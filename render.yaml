@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: flavorthresholddb-api
+    runtime: python
+    plan: free
+    buildCommand: ""
+    startCommand: python fema_proxy_server.py
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5

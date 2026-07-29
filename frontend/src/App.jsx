@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import { Search, FileSpreadsheet, List, FileText, Download, AlertCircle, Loader2, Info, Upload, ExternalLink, X, Copy, Check } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+const FEMA_API_URL = (import.meta.env.VITE_FEMA_API_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
+
 const parseThresholdStr = (str) => {
   const match = str.match(/^(.+?\(\d{4}.*?\))\s*(?:([dr])\s+)?(.*)$/);
   if (match) {
@@ -301,7 +303,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
 
     let cancelled = false;
     missingCas.forEach(cas => {
-      fetch(`http://127.0.0.1:8787/fema?cas=${encodeURIComponent(cas)}`)
+      fetch(`${FEMA_API_URL}/fema?cas=${encodeURIComponent(cas)}`)
         .then(res => res.json())
         .then(profile => {
           if (cancelled) return;
