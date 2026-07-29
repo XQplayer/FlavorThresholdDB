@@ -39,6 +39,10 @@ jobs:
           VITE_FEMA_API_URL: ${{ vars.FEMA_API_URL }}
         run: npm run build
 
+      - name: Add SPA fallback
+        working-directory: frontend
+        run: cp dist/index.html dist/404.html
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
