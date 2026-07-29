@@ -1,0 +1,362 @@
+{
+  "141-78-6": {
+    "found": true,
+    "name": "ETHYL ACETATE",
+    "cas": "141-78-6",
+    "fema_number": "2414",
+    "jecfa_number": "27",
+    "flavor_profile": "Aromatic, Brandy, Grape",
+    "url": "https://www.femaflavor.org/flavor-library/ethyl-acetate",
+    "source": "FEMA Flavor Library",
+    "query": "141-78-6",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=141-78-6"
+  },
+  "78-83-1": {
+    "found": true,
+    "name": "ISOBUTYL ALCOHOL",
+    "cas": "78-83-1",
+    "fema_number": "2179",
+    "jecfa_number": "251",
+    "flavor_profile": "Apple, Bitter, Cocoa, Wine",
+    "url": "https://www.femaflavor.org/flavor-library/isobutyl-alcohol",
+    "source": "FEMA Flavor Library",
+    "query": "78-83-1",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=78-83-1"
+  },
+  "64-19-7": {
+    "found": true,
+    "name": "ACETIC ACID",
+    "cas": "64-19-7",
+    "fema_number": "2006",
+    "jecfa_number": "81",
+    "flavor_profile": "Acid, Fruit, Pungent, Sour, Vinegar",
+    "url": "https://www.femaflavor.org/flavor-library/acetic-acid",
+    "source": "FEMA Flavor Library",
+    "query": "64-19-7",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=64-19-7"
+  },
+  "14901-07-6": {
+    "found": true,
+    "name": "BETA-IONONE",
+    "cas": "79-77-6; 14901-07-6",
+    "fema_number": "2595",
+    "jecfa_number": "389",
+    "flavor_profile": "Floral, Violet",
+    "url": "https://www.femaflavor.org/flavor-library/beta-ionone",
+    "source": "FEMA Flavor Library",
+    "query": "14901-07-6",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=14901-07-6"
+  },
+  "7785-70-8": {
+    "found": true,
+    "name": "ALPHA-PINENE",
+    "cas": "80-56-8; 7785-26-4; 7785-70-8",
+    "fema_number": "2902",
+    "jecfa_number": "1329",
+    "flavor_profile": "Cedarwood, Pine, Sharp",
+    "url": "https://www.femaflavor.org/flavor-library/alpha-pinene",
+    "source": "FEMA Flavor Library",
+    "query": "7785-70-8",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=7785-70-8"
+  },
+  "7785-26-4": {
+    "found": true,
+    "name": "ALPHA-PINENE",
+    "cas": "80-56-8; 7785-26-4; 7785-70-8",
+    "fema_number": "2902",
+    "jecfa_number": "1329",
+    "flavor_profile": "Cedarwood, Pine, Sharp",
+    "url": "https://www.femaflavor.org/flavor-library/alpha-pinene",
+    "source": "FEMA Flavor Library",
+    "query": "7785-26-4",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=7785-26-4"
+  },
+  "127-41-3": {
+    "found": true,
+    "name": "ALPHA-IONONE",
+    "cas": "127-41-3",
+    "fema_number": "2594",
+    "jecfa_number": "388",
+    "flavor_profile": "Violet, Wood",
+    "url": "https://www.femaflavor.org/flavor-library/alpha-ionone",
+    "source": "FEMA Flavor Library",
+    "query": "127-41-3",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=127-41-3"
+  },
+  "80-56-8": {
+    "found": true,
+    "name": "ALPHA-PINENE",
+    "cas": "80-56-8; 7785-26-4; 7785-70-8",
+    "fema_number": "2902",
+    "jecfa_number": "1329",
+    "flavor_profile": "Cedarwood, Pine, Sharp",
+    "url": "https://www.femaflavor.org/flavor-library/alpha-pinene",
+    "source": "FEMA Flavor Library",
+    "query": "80-56-8",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=80-56-8"
+  },
+  "17283-81-7": {
+    "found": true,
+    "name": "DIHYDRO-BETA-IONONE",
+    "cas": "17283-81-7",
+    "fema_number": "3626",
+    "jecfa_number": "394",
+    "flavor_profile": "Floral",
+    "url": "https://www.femaflavor.org/flavor-library/dihydro-beta-ionone",
+    "source": "FEMA Flavor Library",
+    "query": "17283-81-7",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=17283-81-7"
+  },
+  "6753-98-6": {
+    "found": false,
+    "query": "6753-98-6",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=6753-98-6",
+    "error": "No FEMA result"
+  },
+  "84648-07-7": {
+    "found": false,
+    "query": "84648-07-7",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=84648-07-7",
+    "error": "No FEMA result"
+  },
+  "6790-58-5": {
+    "found": false,
+    "query": "6790-58-5",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=6790-58-5",
+    "error": "No FEMA result"
+  },
+  "68365-88-8": {
+    "found": false,
+    "query": "68365-88-8",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=68365-88-8",
+    "error": "No FEMA result"
+  },
+  "28102-28-5": {
+    "found": false,
+    "query": "28102-28-5",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=28102-28-5",
+    "error": "No FEMA result"
+  },
+  "20013-73-4": {
+    "found": false,
+    "query": "20013-73-4",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=20013-73-4",
+    "error": "No FEMA result"
+  },
+  "14398-36-8": {
+    "found": false,
+    "query": "14398-36-8",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=14398-36-8",
+    "error": "No FEMA result"
+  },
+  "24190-29-2": {
+    "found": false,
+    "query": "24190-29-2",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=24190-29-2",
+    "error": "No FEMA result"
+  },
+  "432-25-7": {
+    "found": true,
+    "name": "2,6,6-TRIMETHYL-1-&2-CYCLOHEXEN-1-CARBOXALDEHYDE",
+    "cas": "432-25-7; 432-24-6; 52844-21-0",
+    "fema_number": "3639",
+    "jecfa_number": "979",
+    "flavor_profile": "",
+    "url": "https://www.femaflavor.org/flavor-library/266-trimethyl-1-2-cyclohexen-1-carboxaldehyde",
+    "source": "FEMA Flavor Library",
+    "query": "432-25-7",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=432-25-7"
+  },
+  "17909-77-2": {
+    "found": false,
+    "query": "17909-77-2",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=17909-77-2",
+    "error": "No FEMA result"
+  },
+  "127-51-5": {
+    "found": true,
+    "name": "ALPHA-ISO-METHYLIONONE",
+    "cas": "127-51-5",
+    "fema_number": "2714",
+    "jecfa_number": "404",
+    "flavor_profile": "Floral",
+    "url": "https://www.femaflavor.org/flavor-library/alpha-iso-methylionone",
+    "source": "FEMA Flavor Library",
+    "query": "127-51-5",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=127-51-5"
+  },
+  "79-77-6": {
+    "found": true,
+    "name": "BETA-IONONE",
+    "cas": "79-77-6; 14901-07-6",
+    "fema_number": "2595",
+    "jecfa_number": "389",
+    "flavor_profile": "Floral, Violet",
+    "url": "https://www.femaflavor.org/flavor-library/beta-ionone",
+    "source": "FEMA Flavor Library",
+    "query": "79-77-6",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=79-77-6"
+  },
+  "23726-93-4": {
+    "found": false,
+    "query": "23726-93-4",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=23726-93-4",
+    "error": "No FEMA result"
+  },
+  "1125-21-9": {
+    "found": true,
+    "name": "2,6,6-TRIMETHYLCYCLOHEX-2-ENE-1,4-DIONE",
+    "cas": "1125-21-9",
+    "fema_number": "3421",
+    "jecfa_number": "1857",
+    "flavor_profile": "Floral",
+    "url": "https://www.femaflavor.org/flavor-library/266-trimethylcyclohex-2-ene-14-dione",
+    "source": "FEMA Flavor Library",
+    "query": "1125-21-9",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=1125-21-9"
+  },
+  "2919-23-5": {
+    "found": false,
+    "query": "2919-23-5",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=2919-23-5",
+    "error": "No FEMA result"
+  },
+  "78-84-2": {
+    "found": true,
+    "name": "ISOBUTYRALDEHYDE",
+    "cas": "78-84-2",
+    "fema_number": "2220",
+    "jecfa_number": "252",
+    "flavor_profile": "Burnt, Caramel, Cocoa, Green, Malt",
+    "url": "https://www.femaflavor.org/flavor-library/isobutyraldehyde",
+    "source": "FEMA Flavor Library",
+    "query": "78-84-2",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=78-84-2"
+  },
+  "78-93-3": {
+    "found": true,
+    "name": "2-BUTANONE",
+    "cas": "78-93-3",
+    "fema_number": "2170",
+    "jecfa_number": "278",
+    "flavor_profile": "Fragrant, Fruit, Pleasant",
+    "url": "https://www.femaflavor.org/flavor-library/2-butanone",
+    "source": "FEMA Flavor Library",
+    "query": "78-93-3",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=78-93-3"
+  },
+  "75-07-0": {
+    "found": true,
+    "name": "ACETALDEHYDE",
+    "cas": "75-07-0",
+    "fema_number": "2003",
+    "jecfa_number": "80",
+    "flavor_profile": "Floral, Green Apple",
+    "url": "https://www.femaflavor.org/flavor-library/acetaldehyde",
+    "source": "FEMA Flavor Library",
+    "query": "75-07-0",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=75-07-0"
+  },
+  "123-96-6": {
+    "found": true,
+    "name": "2-OCTANOL",
+    "cas": "123-96-6",
+    "fema_number": "2801",
+    "jecfa_number": "289",
+    "flavor_profile": "Fat, Mushroom",
+    "url": "https://www.femaflavor.org/flavor-library/2-octanol",
+    "source": "FEMA Flavor Library",
+    "query": "123-96-6",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=123-96-6"
+  },
+  "75-31-0": {
+    "found": true,
+    "name": "ISOPROPYLAMINE",
+    "cas": "75-31-0",
+    "fema_number": "4238",
+    "jecfa_number": "1581",
+    "flavor_profile": "",
+    "url": "https://www.femaflavor.org/flavor-library/isopropylamine",
+    "source": "FEMA Flavor Library",
+    "query": "75-31-0",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=75-31-0"
+  },
+  "96-17-3": {
+    "found": true,
+    "name": "2-METHYLBUTYRALDEHYDE",
+    "cas": "96-17-3",
+    "fema_number": "2691",
+    "jecfa_number": "254",
+    "flavor_profile": "Almond, Cocoa, Fermented, Hazelnut, Malt",
+    "url": "https://www.femaflavor.org/flavor-library/2-methylbutyraldehyde",
+    "source": "FEMA Flavor Library",
+    "query": "96-17-3",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=96-17-3"
+  },
+  "97-62-1": {
+    "found": true,
+    "name": "ETHYL ISOBUTYRATE",
+    "cas": "97-62-1",
+    "fema_number": "2428",
+    "jecfa_number": "186",
+    "flavor_profile": "",
+    "url": "https://www.femaflavor.org/flavor-library/ethyl-isobutyrate",
+    "source": "FEMA Flavor Library",
+    "query": "97-62-1",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=97-62-1"
+  },
+  "105-46-4": {
+    "found": false,
+    "query": "105-46-4",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=105-46-4",
+    "error": "No FEMA result"
+  },
+  "56-81-5": {
+    "found": true,
+    "name": "GLYCEROL",
+    "cas": "56-81-5",
+    "fema_number": "2525",
+    "jecfa_number": "909",
+    "flavor_profile": "",
+    "url": "https://www.femaflavor.org/flavor-library/glycerol",
+    "source": "FEMA Flavor Library",
+    "query": "56-81-5",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=56-81-5"
+  },
+  "590-86-3": {
+    "found": true,
+    "name": "3-METHYLBUTYRALDEHYDE",
+    "cas": "590-86-3",
+    "fema_number": "2692",
+    "jecfa_number": "258",
+    "flavor_profile": "",
+    "url": "https://www.femaflavor.org/flavor-library/3-methylbutyraldehyde",
+    "source": "FEMA Flavor Library",
+    "query": "590-86-3",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=590-86-3"
+  },
+  "105-37-3": {
+    "found": true,
+    "name": "ETHYL PROPIONATE",
+    "cas": "105-37-3",
+    "fema_number": "2456",
+    "jecfa_number": "28",
+    "flavor_profile": "Apple, Pineapple, Rum, Strawberry",
+    "url": "https://www.femaflavor.org/flavor-library/ethyl-propionate",
+    "source": "FEMA Flavor Library",
+    "query": "105-37-3",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=105-37-3"
+  },
+  "109-60-4": {
+    "found": true,
+    "name": "PROPYL ACETATE",
+    "cas": "109-60-4",
+    "fema_number": "2925",
+    "jecfa_number": "126",
+    "flavor_profile": "Celery, Floral, Pear, Red Fruit",
+    "url": "https://www.femaflavor.org/flavor-library/propyl-acetate",
+    "source": "FEMA Flavor Library",
+    "query": "109-60-4",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=109-60-4"
+  }
+}

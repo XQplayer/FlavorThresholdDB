@@ -1,0 +1,40 @@
+# 虚拟环境
+.venv/
+Scripts/
+Include/
+Lib/
+
+# 编译和缓存文件
+__pycache__/
+*.pyc
+
+# IDE 配置文件
+.idea/
+.vscode/
+
+# 其他环境或大文件
+*.log
+
+# 本地依赖与构建输出
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# 原始文献、实验数据和本地网页缓存
+*.pdf
+*.docx
+*.xlsx
+*.xls
+data/
+Flavor Library _ FEMA.html
+Flavor Library _ FEMA_files/
+
+# 批处理结果与运行时文件
+batch_extracted*.json
+batch_output_summary.json
+internal_standard_scan.json
+semiquant_summary.json
+*.pid
+*.err
+
+# 由于前端有自己的 .gitignore，所以 node_modules 会被默认过滤
