@@ -41,6 +41,10 @@ Start the optional FEMA proxy from the repository root:
 python fema_proxy_server.py
 ```
 
+For public FEMA lookups, deploy the included Render Blueprint and set the GitHub Actions repository variable `FEMA_API_URL` to the resulting HTTPS service URL:
+
+[Deploy the FEMA API to Render](https://render.com/deploy?repo=https://github.com/XQplayer/FlavorThresholdDB)
+
 The frontend runs at `http://127.0.0.1:5173/FlavorThresholdDB/` by default. The FEMA proxy listens on `http://127.0.0.1:8787`.
 
 ## Build

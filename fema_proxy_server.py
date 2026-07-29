@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -9,8 +10,8 @@ from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
 
 
-HOST = "127.0.0.1"
-PORT = 8787
+HOST = os.environ.get("HOST", "0.0.0.0")
+PORT = int(os.environ.get("PORT", "8787"))
 BASE_URL = "https://www.femaflavor.org"
 CACHE_PATH = Path(__file__).resolve().with_name("fema_flavor_cache.json")
 
