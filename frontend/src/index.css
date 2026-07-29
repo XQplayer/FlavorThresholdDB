@@ -1,6 +1,24 @@
 @import "tailwindcss";
+@import "./tokens.css";
+
+* {
+  box-sizing: border-box;
+}
 
 body {
-  background-color: #f3f4f6;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  min-width: 320px;
+  background-color: var(--surface-brand);
+  font-family: "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
 }

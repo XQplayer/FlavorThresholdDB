@@ -1,0 +1,89 @@
+:root {
+  /* Primitive */
+  --color-navy-950: #07111f;
+  --color-navy-900: #0b1530;
+  --color-navy-800: #132448;
+  --color-blue-700: #1d4ed8;
+  --color-blue-600: #2563eb;
+  --color-blue-500: #3b82f6;
+  --color-cyan-400: #22d3ee;
+  --color-violet-500: #7c3aed;
+  --color-slate-950: #0f172a;
+  --color-slate-800: #1e293b;
+  --color-slate-700: #334155;
+  --color-slate-600: #475569;
+  --color-slate-500: #64748b;
+  --color-slate-300: #cbd5e1;
+  --color-slate-200: #e2e8f0;
+  --color-slate-100: #f1f5f9;
+  --color-slate-50: #f7f9fc;
+  --color-white: #ffffff;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  --radius-control: 7px;
+  --radius-sm: 5px;
+  --radius-surface: 10px;
+  --radius-panel: 12px;
+  --radius-pill: 999px;
+
+  --shadow-nav: 0 14px 36px rgba(2, 8, 23, 0.24);
+  --shadow-panel: 0 20px 55px rgba(15, 23, 42, 0.11);
+  --shadow-control: 0 3px 10px rgba(15, 23, 42, 0.08);
+
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --motion-slow: 480ms;
+  --motion-ambient: 24s;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --container-max: 1280px;
+  --workbench-max: 1160px;
+  --container-gutter: 24px;
+
+  /* Semantic */
+  --surface-brand: var(--color-navy-950);
+  --surface-brand-raised: var(--color-navy-900);
+  --surface-workbench: var(--color-slate-50);
+  --surface-panel: var(--color-white);
+  --surface-primary: var(--color-white);
+  --surface-subtle: var(--color-slate-50);
+  --surface-muted: var(--color-slate-100);
+  --text-on-brand: var(--color-white);
+  --text-on-brand-muted: #a9b8cf;
+  --text-primary: var(--color-slate-800);
+  --text-secondary: var(--color-slate-500);
+  --text-tertiary: #8290a5;
+  --action-primary: var(--color-blue-600);
+  --action-primary-hover: var(--color-blue-700);
+  --accent-subtle: rgba(34, 211, 238, 0.12);
+  --border-on-brand: rgba(148, 197, 255, 0.16);
+  --border-default: var(--color-slate-200);
+  --border-strong: var(--color-slate-300);
+  --focus-ring: rgba(34, 211, 238, 0.76);
+
+  /* Component */
+  --navbar-height: 60px;
+  --navbar-background: rgba(7, 17, 31, 0.76);
+  --navbar-border: rgba(148, 197, 255, 0.14);
+  --control-height: 44px;
+  --workbench-radius: var(--radius-panel);
+  --workbench-shadow: var(--shadow-panel);
+}
+
+@media (max-width: 640px) {
+  :root {
+    --container-gutter: 16px;
+    --navbar-height: 58px;
+  }
+}

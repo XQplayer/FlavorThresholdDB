@@ -1,8 +1,17 @@
 import { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
-import { Search, FileSpreadsheet, List, FileText, Download, AlertCircle, Loader2, Info, Upload, ExternalLink, X, Copy, Check } from 'lucide-react';
+import { Search, FileSpreadsheet, List, FileText, Download, AlertCircle, Loader2, Info, Upload, ExternalLink, X, Copy, Check, BookOpen, FlaskConical, Mail, MessageCircle, Network } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import './App.css';
 
 const FEMA_API_URL = (import.meta.env.VITE_FEMA_API_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
+const APP_BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, '');
+const SEARCH_PATH = `${APP_BASE_PATH}/aroma-threshold/`;
+
+const getViewFromLocation = () => (
+  window.location.pathname.replace(/\/+$/, '').endsWith('/aroma-threshold') || window.location.hash === '#search'
+    ? 'search'
+    : 'home'
+);
 
 const parseThresholdStr = (str) => {
   const match = str.match(/^(.+?\(\d{4}.*?\))\s*(?:([dr])\s+)?(.*)$/);
@@ -20,6 +29,7 @@ const parseThresholdStr = (str) => {
 };
 
 export default function App() {
+  const [currentView, setCurrentView] = useState(getViewFromLocation);
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -39,11 +49,11 @@ export default function App() {
   const deferredSingleQuery = useDeferredValue(singleQuery);
   const deferredBulkQuery = useDeferredValue(bulkQuery);
   
-  const [references, setReferences] = useState({});
   const [normRefsKeys, setNormRefsKeys] = useState([]);
   const [selectedRef, setSelectedRef] = useState(null);
   const [copied, setCopied] = useState(false);
   const [showCitationExample, setShowCitationExample] = useState(false);
+  const [showContact, setShowContact] = useState(false);
   const [citationCopied, setCitationCopied] = useState(false);
   const [interfaceLanguage, setInterfaceLanguage] = useState('zh');
   const [refsLookup, setRefsLookup] = useState({});
@@ -51,17 +61,48 @@ export default function App() {
   const [femaProfiles, setFemaProfiles] = useState({});
 
   const isEnglish = interfaceLanguage === 'en';
+
+  useEffect(() => {
+    document.documentElement.lang = isEnglish ? 'en' : 'zh-CN';
+    document.title = isEnglish ? 'FlavorThresholdDB | HXQLab' : '香气阈值与风味描述检索库 | HXQLab';
+  }, [isEnglish]);
+
+  useEffect(() => {
+    const syncViewWithLocation = () => setCurrentView(getViewFromLocation());
+    window.addEventListener('popstate', syncViewWithLocation);
+    window.addEventListener('hashchange', syncViewWithLocation);
+    return () => {
+      window.removeEventListener('popstate', syncViewWithLocation);
+      window.removeEventListener('hashchange', syncViewWithLocation);
+    };
+  }, []);
+
+  const openSearchView = () => {
+    setCurrentView('search');
+    window.history.pushState({ view: 'search' }, '', SEARCH_PATH);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openHomeView = () => {
+    setCurrentView('home');
+    window.history.pushState({ view: 'home' }, '', `${APP_BASE_PATH}/`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const ui = {
     loading: isEnglish ? 'Loading the local odor-threshold database...' : '正在解析本地阈值大数据库...',
-    singleMode: isEnglish ? 'Single search' : '搜索框模式',
-    bulkMode: isEnglish ? 'Batch matching' : '批量匹配模式',
+    singleMode: isEnglish ? 'Single compound' : '单物质检索',
+    bulkMode: isEnglish ? 'Batch matching' : '批量匹配',
     exact: isEnglish ? 'Exact search' : '精确检索',
     fuzzy: isEnglish ? 'Fuzzy search' : '模糊检索',
     bulkLabel: isEnglish ? 'Enter one substance per line' : '请输入需要匹配的物质名单（每行一个记录）',
     importFile: isEnglish ? 'Import CSV / Excel' : '导入 CSV / Excel 表格',
     bulkPlaceholder: isEnglish ? 'Enter one substance name or CAS number per line, or import a spreadsheet above...' : '每一行填写一个物质名称或 CAS 号，或者点击上方按钮导入表格...',
     bulkHelp: isEnglish ? 'Supports Chinese and English names, CAS numbers, and fuzzy matching.' : '支持中英文混排、支持 CAS 号与模糊匹配。直接提取出相关阈值记录结果。',
-    filters: isEnglish ? 'Result filters:' : '检测介质过滤:',
+    filters: isEnglish ? 'Filters' : '筛选条件',
+    dataScope: isEnglish ? 'Data scope' : '数据范围',
+    thresholdScope: isEnglish ? 'Threshold type' : '阈值类型',
+    searchLabel: isEnglish ? 'Compound name or CAS number' : '化合物名称或 CAS 号',
+    liveSearchHelp: isEnglish ? 'Results update as you type.' : '输入内容后结果将自动更新。',
     dragTitle: isEnglish ? 'Drag to reorder the result sections below' : '拖动可调整下方结果卡片顺序',
     results: isEnglish ? 'Matched results' : '匹配结果',
     found: isEnglish ? 'records found' : '条记录',
@@ -96,6 +137,7 @@ export default function App() {
       .replace('觉察阈', 'Detection threshold')
       .replace('识别阈', 'Recognition threshold');
   };
+  const measurementMediaCount = new Set(data.map(item => item.medium).filter(Boolean)).size || 3;
 
   const accessDate = new Date();
   const accessYear = accessDate.getFullYear();
@@ -126,7 +168,6 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
     ])
       .then(([dataJson, refsJson, lookupJson, bookJson]) => {
         setData(dataJson);
-        setReferences(refsJson);
         setRefsLookup(lookupJson);
         setBookIndex(bookJson.records || []);
         
@@ -165,9 +206,9 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
     const years = yearMatches.map(m => m[0]);
     
     let mainAuthor = "";
-    const vanDeMatch = cleanCitation.match(/^(Van|De|Von|Le|La|Du|Di)\s+([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF\-]+)/i);
-    const hyphenMatch = cleanCitation.match(/^([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]+\-[a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]+)/);
-    const simpleMatch = cleanCitation.match(/^([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF\-]+)/);
+    const vanDeMatch = cleanCitation.match(/^(Van|De|Von|Le|La|Du|Di)\s+([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF-]+)/i);
+    const hyphenMatch = cleanCitation.match(/^([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]+-[a-zA-Z\u00C0-\u024F\u1E00-\u1EFF]+)/);
+    const simpleMatch = cleanCitation.match(/^([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF-]+)/);
     
     if (vanDeMatch) {
       // e.g. "Van Anrooij" wants "van anrooij" but our keys often have "ANROOIJ, A. VAN"
@@ -180,7 +221,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
     if (!mainAuthor) return null;
     
     let secondAuthor = "";
-    const ampMatch = cleanCitation.match(/[&\&]\s*([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF\-]+)/);
+    const ampMatch = cleanCitation.match(/[&]\s*([a-zA-Z\u00C0-\u024F\u1E00-\u1EFF-]+)/);
     if (ampMatch) secondAuthor = normalize(ampMatch[1]);
     
     let bestMatch = null;
@@ -243,15 +284,13 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
     return null;
   };
 
-  const results = useMemo(() => {
+  const queryMatchedResults = useMemo(() => {
     if (!data.length) return [];
-    
-    const mediaFilteredData = data.filter(item => selectedMedia.includes(item.medium));
-    
+
     if (searchMode === 'single') {
       if (!deferredSingleQuery.trim()) return [];
       const q = deferredSingleQuery.toLowerCase().trim();
-      return mediaFilteredData.filter(item => {
+      return data.filter(item => {
         const cas = (item.cas || "").toLowerCase();
         const en = (item.english_name || "").toLowerCase();
         const cn = (item.chinese_name || "").toLowerCase();
@@ -271,7 +310,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
       
       lines.forEach(line => {
         // Find all records that match
-        const matches = mediaFilteredData.filter(item => {
+        const matches = data.filter(item => {
           const cas = (item.cas || "").toLowerCase();
           const en = (item.english_name || "").toLowerCase();
           const cn = (item.chinese_name || "").toLowerCase();
@@ -292,12 +331,17 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
       });
       return matched;
     }
-  }, [data, deferredSingleQuery, deferredBulkQuery, searchMode, selectedMedia, exactMatch]);
+  }, [data, deferredSingleQuery, deferredBulkQuery, searchMode, exactMatch]);
+
+  const results = useMemo(
+    () => queryMatchedResults.filter(item => selectedMedia.includes(item.medium)),
+    [queryMatchedResults, selectedMedia]
+  );
 
   useEffect(() => {
-    if (!results.length) return;
+    if (!queryMatchedResults.length) return;
 
-    const uniqueCas = [...new Set(results.map(item => item.cas).filter(Boolean))].slice(0, 50);
+    const uniqueCas = [...new Set(queryMatchedResults.map(item => item.cas).filter(Boolean))].slice(0, 50);
     const missingCas = uniqueCas.filter(cas => !femaProfiles[cas]);
     if (!missingCas.length) return;
 
@@ -318,7 +362,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
     return () => {
       cancelled = true;
     };
-  }, [results, femaProfiles]);
+  }, [queryMatchedResults, femaProfiles]);
 
   const bookResults = useMemo(() => {
     if (!includeBookResults) return [];
@@ -372,14 +416,14 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
   const femaResults = useMemo(() => {
     if (!includeFlavorDescriptions) return [];
     const seenCas = new Set();
-    return orderedResults
+    return queryMatchedResults
       .map(item => ({ item, profile: femaProfiles[item.cas] }))
       .filter(({ item, profile }) => {
         if (!profile || !profile.found || !item.cas || seenCas.has(item.cas)) return false;
         seenCas.add(item.cas);
         return true;
       });
-  }, [orderedResults, femaProfiles, includeFlavorDescriptions]);
+  }, [queryMatchedResults, femaProfiles, includeFlavorDescriptions]);
 
   const toggleMedium = (medium) => {
     setSelectedMedia(prev => 
@@ -422,40 +466,36 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
   };
 
   const filterOptions = [
-    ...['空气', '水', '其他介质'].map(medium => ({
+    ...['空气', '水', '其他介质'].map((medium, index) => ({
       key: `medium:${medium}`,
+      tone: ['air', 'water', 'other'][index],
       label: displayMedium(medium),
       active: selectedMedia.includes(medium),
-      onClick: () => toggleMedium(medium),
-      activeClass: 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-indigo-100/50',
-      dotClass: medium === '空气' ? 'bg-sky-400' : medium === '水' ? 'bg-blue-400' : 'bg-emerald-400'
+      onClick: () => toggleMedium(medium)
     })),
     {
       key: 'book',
+      tone: 'book',
       label: ui.bookResults,
       active: includeBookResults,
-      onClick: () => setIncludeBookResults(prev => !prev),
-      activeClass: 'bg-amber-50 border-amber-200 text-amber-700 shadow-amber-100/50',
-      dotClass: 'bg-amber-400'
+      onClick: () => setIncludeBookResults(prev => !prev)
     },
     {
       key: 'flavor',
+      tone: 'flavor',
       label: ui.flavorDescriptions,
       active: includeFlavorDescriptions,
-      onClick: () => setIncludeFlavorDescriptions(prev => !prev),
-      activeClass: 'bg-blue-50 border-blue-200 text-blue-700 shadow-blue-100/50',
-      dotClass: 'bg-blue-400'
+      onClick: () => setIncludeFlavorDescriptions(prev => !prev)
     },
     ...[
       { code: 'd', label: isEnglish ? 'Detection threshold (d)' : '觉察阈 (d)' },
       { code: 'r', label: isEnglish ? 'Recognition threshold (r)' : '识别阈 (r)' }
     ].map(type => ({
       key: `threshold:${type.code}`,
+      tone: type.code === 'd' ? 'detection' : 'recognition',
       label: type.label,
       active: selectedThresholdTypes.includes(type.code),
-      onClick: () => toggleThresholdType(type.code),
-      activeClass: 'bg-rose-50 border-rose-200 text-rose-700 shadow-rose-100/50',
-      dotClass: 'bg-rose-400'
+      onClick: () => toggleThresholdType(type.code)
     }))
   ].sort((a, b) => getFilterOrderIndex(a.key) - getFilterOrderIndex(b.key));
 
@@ -501,8 +541,6 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
     return tags.length ? [...new Set(tags)] : [isEnglish ? 'Excerpt' : '片段'];
   };
 
-  const sentenceIncludes = (sentence, patterns) => patterns.some(pattern => pattern.test(sentence));
-
   const splitBookSentences = (text) => {
     return (text || '')
       .toString()
@@ -530,7 +568,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
     anchorIndexes.forEach(index => {
       selected.add(index);
       for (let next = index + 1; next < Math.min(sentences.length, index + 4); next += 1) {
-        if (/^\s*\d+\s*[\.、-]/.test(sentences[next]) && next !== index + 1) break;
+        if (/^\s*\d+\s*[.、-]/.test(sentences[next]) && next !== index + 1) break;
         selected.add(next);
       }
       if (index > 0) selected.add(index - 1);
@@ -803,185 +841,202 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 text-slate-800 p-4 md:p-8 font-sans">
-      <div className="max-w-6xl mx-auto flex flex-col">
-        
-        {/* Header Section */}
-        <header className="relative mb-10 text-center">
-          <div className="relative z-30 flex justify-center md:absolute md:right-0 md:top-0 mb-5 md:mb-0 pointer-events-auto">
-            <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white/90 p-1 shadow-sm" aria-label={isEnglish ? 'Interface language' : '界面语言'}>
-              <button
-                type="button"
-                onClick={() => setInterfaceLanguage('zh')}
-                className={`relative z-40 min-h-9 px-4 py-2 rounded-md text-sm font-semibold cursor-pointer select-none transition-colors ${
-                  interfaceLanguage === 'zh'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-blue-700'
-                }`}
-              >
-                中文
+    <div className={`app-shell ${currentView === 'home' ? 'home-view' : 'search-view'}`}>
+      {currentView === 'home' && (
+      <section className="science-hero">
+        <div className="hero-inner">
+          <nav className="science-nav" aria-label={isEnglish ? 'Primary navigation' : '主导航'}>
+            <a href="#top" className="science-brand" aria-label="HXQLab">
+              <span className="science-brand-mark"><Network className="w-6 h-6" /></span>
+              <span className="science-brand-copy">
+                <strong>HXQLab</strong>
+              </span>
+            </a>
+            <div className="science-nav-links">
+              <a href="#top" className={!showCitationExample && !showContact ? 'active' : ''}>{isEnglish ? 'Home' : '首页'}</a>
+              <button type="button" onClick={openSearchView}>FlavorThresholdDB</button>
+              <button type="button" className={showCitationExample && !showContact ? 'active' : ''} onClick={() => setShowCitationExample(prev => !prev)}>
+                {isEnglish ? 'Sources' : '数据来源'}
               </button>
-              <button
-                type="button"
-                onClick={() => setInterfaceLanguage('en')}
-                className={`relative z-40 min-h-9 px-4 py-2 rounded-md text-sm font-semibold cursor-pointer select-none transition-colors ${
-                  interfaceLanguage === 'en'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-500 hover:text-blue-700'
-                }`}
-              >
-                English
+              <button type="button" className={`science-contact-link ${showContact ? 'active' : ''}`} onClick={() => setShowContact(true)}>
+                {isEnglish ? 'Contact' : '联系我们'}
               </button>
             </div>
-          </div>
-          <h1 className="text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 mb-4 tracking-tight drop-shadow-sm">
-            {interfaceLanguage === 'zh' ? '香气阈值与风味描述检索库' : 'FlavorThresholdDB'}
-          </h1>
-          <p className="text-slate-500 text-base lg:text-lg max-w-4xl mx-auto mb-5 leading-relaxed text-balance">
-            {interfaceLanguage === 'zh'
-              ? '整合权威文献与专业数据库中的香气阈值及风味描述信息，支持 CAS 号、中文名和英文名单物质检索及批量清单匹配。'
-              : 'Integrates aroma threshold and flavor profile data from authoritative literature and specialized databases, supporting substance searches—and batch list matching—via CAS numbers, Chinese names, and English names.'}
-          </p>
-          <div className="mx-auto max-w-5xl text-left">
-            <div className="flex flex-col md:flex-row md:items-center gap-3 px-4 py-3 bg-amber-50/80 rounded-xl border border-amber-200/60 text-amber-700 text-sm font-medium shadow-sm">
-              <div className="flex items-start flex-1 min-w-0">
-                <Info className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />
-                <span className="leading-relaxed">
-                  {interfaceLanguage === 'zh' ? (
-                    <>
-                      FlavorThresholdDB 整合 Van Gemert（2011）、范文来与徐岩（2020）以及 FEMA Flavor Ingredient Library 中的香气阈值与风味描述信息。仅供个人学习与交流使用，不得用于商业用途；转载或分享时请注明来源。
-                    </>
-                  ) : (
-                    <>
-                      FlavorThresholdDB integrates odor threshold and flavor descriptor information from Van Gemert (2011), Fan and Xu (2020), and the FEMA Flavor Ingredient Library. For personal study and exchange only; not for commercial use. Please cite the source if reposting or sharing.
-                    </>
-                  )}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCitationExample(prev => !prev)}
-                className="self-end md:self-center inline-flex flex-shrink-0 items-center justify-center px-3 py-2 rounded-lg bg-white/75 hover:bg-white text-amber-700 border border-amber-200 shadow-sm transition-colors text-sm font-semibold"
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                {interfaceLanguage === 'zh' ? '引用示例' : 'Citation example'}
-                <span className="ml-2 text-xs text-amber-500">
-                  {showCitationExample
-                    ? (interfaceLanguage === 'zh' ? '收起' : 'Hide')
-                    : (interfaceLanguage === 'zh' ? '展开' : 'Show')}
-                </span>
+            <button type="button" className="science-mobile-contact" onClick={() => setShowContact(true)} aria-label={isEnglish ? 'Contact' : '联系我们'}>
+              <MessageCircle className="w-4 h-4" />
+            </button>
+            <div className="science-language" aria-label={isEnglish ? 'Interface language' : '界面语言'}>
+              <button type="button" onClick={() => setInterfaceLanguage('zh')} aria-pressed={interfaceLanguage === 'zh'} className={interfaceLanguage === 'zh' ? 'active' : ''}>中</button>
+              <button type="button" onClick={() => setInterfaceLanguage('en')} aria-pressed={interfaceLanguage === 'en'} className={interfaceLanguage === 'en' ? 'active' : ''}>EN</button>
+            </div>
+          </nav>
+
+          <header id="top" className="science-hero-content">
+            <h1>FlavorThresholdDB</h1>
+            <p className="science-subtitle">
+              {isEnglish ? 'An Integrated Flavor Threshold and Descriptor Retrieval Database' : '香气阈值与风味描述检索库'}
+            </p>
+            <p className="science-description">
+              {isEnglish
+                ? 'Integrates authoritative literature and specialized databases to provide traceable support for compound identification, OAV analysis, and standardized flavor annotation.'
+                : '整合权威文献与专业数据库，为风味化合物识别、OAV 分析与标准化风味注释提供可追溯的数据支持。'}
+            </p>
+            <div className="science-actions">
+              <button type="button" onClick={openSearchView} className="science-primary-action">
+                <Search className="w-4 h-4" />
+                {isEnglish ? 'Start searching' : '开始检索'}
+              </button>
+              <button type="button" className="science-secondary-action" onClick={() => setShowCitationExample(prev => !prev)}>
+                <BookOpen className="w-4 h-4" />
+                {isEnglish ? 'Citation guide' : '引用指南'}
               </button>
             </div>
+
+            <div className="science-metrics" aria-label={isEnglish ? 'Platform coverage' : '平台数据覆盖'}>
+              <div><strong>3</strong><span>{isEnglish ? 'core sources' : '核心数据来源'}</span></div>
+              <div><strong>{measurementMediaCount}</strong><span>{isEnglish ? 'measurement media' : '检测介质体系'}</span></div>
+              <div><strong className="science-metric-word">{isEnglish ? 'Traceable' : '可追溯'}</strong><span>{isEnglish ? 'source records retained' : '保留来源记录'}</span></div>
+            </div>
+
+            <div className="science-author-note">
+              <span className="source-note-label">{isEnglish ? 'Author statement' : '作者声明'}</span>
+              <span>
+                {isEnglish
+                  ? 'For personal study and academic exchange only. Commercial use is prohibited. Please cite the source when reposting or sharing.'
+                  : '仅供个人学习与交流使用，不得用于商业用途；转载或分享时请注明来源。'}
+              </span>
+            </div>
+
             {showCitationExample && (
-              <div className="mt-3 rounded-2xl border border-blue-100 bg-white/85 shadow-sm overflow-hidden">
-                <div className="flex items-center justify-between gap-3 px-4 py-3 bg-blue-50/70 border-b border-blue-100">
-                  <div className="text-sm font-bold text-slate-700">
-                    {interfaceLanguage === 'zh' ? '论文写作引用示例' : 'Citation examples for academic writing'}
-                  </div>
+              <div className="science-citation-panel">
+                <div className="science-citation-header">
+                  <span>{isEnglish ? 'Citation examples for academic writing' : '论文写作引用示例'}</span>
                   <button
+                    type="button"
                     onClick={() => {
                       navigator.clipboard.writeText(citationExampleText);
                       setCitationCopied(true);
                       setTimeout(() => setCitationCopied(false), 2000);
                     }}
-                    className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${
-                      citationCopied
-                        ? 'bg-emerald-500 text-white'
-                        : 'bg-blue-600 hover:bg-blue-700 text-white'
-                    }`}
                   >
-                    {citationCopied ? (
-                      <>
-                        <Check className="w-4 h-4 mr-1.5" />
-                        {interfaceLanguage === 'zh' ? '已复制' : 'Copied'}
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4 mr-1.5" />
-                        {interfaceLanguage === 'zh' ? '复制' : 'Copy'}
-                      </>
-                    )}
+                    {citationCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    {citationCopied ? (isEnglish ? 'Copied' : '已复制') : (isEnglish ? 'Copy' : '复制')}
                   </button>
                 </div>
-                <pre className="whitespace-pre-wrap px-4 py-4 text-sm leading-7 text-slate-700 font-serif bg-white">
-                  {citationExampleText}
-                </pre>
+                <pre>{citationExampleText}</pre>
               </div>
             )}
-          </div>
-          {loading && (
-            <div className="flex items-center justify-center mt-6 text-blue-500 bg-blue-50 py-2 px-4 rounded-full inline-flex mx-auto shadow-sm border border-blue-100">
-              <Loader2 className="animate-spin mr-2 h-5 w-5" />
-              <span className="font-medium">{ui.loading}</span>
-            </div>
-          )}
-        </header>
 
+            {loading && (
+              <div className="science-loading">
+                <Loader2 className="animate-spin w-4 h-4" />
+                <span>{ui.loading}</span>
+              </div>
+            )}
+          </header>
+        </div>
+      </section>
+      )}
+
+      {currentView === 'search' && (
+      <>
+      <a className="skip-link" href="#main-content">{isEnglish ? 'Skip to search' : '跳到检索区域'}</a>
+      <header className="search-page-header">
+        <nav className="science-nav search-science-nav" aria-label={isEnglish ? 'Primary navigation' : '主导航'}>
+          <button type="button" className="science-brand" onClick={openHomeView} aria-label="HXQLab home">
+            <span className="science-brand-mark"><Network className="w-6 h-6" /></span>
+            <span className="science-brand-copy"><strong>HXQLab</strong></span>
+          </button>
+          <div className="science-nav-links">
+            <button type="button" onClick={openHomeView}>{isEnglish ? 'Home' : '首页'}</button>
+            <button type="button" className={showContact ? '' : 'active'} onClick={openSearchView}>FlavorThresholdDB</button>
+            <button type="button" onClick={() => { setShowCitationExample(true); openHomeView(); }}>{isEnglish ? 'Sources' : '数据来源'}</button>
+            <button type="button" className={`science-contact-link ${showContact ? 'active' : ''}`} onClick={() => setShowContact(true)}>{isEnglish ? 'Contact' : '联系我们'}</button>
+          </div>
+          <button type="button" className="science-mobile-contact" onClick={() => setShowContact(true)} aria-label={isEnglish ? 'Contact' : '联系我们'}>
+            <MessageCircle className="w-4 h-4" />
+          </button>
+          <div className="science-language" aria-label={isEnglish ? 'Interface language' : '界面语言'}>
+            <button type="button" onClick={() => setInterfaceLanguage('zh')} aria-pressed={interfaceLanguage === 'zh'} className={interfaceLanguage === 'zh' ? 'active' : ''}>中</button>
+            <button type="button" onClick={() => setInterfaceLanguage('en')} aria-pressed={interfaceLanguage === 'en'} className={interfaceLanguage === 'en' ? 'active' : ''}>EN</button>
+          </div>
+        </nav>
+        <div className="search-shell-content">
+          <h1>{isEnglish ? 'Aroma threshold and flavor descriptor search' : '香气阈值与风味描述检索'}</h1>
+          <p>{isEnglish ? 'Search thresholds, flavor descriptors, and source records.' : '检索阈值、风味描述与来源记录。'}</p>
+        </div>
+      </header>
+      <main id="main-content" className="search-main relative z-20 mx-auto flex flex-col px-4 md:px-8 pb-10">
         {/* Search Controls */}
-        <div className="bg-white/70 backdrop-blur-xl rounded-3xl shadow-xl border border-white/40 p-6 md:p-8 mb-8 transition-all">
+        <div id="search-workspace" className="science-workspace search-control-panel bg-white p-5 md:p-6 mb-8 scroll-mt-6">
           
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-8 border-b border-slate-200 pb-4">
-            <div className="flex flex-wrap gap-4">
+          <div className="search-mode-toolbar">
+            <div className="search-mode-tabs flex flex-wrap gap-4">
               <button 
                 onClick={() => setSearchMode('single')}
-                className={`flex items-center px-6 py-3 rounded-full font-semibold transition-all duration-300 ${searchMode === 'single' ? 'bg-blue-600 text-white shadow-md shadow-blue-200 translate-y-[-2px]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                aria-pressed={searchMode === 'single'}
+                className={searchMode === 'single' ? 'active' : ''}
               >
                 <Search className="w-5 h-5 mr-2" />
                 {ui.singleMode}
               </button>
               <button 
                 onClick={() => setSearchMode('bulk')}
-                className={`flex items-center px-6 py-3 rounded-full font-semibold transition-all duration-300 ${searchMode === 'bulk' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200 translate-y-[-2px]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                aria-pressed={searchMode === 'bulk'}
+                className={searchMode === 'bulk' ? 'active' : ''}
               >
                 <List className="w-5 h-5 mr-2" />
                 {ui.bulkMode}
               </button>
             </div>
-
-            <div className="flex bg-slate-100 p-1.5 rounded-full shadow-inner border border-slate-200">
-              <button 
-                onClick={() => setExactMatch(true)}
-                className={`px-5 py-2 rounded-full text-sm font-bold transition-all shadow-sm ${
-                  exactMatch ? 'bg-white text-indigo-700 border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 bg-transparent shadow-none border border-transparent'
-                }`}
+            {results.length > 0 && (
+              <button
+                type="button"
+                onClick={exportCSV}
+                className="result-export-button search-toolbar-export"
               >
-                {ui.exact}
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                {ui.exportCsv}
               </button>
-              <button 
-                onClick={() => setExactMatch(false)}
-                className={`px-5 py-2 rounded-full text-sm font-bold transition-all shadow-sm ${
-                  !exactMatch ? 'bg-white text-indigo-700 border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 bg-transparent shadow-none border border-transparent'
-                }`}
-              >
-                {ui.fuzzy}
-              </button>
-            </div>
+            )}
           </div>
 
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div>
             {searchMode === 'single' ? (
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
-                  <Search className="h-6 w-6 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
-                </div>
+              <div>
+                <label htmlFor="compound-search" className="search-field-label">{ui.searchLabel}</label>
+                <div className="search-input-shell">
+                <Search className="search-input-icon" />
                 <input
+                  id="compound-search"
                   type="text"
-                  className="block w-full pl-14 pr-4 py-4 md:text-lg bg-white border-2 border-slate-200 rounded-2xl focus:ring-0 focus:border-blue-500 transition-all shadow-inner placeholder:text-slate-400"
+                  autoComplete="off"
+                  className="search-input"
                   placeholder={isEnglish
-                    ? `Enter a Chinese name, English name, or CAS number for an ${exactMatch ? 'exact' : 'fuzzy'} search (e.g., 64-19-7, acetic acid)`
-                    : `输入化合物中文名、英文名或 CAS 号进行【${exactMatch ? '精确' : '模糊'}】检索 (例如: 64-19-7, 乙酸)`}
+                    ? `Chinese name, English name, or CAS number (e.g., 64-19-7)`
+                    : `输入中文名、英文名或 CAS 号（如 64-19-7）`}
                   value={singleQuery}
                   onChange={(e) => setSingleQuery(e.target.value)}
                 />
+                <select value={exactMatch ? 'exact' : 'fuzzy'} onChange={(event) => setExactMatch(event.target.value === 'exact')} aria-label={isEnglish ? 'Matching method' : '匹配方式'}>
+                  <option value="exact">{isEnglish ? 'Exact' : '精确'}</option>
+                  <option value="fuzzy">{isEnglish ? 'Fuzzy' : '模糊'}</option>
+                </select>
+                </div>
+                <p className="search-field-help">{ui.liveSearchHelp}</p>
               </div>
             ) : (
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-semibold text-slate-700 flex items-center">
+                <div className="bulk-field-header">
+                  <label htmlFor="bulk-search" className="text-sm font-semibold text-slate-700 flex items-center">
                     <FileText className="w-4 h-4 mr-1 text-indigo-500" />
                     {ui.bulkLabel}
                   </label>
-                  <div>
+                  <div className="bulk-field-actions">
+                    <select value={exactMatch ? 'exact' : 'fuzzy'} onChange={(event) => setExactMatch(event.target.value === 'exact')} aria-label={isEnglish ? 'Matching method' : '匹配方式'}>
+                      <option value="exact">{isEnglish ? 'Exact' : '精确'}</option>
+                      <option value="fuzzy">{isEnglish ? 'Fuzzy' : '模糊'}</option>
+                    </select>
                     <input
                       type="file"
                       accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
@@ -1000,7 +1055,8 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                   </div>
                 </div>
                 <textarea
-                  className="block w-full p-5 md:text-lg bg-white border-2 border-slate-200 rounded-2xl focus:ring-0 focus:border-indigo-500 transition-all shadow-inner placeholder:text-slate-300 resize-y min-h-[160px] leading-relaxed"
+                  id="bulk-search"
+                  className="bulk-search-input"
                   placeholder={ui.bulkPlaceholder}
                   value={bulkQuery}
                   onChange={(e) => setBulkQuery(e.target.value)}
@@ -1014,36 +1070,34 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
           </div>
 
           {/* Medium Filter Controls */}
-          <div className="mt-6 pt-6 border-t border-slate-100 animate-in fade-in duration-700">
-            <span className="block text-sm font-semibold text-slate-600 mb-3">{ui.filters}</span>
-            <div className="space-y-3">
+          <div className="filter-disclosure">
+            <div id="advanced-filters" className="advanced-filters legacy-filter-list" role="group" aria-label={isEnglish ? 'Detection medium filter' : '检测介质过滤'}>
               {[
                 filterOptions.filter(option => !option.key.startsWith('threshold:')),
                 filterOptions.filter(option => option.key.startsWith('threshold:'))
-              ].map((optionGroup, groupIndex) => (
-                <div key={groupIndex} className="flex flex-wrap gap-3">
-                  {optionGroup.map(option => (
-                    <button
-                      key={option.key}
-                      draggable
-                      onDragStart={(event) => handleFilterDragStart(event, option.key)}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={(event) => handleFilterDrop(event, option.key)}
-                      onDragEnd={() => setDraggedFilterKey(null)}
-                      onClick={option.onClick}
-                      className={`px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm border ${
-                        option.active
-                          ? option.activeClass
-                          : 'bg-white border-slate-200 text-slate-400 hover:bg-slate-50'
-                      } ${draggedFilterKey === option.key ? 'opacity-50 ring-2 ring-slate-300' : ''}`}
-                      title={ui.dragTitle}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${option.active ? option.dotClass : 'bg-slate-200'}`} />
+              ].map((optionGroup, rowIndex) => (
+                <div key={rowIndex} className="legacy-filter-row">
+                  <span className="legacy-filter-row-label">{rowIndex === 0 ? ui.dataScope : ui.thresholdScope}</span>
+                  <div className="legacy-filter-row-options">
+                    {optionGroup.map(option => (
+                      <button
+                        key={option.key}
+                        draggable
+                        onDragStart={(event) => handleFilterDragStart(event, option.key)}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => handleFilterDrop(event, option.key)}
+                        onDragEnd={() => setDraggedFilterKey(null)}
+                        onClick={option.onClick}
+                        aria-pressed={option.active}
+                        className={`filter-chip ${option.active ? 'active' : ''} ${draggedFilterKey === option.key ? 'dragging' : ''}`}
+                        data-filter-key={option.key}
+                        data-filter-tone={option.tone}
+                        title={ui.dragTitle}
+                      >
                         {option.label}
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1051,32 +1105,23 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
         </div>
 
         {/* Results Section */}
-        {!loading && (singleQuery.trim() || bulkQuery.trim()) && (
+        {!loading && selectedMedia.length > 0 && (singleQuery.trim() || bulkQuery.trim()) && (
           <div
-            className="space-y-6 animate-in fade-in duration-500"
+            className="result-section space-y-6"
             style={{ order: 20 + Math.min(...['medium:空气', 'medium:水', 'medium:其他介质'].map(getFilterOrderIndex)) }}
           >
             <div className="flex items-center justify-between mb-4 px-2">
               <h2 className="text-2xl font-bold text-slate-800 flex items-center">
                 {ui.results}
-                <span className="ml-3 text-sm font-medium bg-blue-100 text-blue-700 py-1 px-3 rounded-full">
+                <span className="section-count">
                   {isEnglish ? `${results.length} ${ui.found}` : `共找到 ${results.length} ${ui.found}`}
                 </span>
               </h2>
               
-              {results.length > 0 && (
-                <button 
-                  onClick={exportCSV}
-                  className="flex items-center px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-medium rounded-xl transition-all shadow-lg hover:shadow-green-500/30 transform hover:-translate-y-1"
-                >
-                  <FileSpreadsheet className="w-4 h-4 mr-2" />
-                  {ui.exportCsv}
-                </button>
-              )}
             </div>
 
             {results.length === 0 ? (
-              <div className="bg-white rounded-3xl p-12 text-center shadow-sm border border-slate-100">
+              <div className="empty-result-state">
                 <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Search className="w-8 h-8 text-slate-300" />
                 </div>
@@ -1086,17 +1131,23 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
             ) : (
               <div className="grid grid-cols-1 gap-6">
                 {orderedResults.map((item, idx) => (
-                  <div key={`${item.cas}-${item.medium}-${idx}`} className="bg-white rounded-2xl shadow-sm hover:shadow-xl border border-slate-100 p-6 md:p-8 transition-all duration-300 group">
-                    <div className="flex flex-col md:flex-row md:items-start justify-between mb-6 border-b border-slate-100 pb-6">
+                  <div
+                    key={`${item.cas}-${item.medium}-${idx}`}
+                    className="result-entity threshold-result-entity bg-white overflow-hidden group"
+                    data-medium={item.medium}
+                    data-tone={['air', 'water', 'other'][['空气', '水', '其他介质'].indexOf(item.medium)] || 'water'}
+                  >
+                    <div className="threshold-entity-header">
                       <div>
                         <div className="flex items-center gap-3 mb-2">
                           <h3 className="text-2xl font-bold text-slate-800">{item.chinese_name || item.english_name}</h3>
-                          <span className="bg-slate-100 text-slate-600 text-sm font-mono px-3 py-1.5 rounded-md border border-slate-200">
+                          <span className="compound-cas bg-slate-100 text-slate-600 px-3 py-1.5 rounded-md border border-slate-200">
                             CAS: {item.cas}
                           </span>
                         </div>
                         {formatDisplayCommonEnglishName((femaProfiles[item.cas] || {}).name || item.english_name) && (
-                          <p className="text-slate-700 font-semibold">
+                          <p className="common-english-name text-slate-700 font-semibold">
+                            <span>{isEnglish ? 'Common name: ' : '常用英文名：'}</span>
                             {formatDisplayCommonEnglishName((femaProfiles[item.cas] || {}).name || item.english_name)}
                           </p>
                         )}
@@ -1106,13 +1157,14 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                       </div>
                       
                       <div className="mt-4 md:mt-0 flex shrink-0">
-                        <span className={`inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold shadow-sm ${item.medium === '空气' ? 'bg-sky-100 text-sky-700 border border-sky-200' : item.medium === '水' ? 'bg-blue-100 text-blue-700 border border-blue-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
+                        <span className="entity-medium">
+                          <span className="entity-medium-dot" aria-hidden="true" />
                           {ui.medium}: {displayMedium(item.medium)}
                         </span>
                       </div>
                     </div>
 
-                    <div className="bg-slate-50 rounded-xl p-5 border border-slate-100 group-hover:bg-blue-50/30 transition-colors">
+                    <div className="data-panel">
                       <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center">
                         <Info className="w-4 h-4 mr-2" />
                         {ui.thresholdRecords}
@@ -1139,7 +1191,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                                           return (
                                             <button 
                                               onClick={() => setSelectedRef({ author: parsed.author, text: fullRef })}
-                                              className="group inline-flex items-center text-left"
+                                              className="reference-link-button group inline-flex items-center text-left"
                                               aria-label={isEnglish ? 'View full reference' : '查看完整文献'}
                                             >
                                               <span className="border-b border-dashed border-blue-400 text-blue-600 group-hover:text-blue-800 transition-colors">
@@ -1153,7 +1205,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                                       })()}
                                     </td>
                                     <td className="px-3 py-2.5 text-slate-500">{displayThresholdType(parsed.type)}</td>
-                                    <td className="px-3 py-2.5 text-blue-600 font-mono tracking-tight">{parsed.value}</td>
+                                    <td className="threshold-value px-3 py-2.5 text-blue-600 tracking-tight">{parsed.value}</td>
                                   </tr>
                                 );
                               })}
@@ -1167,13 +1219,13 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
 
                     {/* Flavor Profile Section */}
                     {item.flavor_categories && item.flavor_categories.length > 0 && (
-                      <div className="mt-5 p-4 bg-gradient-to-r from-amber-50/80 to-orange-50/50 rounded-xl border border-amber-100/60">
-                        <h4 className="text-sm font-semibold text-amber-700 uppercase tracking-wider mb-3 flex items-center">
+                      <div className="descriptor-panel">
+                        <h4 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-3 flex items-center">
                           {ui.flavorClassification}
                         </h4>
                         <div className="flex flex-wrap gap-2 mb-3">
                           {item.flavor_categories.map((cat, ci) => (
-                            <span key={ci} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-white shadow-sm border border-amber-200 text-amber-800">
+                            <span key={ci} className="data-tag">
                               {cat}
                             </span>
                           ))}
@@ -1181,7 +1233,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                         {item.flavor_desc_cn && item.flavor_desc_cn.length > 0 && (
                           <div className="flex flex-wrap gap-1.5">
                             {item.flavor_desc_cn.map((desc, di) => (
-                              <span key={di} className="text-xs px-2 py-0.5 bg-amber-100/60 text-amber-600 rounded-md">
+                              <span key={di} className="descriptor-text">
                                 {desc}
                               </span>
                             ))}
@@ -1192,7 +1244,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                     )}
 
                     {/* External Database Search Links */}
-                    <div className="mt-5 pt-5 border-t border-slate-100 flex flex-wrap items-center gap-3">
+                    <div className="threshold-external-links mt-5 pt-5 border-t border-slate-100 flex flex-wrap items-center gap-3">
                       <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest mr-2 flex items-center">
                         <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
                         {ui.externalLinks}
@@ -1201,7 +1253,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                         href={`https://www.google.com/search?q=site:thegoodscentscompany.com+"${item.cas}"`}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center px-3 py-1.5 bg-slate-50 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-lg text-xs font-medium border border-slate-200 hover:border-rose-200 transition-colors"
+                        className="source-external-link"
                       >
                         The Good Scents Company
                       </a>
@@ -1209,7 +1261,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                         href={`https://www.femaflavor.org/flavor-library?cas=${item.cas}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center px-3 py-1.5 bg-slate-50 hover:bg-amber-50 text-slate-600 hover:text-amber-600 rounded-lg text-xs font-medium border border-slate-200 hover:border-amber-200 transition-colors"
+                        className="source-external-link"
                       >
                         FEMA Flavor
                       </a>
@@ -1217,7 +1269,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                         href={`https://www.google.com/search?q=site:perflavory.com+"${item.cas}"`}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center px-3 py-1.5 bg-slate-50 hover:bg-purple-50 text-slate-600 hover:text-purple-600 rounded-lg text-xs font-medium border border-slate-200 hover:border-purple-200 transition-colors"
+                        className="source-external-link"
                       >
                         Perflavory
                       </a>
@@ -1231,42 +1283,43 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
 
         {!loading && (singleQuery.trim() || bulkQuery.trim()) && femaResults.length > 0 && (
           <div
-            className="mt-8 space-y-4 animate-in fade-in duration-500"
+            className="result-section mt-8 space-y-4"
             style={{ order: 20 + getFilterOrderIndex('flavor') }}
           >
             <div className="flex items-center justify-between px-2">
               <h2 className="text-2xl font-bold text-slate-800 flex items-center">
                 {ui.flavorDescriptions}
-                <span className="ml-3 text-sm font-medium bg-blue-100 text-blue-700 py-1 px-3 rounded-full">
+                <span className="section-count">
                   FEMA Flavor Library {femaResults.length} {isEnglish ? 'records' : '条'}
                 </span>
               </h2>
             </div>
             <div className="grid grid-cols-1 gap-4">
               {femaResults.map(({ item, profile }) => (
-                <div key={`fema-${item.cas}`} className="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden">
-                  <div className="px-5 md:px-6 py-4 bg-blue-50/70 border-b border-blue-100 flex flex-wrap items-center justify-between gap-3">
+                <div key={`fema-${item.cas}`} className="result-entity fema-result-entity bg-white overflow-hidden">
+                  <div className="entity-header">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-3">
                         <h3 className="text-xl font-bold text-slate-800">{item.chinese_name || item.english_name}</h3>
-                        <span className="inline-flex items-center px-3 py-1 rounded-lg text-sm font-semibold bg-white text-slate-600 border border-blue-100">
+                        <span className="entity-cas">
                           CAS: {item.cas}
                         </span>
                       </div>
                       {formatDisplayCommonEnglishName(profile.name || item.english_name) && (
-                        <p className="mt-1 text-slate-700 font-semibold">
+                        <p className="common-english-name mt-1 text-slate-700 font-semibold">
+                          <span>{isEnglish ? 'Common name: ' : '常用英文名：'}</span>
                           {formatDisplayCommonEnglishName(profile.name || item.english_name)}
                         </p>
                       )}
                     </div>
-                    <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-bold bg-white text-blue-700 border border-blue-100">
+                    <span className="source-record-id">
                       FEMA No. {profile.fema_number || '-'}
                     </span>
                   </div>
 
                   <div className="p-5 md:p-6">
-                    <div className="border border-blue-100 rounded-xl p-4 bg-blue-50/40">
-                      <h4 className="text-sm font-semibold text-blue-700 uppercase tracking-wider mb-2 flex items-center">
+                    <div className="source-panel">
+                      <h4 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center">
                         <ExternalLink className="w-4 h-4 mr-2" />
                         FEMA Flavor Library
                       </h4>
@@ -1295,13 +1348,13 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
 
         {!loading && (singleQuery.trim() || bulkQuery.trim()) && bookResults.length > 0 && (
           <div
-            className="mt-8 space-y-4 animate-in fade-in duration-500"
+            className="result-section mt-8 space-y-4"
             style={{ order: 20 + getFilterOrderIndex('book') }}
           >
             <div className="flex items-center justify-between px-2">
               <h2 className="text-2xl font-bold text-slate-800 flex items-center">
                 {ui.bookResults}
-                <span className="ml-3 text-sm font-medium bg-amber-100 text-amber-700 py-1 px-3 rounded-full">
+                <span className="section-count">
                   {isEnglish ? 'Wine Flavor Chemistry' : '酒类风味化学'} {bookResults.length} {isEnglish ? 'records' : '条'}
                 </span>
               </h2>
@@ -1311,10 +1364,10 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                 const summary = summarizeBookHit(item.text, getActiveBookQueries());
                 const tags = getBookHitTags(item.text);
                 return (
-                  <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden">
-                    <div className="px-5 md:px-6 py-4 bg-amber-50/60 border-b border-amber-100 flex flex-wrap items-center justify-between gap-3">
+                  <div key={item.id} className="result-entity book-result-entity bg-white overflow-hidden">
+                    <div className="entity-header">
                       <div className="flex flex-wrap items-center gap-3">
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-white text-amber-700 border border-amber-200">
+                        <span className="source-label">
                           {isEnglish ? 'Wine Flavor Chemistry' : item.book_title}
                         </span>
                         <span className="text-sm font-semibold text-slate-600">
@@ -1323,7 +1376,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {tags.map(tag => (
-                          <span key={tag} className="px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-100 text-amber-700">
+                          <span key={tag} className="data-tag">
                             {tag}
                           </span>
                         ))}
@@ -1344,7 +1397,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                               <div className="text-sm font-bold text-slate-700 mb-2">{group.title}</div>
                               <ul className="space-y-2 text-sm leading-6 text-slate-600">
                                 {group.lines.map((line, lineIdx) => (
-                                  <li key={lineIdx} className="pl-3 border-l-2 border-amber-200">
+                                  <li key={lineIdx} className="book-data-line">
                                     {line}
                                   </li>
                                 ))}
@@ -1355,7 +1408,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                       )}
 
                       <details className="group">
-                        <summary className="cursor-pointer text-sm font-semibold text-amber-700 hover:text-amber-800">
+                        <summary className="book-original-trigger">
                           {ui.showOriginal}
                         </summary>
                         <div className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap text-sm leading-7 text-slate-600 bg-slate-50 border border-slate-100 rounded-xl p-4">
@@ -1370,7 +1423,36 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
           </div>
         )}
 
-      </div>
+      </main>
+      </>
+      )}
+
+      {showContact && (
+        <div className="contact-overlay" role="dialog" aria-modal="true" aria-labelledby="contact-title">
+          <button type="button" className="contact-backdrop" aria-label={isEnglish ? 'Close contact dialog' : '关闭联系方式'} onClick={() => setShowContact(false)} />
+          <div className="contact-dialog">
+            <div className="contact-dialog-header">
+              <div>
+                <h2 id="contact-title">{isEnglish ? 'Contact us' : '联系我们'}</h2>
+              </div>
+              <button type="button" onClick={() => setShowContact(false)} aria-label={isEnglish ? 'Close' : '关闭'}><X className="w-5 h-5" /></button>
+            </div>
+            <div className="contact-options">
+              <div className="contact-wechat">
+                <button type="button" className="contact-wechat-id" onClick={() => navigator.clipboard.writeText('XQ_player')}>
+                  <MessageCircle className="w-5 h-5" />
+                  <span><strong>{isEnglish ? 'WeChat' : '微信'}</strong><small>XQ_player</small></span>
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+              <a className="contact-email" href="mailto:hanxq888@gmail.com">
+                <Mail className="w-5 h-5" />
+                <span><strong>{isEnglish ? 'Email' : '邮箱'}</strong><small>hanxq888@gmail.com</small></span>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Reference Modal */}
       {selectedRef && (
@@ -1394,7 +1476,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
               <div className="mb-4 inline-block px-3 py-1 bg-blue-50 text-blue-700 text-sm font-semibold rounded-lg border border-blue-100">
                 {ui.citationIndex}: {selectedRef.author}
               </div>
-              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 text-slate-700 text-[15px] leading-relaxed font-serif whitespace-pre-wrap selection:bg-blue-200 max-h-[50vh] overflow-y-auto">
+              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 text-slate-700 text-[15px] leading-relaxed font-serif whitespace-pre-wrap max-h-[50vh] overflow-y-auto">
                 {selectedRef.text}
               </div>
             </div>
@@ -1406,11 +1488,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                   setCopied(true);
                   setTimeout(() => setCopied(false), 2000);
                 }}
-                className={`flex items-center px-6 py-2.5 rounded-xl font-bold transition-all duration-300 shadow-sm ${
-                  copied 
-                    ? 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-200 scale-[1.02]' 
-                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-200 hover:-translate-y-0.5'
-                }`}
+                className={`reference-copy-button ${copied ? 'copied' : ''}`}
               >
                 {copied ? (
                   <>
