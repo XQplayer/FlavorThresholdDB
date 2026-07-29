@@ -1,5 +1,7 @@
 # FlavorThresholdDB
 
+Live site: https://xqplayer.github.io/FlavorThresholdDB/
+
 FlavorThresholdDB is a bilingual local search interface for odor thresholds and flavor descriptors. It supports exact and fuzzy searches by CAS number, Chinese name, or English name, as well as batch list matching and CSV export.
 
 ## Features
