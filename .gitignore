@@ -2,7 +2,7 @@
 .venv/
 Scripts/
 Include/
-Lib/
+/Lib/
 
 # 编译和缓存文件
 __pycache__/
@@ -36,5 +36,6 @@ internal_standard_scan.json
 semiquant_summary.json
 *.pid
 *.err
+supabase/.temp/
 
 # 由于前端有自己的 .gitignore，所以 node_modules 会被默认过滤

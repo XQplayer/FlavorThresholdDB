@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
-import { Search, FileSpreadsheet, List, FileText, Download, AlertCircle, Loader2, Info, Upload, ExternalLink, X, Copy, Check, BookOpen, FlaskConical, Mail, MessageCircle, Network } from 'lucide-react';
+import { Search, FileSpreadsheet, List, FileText, Download, AlertCircle, Loader2, Info, Upload, ExternalLink, X, Copy, Check, ChevronDown, ChevronUp, FlaskConical, Mail, MessageCircle, Network, Database, ShieldCheck } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import './App.css';
 import SearchInsights from './components/SearchInsights';
+import PubChemStructureViewer from './components/PubChemStructureViewer';
 import { recordCompoundSearch } from './lib/supabase';
+import { classifyCompoundBySmarts } from './lib/compoundClassification';
 
 const FEMA_API_URL = (import.meta.env.VITE_FEMA_API_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
 const APP_BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -30,6 +32,56 @@ const parseThresholdStr = (str) => {
   return { author: str, type: '-', value: '-' };
 };
 
+const getThresholdYear = (threshold) => {
+  const years = (threshold || '').match(/\b(?:18|19|20)\d{2}[a-z]?\b/gi) || [];
+  return years.reduce((latest, value) => Math.max(latest, Number.parseInt(value, 10) || 0), 0);
+};
+
+const getThresholdNumericValue = (threshold) => {
+  const value = parseThresholdStr(threshold).value.replace(/,/g, '');
+  const match = value.match(/(?:\d+(?:\.\d+)?|\.\d+)(?:\s*[eE][+-]?\d+)?/);
+  return match ? Number.parseFloat(match[0].replace(/\s+/g, '')) : Number.POSITIVE_INFINITY;
+};
+
+const splitDescriptorValues = (value) => {
+  const values = Array.isArray(value) ? value : [value];
+  return values
+    .flatMap(item => (item || '').toString().split(/[,;|]/))
+    .map(item => item.trim())
+    .filter(Boolean);
+};
+
+const groupFlavorDescriptors = (fema, flavordb) => {
+  const normalize = value => value.toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+  const flavorDbDescriptors = flavordb?.found
+    ? [
+        ...splitDescriptorValues(flavordb.flavor_profile),
+        ...splitDescriptorValues(flavordb.odor),
+        ...splitDescriptorValues(flavordb.taste)
+      ]
+    : [];
+  const flavorDbTerms = new Set(flavorDbDescriptors.map(normalize));
+  const femaDescriptors = fema?.found
+    ? splitDescriptorValues(fema.flavor_profile).filter(label => !flavorDbTerms.has(normalize(label)))
+    : [];
+
+  return [
+    { key: 'fema', label: 'FEMA', descriptors: femaDescriptors },
+    { key: 'flavordb', label: 'FlavorDB', descriptors: flavorDbDescriptors }
+  ].filter(group => group.descriptors.length > 0);
+};
+
+const MatchModeControl = ({ exactMatch, onChange, isEnglish, compact = false }) => (
+  <div className={`match-mode-control${compact ? ' compact' : ''}`} role="group" aria-label={isEnglish ? 'Matching method' : '匹配方式'}>
+    <button type="button" className={exactMatch ? 'active' : ''} aria-pressed={exactMatch} onClick={() => onChange(true)}>
+      {isEnglish ? 'Exact' : '精确'}
+    </button>
+    <button type="button" className={!exactMatch ? 'active' : ''} aria-pressed={!exactMatch} onClick={() => onChange(false)}>
+      {isEnglish ? 'Fuzzy' : '模糊'}
+    </button>
+  </div>
+);
+
 export default function App() {
   const [currentView, setCurrentView] = useState(getViewFromLocation);
   const [data, setData] = useState([]);
@@ -41,12 +93,16 @@ export default function App() {
   const [selectedMedia, setSelectedMedia] = useState(['空气', '水', '其他介质']);
   const [includeBookResults, setIncludeBookResults] = useState(true);
   const [includeFlavorDescriptions, setIncludeFlavorDescriptions] = useState(true);
+  const [includePubChem, setIncludePubChem] = useState(true);
+  const [includeFlavorDB, setIncludeFlavorDB] = useState(true);
+  const [selectedFlavorSources, setSelectedFlavorSources] = useState(['FEMA', 'FlavorDB']);
   const [selectedThresholdTypes, setSelectedThresholdTypes] = useState(['d', 'r']);
-  const [filterOrder, setFilterOrder] = useState(['medium:空气', 'medium:水', 'medium:其他介质', 'book', 'flavor', 'threshold:d', 'threshold:r']);
+  const [filterOrder, setFilterOrder] = useState(['flavor', 'flavordb', 'pubchem', 'medium:水', 'medium:空气', 'medium:其他介质', 'book', 'threshold:d', 'threshold:r']);
   const [draggedFilterKey, setDraggedFilterKey] = useState(null);
   const [exactMatch, setExactMatch] = useState(true); // Default to exact match
   const fileInputRef = useRef(null);
   const trackedSearchesRef = useRef(new Set());
+  const compoundProfilesRef = useRef({});
 
   // Use deferred values for smooth typing
   const deferredSingleQuery = useDeferredValue(singleQuery);
@@ -56,12 +112,14 @@ export default function App() {
   const [selectedRef, setSelectedRef] = useState(null);
   const [copied, setCopied] = useState(false);
   const [showCitationExample, setShowCitationExample] = useState(false);
+  const [citationExpanded, setCitationExpanded] = useState(true);
   const [showContact, setShowContact] = useState(false);
   const [citationCopied, setCitationCopied] = useState(false);
   const [interfaceLanguage, setInterfaceLanguage] = useState('zh');
   const [refsLookup, setRefsLookup] = useState({});
   const [bookIndex, setBookIndex] = useState([]);
   const [femaProfiles, setFemaProfiles] = useState({});
+  const [compoundProfiles, setCompoundProfiles] = useState({});
 
   const isEnglish = interfaceLanguage === 'en';
 
@@ -88,8 +146,20 @@ export default function App() {
 
   const openHomeView = () => {
     setCurrentView('home');
+    setShowCitationExample(false);
     window.history.pushState({ view: 'home' }, '', `${APP_BASE_PATH}/`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openDataSources = () => {
+    setCurrentView('home');
+    setShowCitationExample(true);
+    setCitationExpanded(true);
+    setShowContact(false);
+    window.history.pushState({ view: 'home' }, '', `${APP_BASE_PATH}/`);
+    window.setTimeout(() => {
+      document.querySelector('.science-citation-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 0);
   };
   const ui = {
     loading: isEnglish ? 'Loading the local odor-threshold database...' : '正在解析本地阈值大数据库...',
@@ -102,7 +172,8 @@ export default function App() {
     bulkPlaceholder: isEnglish ? 'Enter one substance name or CAS number per line, or import a spreadsheet above...' : '每一行填写一个物质名称或 CAS 号，或者点击上方按钮导入表格...',
     bulkHelp: isEnglish ? 'Supports Chinese and English names, CAS numbers, and fuzzy matching.' : '支持中英文混排、支持 CAS 号与模糊匹配。直接提取出相关阈值记录结果。',
     filters: isEnglish ? 'Filters' : '筛选条件',
-    dataScope: isEnglish ? 'Data scope' : '数据范围',
+    chemicalInfo: isEnglish ? 'Chemical information' : '化学信息',
+    dataScope: isEnglish ? 'Threshold data' : '阈值数据',
     thresholdScope: isEnglish ? 'Threshold type' : '阈值类型',
     searchLabel: isEnglish ? 'Compound name or CAS number' : '化合物名称或 CAS 号',
     liveSearchHelp: isEnglish ? 'Results update as you type.' : '输入内容后结果将自动更新。',
@@ -121,7 +192,7 @@ export default function App() {
     flavorClassification: isEnglish ? 'Flavor descriptions and categories' : '风味描述与分类',
     flavorSource: isEnglish ? 'Source: FlavorNet' : '来源: FlavorNet',
     externalLinks: isEnglish ? 'External flavor-description sources:' : '香气描述外链查询:',
-    flavorDescriptions: isEnglish ? 'Flavor descriptions' : '风味描述',
+    flavorDescriptions: 'FEMA',
     openFema: isEnglish ? 'Open FEMA page' : '打开 FEMA 页面',
     bookResults: isEnglish ? 'Book search results' : '书籍检索结果',
     pageChunk: (page, chunk) => isEnglish ? `Page ${page} / excerpt ${chunk}` : `第 ${page} 页 / 片段 ${chunk}`,
@@ -149,14 +220,16 @@ export default function App() {
     day: 'numeric',
     year: 'numeric'
   });
-  const citationExampleText = `1. Odor thresholds were queried from FlavorThresholdDB v1.0. For each compound, the original source, measurement medium, and threshold unit were retained to ensure data traceability. Thresholds in water were primarily obtained from Van Gemert (2011), while aroma descriptors were cross-referenced against Fan and Xu (2020) and the FEMA Flavor Ingredient Library.
+  const citationExampleText = `1. Odor thresholds were queried from FlavorThresholdDB v1.0. For each compound, the original source, measurement medium, and threshold unit were retained to ensure data traceability. Thresholds in water were primarily obtained from Van Gemert (2011), while aroma descriptors and chemical identifiers were cross-referenced against Fan and Xu (2020), the FEMA Flavor Ingredient Library, PubChem, and FlavorDB.
 
-2. The odor thresholds and flavor profiles of these compounds were determined based on previous reports (Van Gemert, 2011; Fan and Xu, 2020; FEMA, ${accessYear}).
+2. The odor thresholds, flavor profiles, and chemical identifiers of these compounds were determined based on previous reports and database records (Van Gemert, 2011; Fan and Xu, 2020; FEMA, ${accessYear}; PubChem, ${accessYear}; FlavorDB, ${accessYear}).
 
 References:
 Van Gemert, L. J. (2011). Flavour Thresholds (2nd ed.). Flavour or taste threshold values in water (Chapter 1).
 Fan, W. L., & Xu, Y. (2020). Wine flavor chemistry. China Light Industry Press.
-FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from https://www.femaflavor.org/flavor-library. Accessed ${accessDateText}.`;
+FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from https://www.femaflavor.org/flavor-library. Accessed ${accessDateText}.
+National Center for Biotechnology Information. (${accessYear}). PubChem. Retrieved from https://pubchem.ncbi.nlm.nih.gov/. Accessed ${accessDateText}.
+FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosylab.iiitd.edu.in/flavordb/. Accessed ${accessDateText}.`;
 
   useEffect(() => {
     const normalize = (str) => {
@@ -367,6 +440,46 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
     };
   }, [queryMatchedResults, femaProfiles]);
 
+  useEffect(() => {
+    const limit = searchMode === 'single' ? 1 : 10;
+    const uniqueCas = [...new Set(queryMatchedResults.map(item => item.cas).filter(Boolean))].slice(0, limit);
+    const missingCas = uniqueCas.filter(cas => compoundProfilesRef.current[cas] === undefined);
+    if (!missingCas.length) return undefined;
+
+    setCompoundProfiles(prev => {
+      const next = { ...prev };
+      missingCas.forEach(cas => {
+        const loadingProfile = { loading: true };
+        next[cas] = loadingProfile;
+        compoundProfilesRef.current[cas] = loadingProfile;
+      });
+      return next;
+    });
+
+    const loadProfiles = async () => {
+      for (const cas of missingCas) {
+        try {
+          const response = await fetch(`${FEMA_API_URL}/compound?cas=${encodeURIComponent(cas)}`);
+          if (!response.ok) throw new Error(`Compound lookup failed (${response.status})`);
+          const profile = await response.json();
+          const smartClassification = await classifyCompoundBySmarts(profile.pubchem?.smiles);
+          profile.smart_classification = smartClassification;
+          compoundProfilesRef.current[cas] = profile;
+          setCompoundProfiles(prev => ({ ...prev, [cas]: profile }));
+        } catch (error) {
+          const failedProfile = { loading: false, error: error.message, pubchem: { found: false }, flavordb: { found: false } };
+          compoundProfilesRef.current[cas] = failedProfile;
+          setCompoundProfiles(prev => ({
+            ...prev,
+            [cas]: failedProfile,
+          }));
+        }
+      }
+    };
+    loadProfiles();
+    return undefined;
+  }, [queryMatchedResults, searchMode]);
+
   const bookResults = useMemo(() => {
     if (!includeBookResults) return [];
     if (!bookIndex.length) return [];
@@ -428,6 +541,39 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
       });
   }, [queryMatchedResults, femaProfiles, includeFlavorDescriptions]);
 
+  const externalCompoundResults = useMemo(() => {
+    const seenCas = new Set();
+    return queryMatchedResults
+      .map(item => ({ item, profile: compoundProfiles[item.cas] }))
+      .filter(({ item, profile }) => {
+        if (!item.cas || seenCas.has(item.cas) || !profile || profile.loading) return false;
+        const hasPubChem = includePubChem && profile.pubchem?.found;
+        const hasFlavorDB = includeFlavorDB && profile.flavordb?.found;
+        if (!hasPubChem && !hasFlavorDB) return false;
+        seenCas.add(item.cas);
+        return true;
+      });
+  }, [queryMatchedResults, compoundProfiles, includePubChem, includeFlavorDB]);
+
+  const integratedCompoundResults = useMemo(() => {
+    const seenCas = new Set();
+    return queryMatchedResults
+      .map(item => ({
+        item,
+        fema: femaProfiles[item.cas] || {},
+        profile: compoundProfiles[item.cas] || {}
+      }))
+      .filter(({ item, fema, profile }) => {
+        if (!item.cas || seenCas.has(item.cas)) return false;
+        const hasFema = includeFlavorDescriptions && fema.found;
+        const hasPubChem = includePubChem && profile.pubchem?.found;
+        const hasFlavorDB = includeFlavorDB && profile.flavordb?.found;
+        if (!hasFema && !hasPubChem && !hasFlavorDB) return false;
+        seenCas.add(item.cas);
+        return true;
+      });
+  }, [queryMatchedResults, femaProfiles, compoundProfiles, includeFlavorDescriptions, includePubChem, includeFlavorDB]);
+
   useEffect(() => {
     if (!queryMatchedResults.length) return;
     const queryKey = searchMode === 'single'
@@ -479,6 +625,14 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
     );
   };
 
+  const toggleFlavorSource = (source) => {
+    setSelectedFlavorSources(prev =>
+      prev.includes(source)
+        ? prev.filter(item => item !== source)
+        : [...prev, source]
+    );
+  };
+
   const moveFilterOption = (sourceKey, targetKey) => {
     if (!sourceKey || !targetKey || sourceKey === targetKey) return;
     setFilterOrder(prev => {
@@ -504,9 +658,34 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
   };
 
   const filterOptions = [
+    {
+      key: 'flavor',
+      tone: 'flavor',
+      group: 'chemical',
+      label: ui.flavorDescriptions,
+      active: includeFlavorDescriptions,
+      onClick: () => setIncludeFlavorDescriptions(prev => !prev)
+    },
+    {
+      key: 'pubchem',
+      tone: 'pubchem',
+      group: 'chemical',
+      label: 'PubChem',
+      active: includePubChem,
+      onClick: () => setIncludePubChem(prev => !prev)
+    },
+    {
+      key: 'flavordb',
+      tone: 'flavordb',
+      group: 'chemical',
+      label: 'FlavorDB',
+      active: includeFlavorDB,
+      onClick: () => setIncludeFlavorDB(prev => !prev)
+    },
     ...['空气', '水', '其他介质'].map((medium, index) => ({
       key: `medium:${medium}`,
       tone: ['air', 'water', 'other'][index],
+      group: 'data',
       label: displayMedium(medium),
       active: selectedMedia.includes(medium),
       onClick: () => toggleMedium(medium)
@@ -514,16 +693,10 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
     {
       key: 'book',
       tone: 'book',
+      group: 'data',
       label: ui.bookResults,
       active: includeBookResults,
       onClick: () => setIncludeBookResults(prev => !prev)
-    },
-    {
-      key: 'flavor',
-      tone: 'flavor',
-      label: ui.flavorDescriptions,
-      active: includeFlavorDescriptions,
-      onClick: () => setIncludeFlavorDescriptions(prev => !prev)
     },
     ...[
       { code: 'd', label: isEnglish ? 'Detection threshold (d)' : '觉察阈 (d)' },
@@ -531,6 +704,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
     ].map(type => ({
       key: `threshold:${type.code}`,
       tone: type.code === 'd' ? 'detection' : 'recognition',
+      group: 'threshold',
       label: type.label,
       active: selectedThresholdTypes.includes(type.code),
       onClick: () => toggleThresholdType(type.code)
@@ -553,6 +727,10 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
       })
       .map((threshold, index) => ({ threshold, index }))
       .sort((a, b) => {
+        const yearOrder = getThresholdYear(b.threshold) - getThresholdYear(a.threshold);
+        if (yearOrder) return yearOrder;
+        const valueOrder = getThresholdNumericValue(a.threshold) - getThresholdNumericValue(b.threshold);
+        if (valueOrder) return valueOrder;
         const aCode = getThresholdTypeCode(a.threshold);
         const bCode = getThresholdTypeCode(b.threshold);
         const aOrder = aCode ? getFilterOrderIndex(`threshold:${aCode}`) : filterOrder.length;
@@ -707,13 +885,33 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
   const exportCSV = () => {
     if (!results.length) return;
     
-    const baseHeaders = ['序号', 'CAS号', '化合物中文名', '化合物英文名', '常用英文名', '检索介质', '文献来源', '阈值类型(d/r)', '阈值数值', '阈值单位', '风味分类', '风味描述'];
-    const femaHeaders = ['FEMA名称', 'FEMA编号', 'FEMA风味描述', 'FEMA链接'];
-    const bookHeaders = ['书籍来源', '书籍页码片段', '书籍分类', '书籍命中文本'];
     const headers = [
-      ...baseHeaders,
-      ...(includeFlavorDescriptions ? femaHeaders : []),
-      ...(includeBookResults ? bookHeaders : [])
+      '序号',
+      'CAS号',
+      '化合物中文名',
+      '常用英文名',
+      ...(includeFlavorDB ? ['主要官能团', 'FlavorDB CID', 'FlavorDB风味描述', 'FlavorDB链接'] : []),
+      ...(includePubChem ? [
+        '主要化合物类别',
+        'SMARTS命中',
+        '分子式',
+        '分子量',
+        'IUPAC',
+        'XLogP',
+        'TPSA',
+        'HBD',
+        'HBA',
+        'SMILES',
+        'PubChem CID',
+        'PubChem链接'
+      ] : []),
+      '检索介质',
+      '文献来源',
+      '阈值类型(d/r)',
+      '阈值数值',
+      '阈值单位',
+      ...(includeFlavorDescriptions ? ['FEMA编号', 'FEMA风味描述', 'FEMA链接'] : []),
+      ...(includeBookResults ? ['书籍来源', '书籍页码片段', '书籍分类', '书籍命中文本'] : [])
     ];
     const rows = [headers.join(',')];
     const formatCommonEnglishName = (value) => {
@@ -723,7 +921,13 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
       return lower.replace(/[A-Za-z]/, match => match.toUpperCase());
     };
 
-    const csvCell = (value) => `"${(value || '').toString().replace(/"/g, '""')}"`;
+    const csvCell = (value) => `"${(value ?? '').toString().replace(/"/g, '""')}"`;
+    const csvCasCell = (value) => {
+      const cas = (value || '').toString().trim();
+      return /^\d{2,7}-\d{2}-\d$/.test(cas)
+        ? `="${cas}"`
+        : csvCell(cas);
+    };
 
     const classifyBookHit = (text) => {
       const source = (text || '').toString();
@@ -765,66 +969,65 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
     };
     
     orderedResults.forEach((item, index) => {
-      const cas = `"${item.cas || ''}"`;
-      const cn = `"${(item.chinese_name || '').replace(/"/g, '""')}"`;
-      const en = `"${(item.english_name || '').replace(/"/g, '""')}"`;
-      const medium = `"${item.medium || ''}"`;
-      const unit = item.medium === '空气' ? '"mg/m³"' : '"mg/kg"';
-      const flavorCats = `"${(item.flavor_categories || []).join('; ')}"` ;
-      const flavorDesc = `"${(item.flavor_desc_cn || []).join('; ')}"` ;
       const fema = femaProfiles[item.cas] || {};
-      const femaName = `"${(fema.name || '').replace(/"/g, '""')}"`;
-      const femaNumber = `"${(fema.fema_number || '').replace(/"/g, '""')}"`;
-      const femaFlavor = `"${(fema.flavor_profile || '').replace(/"/g, '""')}"`;
-      const femaUrl = `"${(fema.url || '').replace(/"/g, '""')}"`;
+      const profile = compoundProfiles[item.cas] || {};
+      const pubchem = profile.pubchem || {};
+      const flavordb = profile.flavordb || {};
       const commonEnglishNameText = formatCommonEnglishName(fema.name || item.english_name);
-      const commonEnglishName = csvCell(commonEnglishNameText);
       const bookMatches = getBookMatchesForItem(item, fema, commonEnglishNameText);
-      const bookSource = csvCell(bookMatches.length ? '酒类风味化学' : '');
-      const bookPageChunks = csvCell(bookMatches.map(hit => `第 ${hit.page} 页 / 片段 ${hit.chunk}`).join('\n'));
-      const bookCategories = csvCell([...new Set(bookMatches.map(hit => classifyBookHit(hit.text)))].join('; '));
-      const bookTexts = csvCell(bookMatches.map(hit => `[第 ${hit.page} 页 / 片段 ${hit.chunk}] ${hit.text}`).join('\n\n'));
+      const firstThreshold = getFilteredThresholds(item)[0];
+      const parsed = firstThreshold
+        ? parseThresholdStr(firstThreshold)
+        : { author: '', type: '', value: '' };
+      const functionalGroups = flavordb.functional_groups || [];
+      const primaryClass = profile.smart_classification || { zh: '其他类', en: 'Others' };
 
-      const thresholds = getFilteredThresholds(item);
-      if (thresholds.length === 0) {
-        const baseRow = [index + 1, cas, cn, en, commonEnglishName, medium, '""', '""', '""', unit, flavorCats, flavorDesc];
-        rows.push([
-          ...baseRow,
-          ...(includeFlavorDescriptions ? [femaName, femaNumber, femaFlavor, femaUrl] : []),
-          ...(includeBookResults ? [bookSource, bookPageChunks, bookCategories, bookTexts] : [])
-        ].join(','));
-      } else {
-        thresholds.forEach((thStr, tIdx) => {
-          const parsed = parseThresholdStr(thStr);
-          // Only show index on the first row of the compound
-          rows.push([
-            tIdx === 0 ? index + 1 : "",
-            tIdx === 0 ? cas : '""',
-            tIdx === 0 ? cn : '""',
-            tIdx === 0 ? en : '""',
-            tIdx === 0 ? commonEnglishName : '""',
-            tIdx === 0 ? medium : '""',
-            `"${parsed.author.replace(/"/g, '""')}"`,
-            `"${parsed.type.replace(/"/g, '""')}"`,
-            `"${parsed.value.replace(/"/g, '""')}"`,
-            unit,
-            tIdx === 0 ? flavorCats : '""',
-            tIdx === 0 ? flavorDesc : '""',
-            ...(includeFlavorDescriptions ? [
-              tIdx === 0 ? femaName : '""',
-              tIdx === 0 ? femaNumber : '""',
-              tIdx === 0 ? femaFlavor : '""',
-              tIdx === 0 ? femaUrl : '""'
-            ] : []),
-            ...(includeBookResults ? [
-              tIdx === 0 ? bookSource : '""',
-              tIdx === 0 ? bookPageChunks : '""',
-              tIdx === 0 ? bookCategories : '""',
-              tIdx === 0 ? bookTexts : '""'
-            ] : [])
-          ].join(','));
-        });
-      }
+      rows.push([
+        index + 1,
+        csvCasCell(item.cas),
+        csvCell(item.chinese_name),
+        csvCell(commonEnglishNameText),
+        ...(includeFlavorDB ? [
+          csvCell(functionalGroups.join('; ')),
+          csvCell(flavordb.cid),
+          csvCell([
+            ...(flavordb.flavor_profile || []),
+            ...(flavordb.odor || []),
+            ...(flavordb.taste || [])
+          ].join('; ')),
+          csvCell(flavordb.url)
+        ] : []),
+        ...(includePubChem ? [
+          csvCell(isEnglish ? primaryClass.en : primaryClass.zh),
+          csvCell((primaryClass.matches || []).map(match => isEnglish ? match.en : match.zh).join('; ')),
+          csvCell(pubchem.molecular_formula),
+          csvCell(pubchem.molecular_weight),
+          csvCell(pubchem.iupac_name),
+          csvCell(pubchem.xlogp),
+          csvCell(pubchem.tpsa),
+          csvCell(pubchem.h_bond_donor_count),
+          csvCell(pubchem.h_bond_acceptor_count),
+          csvCell(pubchem.smiles),
+          csvCell(pubchem.cid),
+          csvCell(pubchem.url)
+        ] : []),
+        csvCell(item.medium),
+        csvCell(parsed.author),
+        csvCell(parsed.type),
+        csvCell(parsed.value),
+        csvCell(item.medium === '空气' ? 'mg/m3' : 'mg/kg'),
+        ...(includeFlavorDescriptions ? [
+          csvCell(fema.fema_number),
+          csvCell(fema.flavor_profile),
+          csvCell(fema.url)
+        ] : []),
+        ...(includeBookResults ? [
+          csvCell(bookMatches.length ? '酒类风味化学' : ''),
+          csvCell(bookMatches.map(hit => `第 ${hit.page} 页 / 片段 ${hit.chunk}`).join('\n')),
+          csvCell([...new Set(bookMatches.map(hit => classifyBookHit(hit.text)))].join('; ')),
+          csvCell(bookMatches.map(hit => `[第 ${hit.page} 页 / 片段 ${hit.chunk}] ${hit.text}`).join('\n\n'))
+        ] : [])
+      ].join(','));
     });
 
     const csvContent = "\uFEFF" + rows.join('\n');
@@ -891,9 +1094,9 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
               </span>
             </a>
             <div className="science-nav-links">
-              <a href="#top" className={!showCitationExample && !showContact ? 'active' : ''}>{isEnglish ? 'Home' : '首页'}</a>
+              <a href="#top" className={!showCitationExample && !showContact ? 'active' : ''} onClick={() => setShowCitationExample(false)}>{isEnglish ? 'Home' : '首页'}</a>
               <button type="button" onClick={openSearchView}>FlavorThresholdDB</button>
-              <button type="button" className={showCitationExample && !showContact ? 'active' : ''} onClick={() => setShowCitationExample(prev => !prev)}>
+              <button type="button" className={showCitationExample && !showContact ? 'active' : ''} onClick={openDataSources}>
                 {isEnglish ? 'Sources' : '数据来源'}
               </button>
               <button type="button" className={`science-contact-link ${showContact ? 'active' : ''}`} onClick={() => setShowContact(true)}>
@@ -917,51 +1120,69 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
             <p className="science-description">
               {isEnglish
                 ? 'Integrates authoritative literature and specialized databases to provide traceable support for compound identification, OAV analysis, and standardized flavor annotation.'
-                : '整合权威文献与专业数据库，为风味化合物识别、OAV 分析与标准化风味注释提供可追溯的数据支持。'}
+                : '整合多来源香气阈值与风味描述数据，保留介质、单位、阈值类型及文献来源，为风味化合物注释与 OAV 分析提供可追溯的数据支持。'}
             </p>
-            <div className="science-actions">
-              <button type="button" onClick={openSearchView} className="science-primary-action">
-                <Search className="w-4 h-4" />
-                {isEnglish ? 'Start searching' : '开始检索'}
-              </button>
-              <button type="button" className="science-secondary-action" onClick={() => setShowCitationExample(prev => !prev)}>
-                <BookOpen className="w-4 h-4" />
-                {isEnglish ? 'Citation guide' : '引用指南'}
-              </button>
-            </div>
+            {!showCitationExample && (
+              <>
+                <div className="science-actions">
+                  <button type="button" onClick={openSearchView} className="science-primary-action">
+                    <Search className="w-5 h-5" />
+                  {isEnglish ? 'Begin your flavor exploration' : '开启风味探索之旅'}
+                  </button>
+                </div>
 
-            <div className="science-metrics" aria-label={isEnglish ? 'Platform coverage' : '平台数据覆盖'}>
-              <div><strong>3</strong><span>{isEnglish ? 'core sources' : '核心数据来源'}</span></div>
-              <div><strong>{measurementMediaCount}</strong><span>{isEnglish ? 'measurement media' : '检测介质体系'}</span></div>
-              <div><strong className="science-metric-word">{isEnglish ? 'Traceable' : '可追溯'}</strong><span>{isEnglish ? 'source records retained' : '保留来源记录'}</span></div>
-            </div>
-
-            <div className="science-author-note">
-              <span className="source-note-label">{isEnglish ? 'Author statement' : '作者声明'}</span>
-              <span>
-                {isEnglish
-                  ? 'For personal study and academic exchange only. Commercial use is prohibited. Please cite the source when reposting or sharing.'
-                  : '仅供个人学习与交流使用，不得用于商业用途；转载或分享时请注明来源。'}
-              </span>
-            </div>
+                <div className="science-metrics" aria-label={isEnglish ? 'Platform coverage' : '平台数据覆盖'}>
+                  <div>
+                    <span className="science-metric-icon"><Database aria-hidden="true" /></span>
+                    <span className="science-metric-copy"><strong>5</strong><span>{isEnglish ? 'integrated data sources' : '整合数据来源'}</span></span>
+                  </div>
+                  <div>
+                    <span className="science-metric-icon"><FlaskConical aria-hidden="true" /></span>
+                    <span className="science-metric-copy"><strong>{measurementMediaCount}</strong><span>{isEnglish ? 'threshold media categories' : '阈值介质分类'}</span></span>
+                  </div>
+                  <div>
+                    <span className="science-metric-icon"><ShieldCheck aria-hidden="true" /></span>
+                    <span className="science-metric-copy"><strong className="science-metric-word">{isEnglish ? 'Traceable' : '可追溯'}</strong><span>{isEnglish ? 'source records retained' : '保留来源记录'}</span></span>
+                  </div>
+                </div>
+              </>
+            )}
 
             {showCitationExample && (
               <div className="science-citation-panel">
                 <div className="science-citation-header">
                   <span>{isEnglish ? 'Citation examples for academic writing' : '论文写作引用示例'}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(citationExampleText);
-                      setCitationCopied(true);
-                      setTimeout(() => setCitationCopied(false), 2000);
-                    }}
-                  >
-                    {citationCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                    {citationCopied ? (isEnglish ? 'Copied' : '已复制') : (isEnglish ? 'Copy' : '复制')}
-                  </button>
+                  <div className="science-citation-controls">
+                    <button
+                      type="button"
+                      onClick={() => setCitationExpanded(prev => !prev)}
+                      aria-expanded={citationExpanded}
+                    >
+                      {citationExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      {citationExpanded ? (isEnglish ? 'Collapse' : '折叠') : (isEnglish ? 'Expand' : '展开')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(citationExampleText);
+                        setCitationCopied(true);
+                        setTimeout(() => setCitationCopied(false), 2000);
+                      }}
+                    >
+                      {citationCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      {citationCopied ? (isEnglish ? 'Copied' : '已复制') : (isEnglish ? 'Copy' : '复制')}
+                    </button>
+                  </div>
                 </div>
-                <pre>{citationExampleText}</pre>
+                {citationExpanded && (
+                  <div className="science-citation-content">
+                    <div className="science-source-overview" aria-label={isEnglish ? 'Five core data sources' : '五项核心数据来源'}>
+                      <div><span>{isEnglish ? 'Literature' : '文献'}</span><strong>Van Gemert (2011)</strong><strong>Fan & Xu (2020)</strong></div>
+                      <div><span>{isEnglish ? 'Databases' : '数据库'}</span><strong>FEMA</strong><strong>PubChem</strong><strong>FlavorDB</strong></div>
+                    </div>
+                    <pre>{citationExampleText}</pre>
+                  </div>
+                )}
               </div>
             )}
 
@@ -972,15 +1193,25 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
               </div>
             )}
           </header>
-          <SearchInsights
-            isEnglish={isEnglish}
-            onSelect={item => {
-              setSearchMode('single');
-              setExactMatch(true);
-              setSingleQuery(item.cas);
-              openSearchView();
-            }}
-          />
+          {!showCitationExample && (
+            <SearchInsights
+              isEnglish={isEnglish}
+              onSelect={item => {
+                setSearchMode('single');
+                setExactMatch(true);
+                setSingleQuery(item.cas);
+                openSearchView();
+              }}
+            />
+          )}
+          <footer className="science-author-footer">
+            <strong>{isEnglish ? 'Author statement' : '作者申明'}</strong>
+            <span>
+              {isEnglish
+                ? 'For personal study and academic exchange only. Commercial use is prohibited. Please cite the source when reposting or sharing.'
+                : '仅供个人学习与交流使用，不得用于商业用途；转载或分享时请注明来源。'}
+            </span>
+          </footer>
         </div>
       </section>
       )}
@@ -997,7 +1228,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
           <div className="science-nav-links">
             <button type="button" onClick={openHomeView}>{isEnglish ? 'Home' : '首页'}</button>
             <button type="button" className={showContact ? '' : 'active'} onClick={openSearchView}>FlavorThresholdDB</button>
-            <button type="button" onClick={() => { setShowCitationExample(true); openHomeView(); }}>{isEnglish ? 'Sources' : '数据来源'}</button>
+            <button type="button" onClick={openDataSources}>{isEnglish ? 'Sources' : '数据来源'}</button>
             <button type="button" className={`science-contact-link ${showContact ? 'active' : ''}`} onClick={() => setShowContact(true)}>{isEnglish ? 'Contact' : '联系我们'}</button>
           </div>
           <button type="button" className="science-mobile-contact" onClick={() => setShowContact(true)} aria-label={isEnglish ? 'Contact' : '联系我们'}>
@@ -1065,10 +1296,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                   value={singleQuery}
                   onChange={(e) => setSingleQuery(e.target.value)}
                 />
-                <select value={exactMatch ? 'exact' : 'fuzzy'} onChange={(event) => setExactMatch(event.target.value === 'exact')} aria-label={isEnglish ? 'Matching method' : '匹配方式'}>
-                  <option value="exact">{isEnglish ? 'Exact' : '精确'}</option>
-                  <option value="fuzzy">{isEnglish ? 'Fuzzy' : '模糊'}</option>
-                </select>
+                <MatchModeControl exactMatch={exactMatch} onChange={setExactMatch} isEnglish={isEnglish} compact />
                 </div>
                 <p className="search-field-help">{ui.liveSearchHelp}</p>
               </div>
@@ -1080,10 +1308,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                     {ui.bulkLabel}
                   </label>
                   <div className="bulk-field-actions">
-                    <select value={exactMatch ? 'exact' : 'fuzzy'} onChange={(event) => setExactMatch(event.target.value === 'exact')} aria-label={isEnglish ? 'Matching method' : '匹配方式'}>
-                      <option value="exact">{isEnglish ? 'Exact' : '精确'}</option>
-                      <option value="fuzzy">{isEnglish ? 'Fuzzy' : '模糊'}</option>
-                    </select>
+                    <MatchModeControl exactMatch={exactMatch} onChange={setExactMatch} isEnglish={isEnglish} />
                     <input
                       type="file"
                       accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
@@ -1120,13 +1345,14 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
           <div className="filter-disclosure">
             <div id="advanced-filters" className="advanced-filters legacy-filter-list" role="group" aria-label={isEnglish ? 'Detection medium filter' : '检测介质过滤'}>
               {[
-                filterOptions.filter(option => !option.key.startsWith('threshold:')),
-                filterOptions.filter(option => option.key.startsWith('threshold:'))
-              ].map((optionGroup, rowIndex) => (
-                <div key={rowIndex} className="legacy-filter-row">
-                  <span className="legacy-filter-row-label">{rowIndex === 0 ? ui.dataScope : ui.thresholdScope}</span>
+                { key: 'chemical', label: ui.chemicalInfo },
+                { key: 'data', label: ui.dataScope },
+                { key: 'threshold', label: ui.thresholdScope }
+              ].map(filterGroup => (
+                <div key={filterGroup.key} className="legacy-filter-row" data-filter-group={filterGroup.key}>
+                  <span className="legacy-filter-row-label">{filterGroup.label}</span>
                   <div className="legacy-filter-row-options">
-                    {optionGroup.map(option => (
+                    {filterOptions.filter(option => option.group === filterGroup.key).map(option => (
                       <button
                         key={option.key}
                         draggable
@@ -1185,22 +1411,14 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                     data-tone={['air', 'water', 'other'][['空气', '水', '其他介质'].indexOf(item.medium)] || 'water'}
                   >
                     <div className="threshold-entity-header">
-                      <div>
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-2xl font-bold text-slate-800">{item.chinese_name || item.english_name}</h3>
-                          <span className="compound-cas bg-slate-100 text-slate-600 px-3 py-1.5 rounded-md border border-slate-200">
-                            CAS: {item.cas}
-                          </span>
-                        </div>
+                      <div className="threshold-identity-row">
+                        <h3>{item.chinese_name || item.english_name}</h3>
                         {formatDisplayCommonEnglishName((femaProfiles[item.cas] || {}).name || item.english_name) && (
-                          <p className="common-english-name text-slate-700 font-semibold">
-                            <span>{isEnglish ? 'Common name: ' : '常用英文名：'}</span>
+                          <span className="threshold-common-name">
                             {formatDisplayCommonEnglishName((femaProfiles[item.cas] || {}).name || item.english_name)}
-                          </p>
+                          </span>
                         )}
-                        {item.chinese_name && (
-                          <p className="text-slate-500 font-medium mt-1">{item.english_name}</p>
-                        )}
+                        <span className="compound-cas">CAS {item.cas}</span>
                       </div>
                       
                       <div className="mt-4 md:mt-0 flex shrink-0">
@@ -1217,110 +1435,57 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                         {ui.thresholdRecords}
                       </h4>
                       {getFilteredThresholds(item).length > 0 ? (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left border-collapse min-w-max">
-                            <thead>
-                              <tr className="bg-slate-200/50 text-slate-500 text-xs uppercase tracking-wider">
-                                <th className="px-3 py-2 rounded-l-lg font-medium">{ui.source}</th>
-                                <th className="px-3 py-2 font-medium">{ui.thresholdType}</th>
-                                <th className="px-3 py-2 rounded-r-lg font-medium">{ui.threshold} ({item.medium === '空气' ? 'mg/m³' : 'mg/kg'})</th>
-                              </tr>
-                            </thead>
-                            <tbody className="text-sm">
-                              {getFilteredThresholds(item).map((th, idx) => {
+                        <div className="threshold-records" role="table" aria-label={ui.thresholdRecords}>
+                          <div className="threshold-record-row threshold-record-head" role="row">
+                            <span role="columnheader">{ui.source}</span>
+                            <span role="columnheader">{ui.thresholdType}</span>
+                            <span role="columnheader">{ui.threshold} ({item.medium === '空气' ? 'mg/m³' : 'mg/kg'})</span>
+                          </div>
+                          {getFilteredThresholds(item).slice(0, 1).map((th, idx) => {
+                            const parsed = parseThresholdStr(th);
+                            const fullRef = matchReference(parsed.author);
+                            return (
+                              <div key={`primary-${idx}`} className="threshold-record-row primary" role="row">
+                                <span role="cell">
+                                  {fullRef ? (
+                                    <button onClick={() => setSelectedRef({ author: parsed.author, text: fullRef })} className="reference-link-button group inline-flex items-center text-left" aria-label={isEnglish ? 'View full reference' : '查看完整文献'}>
+                                      <span>{parsed.author}</span><Info className="w-3.5 h-3.5 ml-1.5" />
+                                    </button>
+                                  ) : parsed.author}
+                                </span>
+                                <span role="cell" data-mobile-label={isEnglish ? 'Type: ' : '类型：'}>{displayThresholdType(parsed.type)}</span>
+                                <strong role="cell" data-mobile-label={isEnglish ? 'Threshold: ' : '阈值：'}>{parsed.value}</strong>
+                              </div>
+                            );
+                          })}
+                          {getFilteredThresholds(item).length > 1 && (
+                            <details className="threshold-more-records">
+                              <summary>{isEnglish ? `Show ${getFilteredThresholds(item).length - 1} more records` : `展开其余 ${getFilteredThresholds(item).length - 1} 条记录`}</summary>
+                              {getFilteredThresholds(item).slice(1).map((th, idx) => {
                                 const parsed = parseThresholdStr(th);
+                                const fullRef = matchReference(parsed.author);
                                 return (
-                                  <tr key={idx} className="border-b border-slate-200/60 last:border-0 hover:bg-slate-100 transition-colors">
-                                    <td className="px-3 py-2.5 text-slate-700 font-medium">
-                                      {(() => {
-                                        const fullRef = matchReference(parsed.author);
-                                        if (fullRef) {
-                                          return (
-                                            <button 
-                                              onClick={() => setSelectedRef({ author: parsed.author, text: fullRef })}
-                                              className="reference-link-button group inline-flex items-center text-left"
-                                              aria-label={isEnglish ? 'View full reference' : '查看完整文献'}
-                                            >
-                                              <span className="border-b border-dashed border-blue-400 text-blue-600 group-hover:text-blue-800 transition-colors">
-                                                {parsed.author}
-                                              </span>
-                                              <Info className="w-3.5 h-3.5 ml-1.5 text-blue-400 group-hover:text-blue-600 opacity-70" />
-                                            </button>
-                                          );
-                                        }
-                                        return parsed.author;
-                                      })()}
-                                    </td>
-                                    <td className="px-3 py-2.5 text-slate-500">{displayThresholdType(parsed.type)}</td>
-                                    <td className="threshold-value px-3 py-2.5 text-blue-600 tracking-tight">{parsed.value}</td>
-                                  </tr>
+                                  <div key={`more-${idx}`} className="threshold-record-row" role="row">
+                                    <span role="cell">
+                                      {fullRef ? (
+                                        <button onClick={() => setSelectedRef({ author: parsed.author, text: fullRef })} className="reference-link-button group inline-flex items-center text-left" aria-label={isEnglish ? 'View full reference' : '查看完整文献'}>
+                                          <span>{parsed.author}</span><Info className="w-3.5 h-3.5 ml-1.5" />
+                                        </button>
+                                      ) : parsed.author}
+                                    </span>
+                                    <span role="cell" data-mobile-label={isEnglish ? 'Type: ' : '类型：'}>{displayThresholdType(parsed.type)}</span>
+                                    <strong role="cell" data-mobile-label={isEnglish ? 'Threshold: ' : '阈值：'}>{parsed.value}</strong>
+                                  </div>
                                 );
                               })}
-                            </tbody>
-                          </table>
+                            </details>
+                          )}
                         </div>
                       ) : (
                         <div className="text-sm text-slate-400 py-2">{ui.noThresholds}</div>
                       )}
                     </div>
 
-                    {/* Flavor Profile Section */}
-                    {item.flavor_categories && item.flavor_categories.length > 0 && (
-                      <div className="descriptor-panel">
-                        <h4 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-3 flex items-center">
-                          {ui.flavorClassification}
-                        </h4>
-                        <div className="flex flex-wrap gap-2 mb-3">
-                          {item.flavor_categories.map((cat, ci) => (
-                            <span key={ci} className="data-tag">
-                              {cat}
-                            </span>
-                          ))}
-                        </div>
-                        {item.flavor_desc_cn && item.flavor_desc_cn.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5">
-                            {item.flavor_desc_cn.map((desc, di) => (
-                              <span key={di} className="descriptor-text">
-                                {desc}
-                              </span>
-                            ))}
-                            <span className="text-xs text-slate-400 ml-1 self-center">({ui.flavorSource})</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* External Database Search Links */}
-                    <div className="threshold-external-links mt-5 pt-5 border-t border-slate-100 flex flex-wrap items-center gap-3">
-                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest mr-2 flex items-center">
-                        <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                        {ui.externalLinks}
-                      </span>
-                      <a
-                        href={`https://www.google.com/search?q=site:thegoodscentscompany.com+"${item.cas}"`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="source-external-link"
-                      >
-                        The Good Scents Company
-                      </a>
-                      <a
-                        href={`https://www.femaflavor.org/flavor-library?cas=${item.cas}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="source-external-link"
-                      >
-                        FEMA Flavor
-                      </a>
-                      <a
-                        href={`https://www.google.com/search?q=site:perflavory.com+"${item.cas}"`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="source-external-link"
-                      >
-                        Perflavory
-                      </a>
-                    </div>
                   </div>
                 ))}
               </div>
@@ -1328,7 +1493,269 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
           </div>
         )}
 
-        {!loading && (singleQuery.trim() || bulkQuery.trim()) && femaResults.length > 0 && (
+        {!loading && (singleQuery.trim() || bulkQuery.trim()) && integratedCompoundResults.length > 0 && (
+          <section className="result-section integrated-records-section" style={{ order: 21 }}>
+            <div className="integrated-records-heading">
+              <div>
+                <h2>{isEnglish ? 'Compound profiles' : '化合物档案'}</h2>
+              </div>
+              <span className="section-count">{integratedCompoundResults.length} {isEnglish ? 'compounds' : '种化合物'}</span>
+            </div>
+
+            <div className="integrated-record-list">
+              {integratedCompoundResults.map(({ item, fema, profile }) => {
+                const pubchem = profile.pubchem || {};
+                const flavordb = profile.flavordb || {};
+                const descriptorGroups = groupFlavorDescriptors(
+                  includeFlavorDescriptions && selectedFlavorSources.includes('FEMA') ? fema : {},
+                  includeFlavorDB && selectedFlavorSources.includes('FlavorDB') ? flavordb : {}
+                );
+                const commonName = formatDisplayCommonEnglishName(
+                  (includeFlavorDescriptions && fema.name) || pubchem.title || flavordb.common_name || item.english_name
+                );
+                const primaryCompoundClass = profile.smart_classification || {
+                  key: 'others',
+                  zh: '其他类',
+                  en: 'Others',
+                  matches: [],
+                  method: 'SMARTS',
+                };
+                const sourceLinks = [
+                  includeFlavorDescriptions && fema.found && { key: 'fema', label: 'FEMA', meta: fema.fema_number ? `FEMA No. ${fema.fema_number}` : '', url: fema.url },
+                  includePubChem && pubchem.found && { key: 'pubchem', label: 'PubChem', meta: pubchem.cid ? `CID ${pubchem.cid}` : '', url: pubchem.url },
+                  includeFlavorDB && flavordb.found && { key: 'flavordb', label: 'FlavorDB', meta: flavordb.cid ? `CID ${flavordb.cid}` : '', url: flavordb.url }
+                ].filter(Boolean);
+
+                return (
+                  <article key={`integrated-${item.cas}`} className="integrated-compound-card">
+                    <header className="integrated-identity-header">
+                      <div className="integrated-identity-copy integrated-identity-row">
+                        <h3>{item.chinese_name || commonName || item.english_name}</h3>
+                        {commonName && <p className="integrated-common-name">{commonName}</p>}
+                        <div className="integrated-identity-ids">
+                          <span>CAS {item.cas}</span>
+                          {(pubchem.cid || flavordb.cid) && <span>CID {pubchem.cid || flavordb.cid}</span>}
+                        </div>
+                      </div>
+                    </header>
+
+                    <div className="integrated-content-grid">
+                      {includePubChem && pubchem.found && (
+                        <section className="integrated-chemistry" aria-labelledby={`chemistry-${item.cas}`}>
+                          <div className="integrated-section-title">
+                            <Database aria-hidden="true" />
+                            <div><h4 id={`chemistry-${item.cas}`}>{isEnglish ? 'Chemical identity' : '化学身份'}</h4></div>
+                          </div>
+                          <div className="integrated-chemistry-body">
+                            <PubChemStructureViewer
+                              apiUrl={FEMA_API_URL}
+                              cid={pubchem.cid}
+                              compoundName={commonName || item.english_name}
+                              imagePath={pubchem.image_path}
+                              isEnglish={isEnglish}
+                              pubchemUrl={pubchem.url}
+                            />
+                            <dl>
+                              <div><dt>{isEnglish ? 'Formula' : '分子式'}</dt><dd>{pubchem.molecular_formula || '-'}</dd></div>
+                              <div><dt>{isEnglish ? 'Molecular weight' : '分子量'}</dt><dd>{pubchem.molecular_weight ? `${pubchem.molecular_weight} g/mol` : '-'}</dd></div>
+                              <div><dt>IUPAC</dt><dd>{pubchem.iupac_name || '-'}</dd></div>
+                              <div><dt>XLogP</dt><dd>{pubchem.xlogp ?? '-'}</dd></div>
+                              <div><dt>TPSA</dt><dd>{pubchem.tpsa != null ? `${pubchem.tpsa} Å²` : '-'}</dd></div>
+                              <div><dt>HBD / HBA</dt><dd>{pubchem.h_bond_donor_count ?? '-'} / {pubchem.h_bond_acceptor_count ?? '-'}</dd></div>
+                              {pubchem.smiles && <div className="integrated-chemistry-wide"><dt>SMILES</dt><dd><code>{pubchem.smiles}</code></dd></div>}
+                              {includeFlavorDB && flavordb.functional_groups?.length > 0 && (
+                                <div className="integrated-chemistry-wide">
+                                  <dt>{isEnglish ? 'Functional groups' : '官能团名称'}</dt>
+                                  <dd>{flavordb.functional_groups.join('; ')}</dd>
+                                </div>
+                              )}
+                              <div className="integrated-chemistry-wide primary-compound-class">
+                                <dt>{isEnglish ? 'Primary compound class' : '主要化合物类别'}</dt>
+                                <dd data-compound-class={primaryCompoundClass.key}>
+                                  {isEnglish ? primaryCompoundClass.en : primaryCompoundClass.zh}
+                                </dd>
+                                {primaryCompoundClass.matches?.length > 1 && (
+                                  <small>
+                                    {isEnglish ? 'SMARTS matches: ' : 'SMARTS 命中：'}
+                                    {primaryCompoundClass.matches
+                                      .map(match => isEnglish ? match.en : match.zh)
+                                      .join('、')}
+                                  </small>
+                                )}
+                              </div>
+                            </dl>
+                          </div>
+                          {pubchem.inchi_key && (
+                            <details className="integrated-structure-details">
+                              <summary>{isEnglish ? 'More structure identifiers' : '更多结构标识符'}</summary>
+                              {pubchem.inchi_key && <div><strong>InChIKey</strong><code>{pubchem.inchi_key}</code></div>}
+                            </details>
+                          )}
+                        </section>
+                      )}
+
+                      <section className="integrated-flavor" aria-labelledby={`flavor-${item.cas}`}>
+                        <div className="integrated-section-title">
+                          <FlaskConical aria-hidden="true" />
+                          <div><h4 id={`flavor-${item.cas}`}>{isEnglish ? 'Flavor descriptors' : '风味描述'}</h4></div>
+                        </div>
+                        <div className="integrated-flavor-source-controls" role="group" aria-label={isEnglish ? 'Flavor descriptor sources' : '风味描述数据来源'}>
+                          <button
+                            type="button"
+                            data-source="fema"
+                            className={selectedFlavorSources.includes('FEMA') && includeFlavorDescriptions ? 'active' : ''}
+                            disabled={!includeFlavorDescriptions}
+                            aria-pressed={selectedFlavorSources.includes('FEMA') && includeFlavorDescriptions}
+                            onClick={() => toggleFlavorSource('FEMA')}
+                          >
+                            <span aria-hidden="true" /> FEMA
+                          </button>
+                          <button
+                            type="button"
+                            data-source="flavordb"
+                            className={selectedFlavorSources.includes('FlavorDB') && includeFlavorDB ? 'active' : ''}
+                            disabled={!includeFlavorDB}
+                            aria-pressed={selectedFlavorSources.includes('FlavorDB') && includeFlavorDB}
+                            onClick={() => toggleFlavorSource('FlavorDB')}
+                          >
+                            <span aria-hidden="true" /> FlavorDB
+                          </button>
+                        </div>
+                        {descriptorGroups.length > 0 ? (
+                          <div className="integrated-descriptor-sources">
+                            {descriptorGroups.map(group => (
+                              <section key={group.key} className="integrated-descriptor-source-card" data-source={group.key}>
+                                <h5>{group.label}</h5>
+                                <div className="integrated-descriptor-list">
+                                  {group.descriptors.map((descriptor, index) => (
+                                    <span key={`${group.key}-${descriptor}-${index}`} className="integrated-descriptor">
+                                      <strong>{descriptor}</strong>
+                                    </span>
+                                  ))}
+                                </div>
+                              </section>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="integrated-empty">{isEnglish ? 'No descriptor returned by the selected sources.' : '所选来源暂未返回风味描述。'}</p>
+                        )}
+                      </section>
+                    </div>
+
+                    <footer className="integrated-source-links">
+                      <div><strong>{isEnglish ? 'Sources and original records' : '来源与原始记录'}</strong><span>{isEnglish ? 'Open the source page to verify the record.' : '可跳转原网页核验数据。'}</span></div>
+                      <nav aria-label={isEnglish ? 'Original database records' : '原始数据库记录'}>
+                        {sourceLinks.map(source => (
+                          <a key={source.key} href={source.url || '#'} target="_blank" rel="noreferrer" data-source={source.key} aria-disabled={!source.url}>
+                            <span><strong>{source.label}</strong>{source.meta && <small>{source.meta}</small>}</span>
+                            <ExternalLink aria-hidden="true" />
+                          </a>
+                        ))}
+                      </nav>
+                    </footer>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {!loading && (singleQuery.trim() || bulkQuery.trim()) && externalCompoundResults.length > 0 && integratedCompoundResults.length === 0 && (
+          <section className="result-section external-database-section" style={{ order: 21 }}>
+            <div className="external-database-heading">
+              <div>
+                <span className="external-database-kicker">{isEnglish ? 'Linked scientific databases' : '关联科学数据库'}</span>
+                <h2>{isEnglish ? 'Chemical and flavor records' : '化学信息与风味关联'}</h2>
+              </div>
+              <span className="section-count">{externalCompoundResults.length} {isEnglish ? 'compounds' : '种化合物'}</span>
+            </div>
+
+            <div className="external-compound-list">
+              {externalCompoundResults.map(({ item, profile }) => {
+                const pubchem = profile.pubchem || {};
+                const flavordb = profile.flavordb || {};
+                return (
+                  <article key={`external-${item.cas}`} className="external-compound-record">
+                    <header className="external-compound-header">
+                      <div>
+                        <h3>{item.chinese_name || pubchem.title || item.english_name}</h3>
+                        <p>{pubchem.title || flavordb.common_name || item.english_name}</p>
+                      </div>
+                      <span>CAS {item.cas}</span>
+                    </header>
+
+                    <div className="external-source-grid">
+                      {includePubChem && pubchem.found && (
+                        <section className="external-source-card pubchem-source-card">
+                          <div className="external-source-title">
+                            <span className="external-source-icon"><Database aria-hidden="true" /></span>
+                            <div><strong>PubChem</strong><small>CID {pubchem.cid}</small></div>
+                            <a href={pubchem.url} target="_blank" rel="noreferrer" aria-label={isEnglish ? 'Open PubChem' : '打开 PubChem'}><ExternalLink /></a>
+                          </div>
+                          <div className="pubchem-summary">
+                            <img src={`${FEMA_API_URL}${pubchem.image_path || `/pubchem-image?cid=${pubchem.cid}`}`} alt={`${pubchem.title || item.english_name} 2D structure`} loading="lazy" />
+                            <dl>
+                              <div><dt>{isEnglish ? 'Formula' : '分子式'}</dt><dd>{pubchem.molecular_formula || '-'}</dd></div>
+                              <div><dt>{isEnglish ? 'Molecular weight' : '分子量'}</dt><dd>{pubchem.molecular_weight ? `${pubchem.molecular_weight} g/mol` : '-'}</dd></div>
+                              <div><dt>IUPAC</dt><dd>{pubchem.iupac_name || '-'}</dd></div>
+                              <div><dt>XLogP</dt><dd>{pubchem.xlogp ?? '-'}</dd></div>
+                              <div><dt>TPSA</dt><dd>{pubchem.tpsa != null ? `${pubchem.tpsa} Å²` : '-'}</dd></div>
+                              <div><dt>HBD / HBA</dt><dd>{pubchem.h_bond_donor_count ?? '-'} / {pubchem.h_bond_acceptor_count ?? '-'}</dd></div>
+                            </dl>
+                          </div>
+                          <details className="external-identifiers">
+                            <summary>{isEnglish ? 'Structure identifiers' : '结构标识符'}</summary>
+                            <div><strong>InChIKey</strong><code>{pubchem.inchi_key || '-'}</code></div>
+                            <div><strong>SMILES</strong><code>{pubchem.smiles || '-'}</code></div>
+                          </details>
+                          <p className="external-source-attribution">{isEnglish ? 'Source: PubChem PUG REST' : '来源：PubChem PUG REST'}</p>
+                        </section>
+                      )}
+
+                      {includeFlavorDB && flavordb.found && (
+                        <section className="external-source-card flavordb-source-card">
+                          <div className="external-source-title">
+                            <span className="external-source-icon"><FlaskConical aria-hidden="true" /></span>
+                            <div><strong>FlavorDB</strong><small>PubChem CID {flavordb.cid}</small></div>
+                            <a href={flavordb.url} target="_blank" rel="noreferrer" aria-label={isEnglish ? 'Open FlavorDB' : '打开 FlavorDB'}><ExternalLink /></a>
+                          </div>
+
+                          <div className="flavordb-group">
+                            <h4>{isEnglish ? 'Flavor profile' : '风味特征'}</h4>
+                            <div className="flavordb-tags">
+                              {(flavordb.flavor_profile || []).map(tag => <span key={tag}>{tag}</span>)}
+                            </div>
+                          </div>
+                          {(flavordb.odor?.length > 0 || flavordb.taste?.length > 0) && (
+                            <dl className="flavordb-sensory">
+                              {flavordb.odor?.length > 0 && <div><dt>{isEnglish ? 'Odor' : '气味'}</dt><dd>{flavordb.odor.join('; ')}</dd></div>}
+                              {flavordb.taste?.length > 0 && <div><dt>{isEnglish ? 'Taste' : '味觉'}</dt><dd>{flavordb.taste.join('; ')}</dd></div>}
+                            </dl>
+                          )}
+                          {flavordb.functional_groups?.length > 0 && (
+                            <div className="flavordb-group">
+                              <h4>{isEnglish ? 'Functional groups' : '功能基团'}</h4>
+                              <p>{flavordb.functional_groups.join('; ')}</p>
+                            </div>
+                          )}
+                          {flavordb.fema_flavor_profile?.length > 0 && (
+                            <div className="flavordb-group">
+                              <h4>FEMA Flavor Profile {flavordb.fema_number ? `· No. ${flavordb.fema_number}` : ''}</h4>
+                              <p>{flavordb.fema_flavor_profile.join(', ')}</p>
+                            </div>
+                          )}
+                          <p className="external-source-attribution">{isEnglish ? 'Source: FlavorDB · License: ' : '来源：FlavorDB · 许可：'}{flavordb.license}</p>
+                        </section>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {!loading && (singleQuery.trim() || bulkQuery.trim()) && femaResults.length > 0 && integratedCompoundResults.length === 0 && (
           <div
             className="result-section mt-8 space-y-4"
             style={{ order: 20 + getFilterOrderIndex('flavor') }}
@@ -1337,7 +1764,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
               <h2 className="text-2xl font-bold text-slate-800 flex items-center">
                 {ui.flavorDescriptions}
                 <span className="section-count">
-                  FEMA Flavor Library {femaResults.length} {isEnglish ? 'records' : '条'}
+                  FEMA {femaResults.length} {isEnglish ? 'records' : '条'}
                 </span>
               </h2>
             </div>
@@ -1354,7 +1781,6 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                       </div>
                       {formatDisplayCommonEnglishName(profile.name || item.english_name) && (
                         <p className="common-english-name mt-1 text-slate-700 font-semibold">
-                          <span>{isEnglish ? 'Common name: ' : '常用英文名：'}</span>
                           {formatDisplayCommonEnglishName(profile.name || item.english_name)}
                         </p>
                       )}
@@ -1368,7 +1794,7 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
                     <div className="source-panel">
                       <h4 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-2 flex items-center">
                         <ExternalLink className="w-4 h-4 mr-2" />
-                        FEMA Flavor Library
+                        FEMA
                       </h4>
                       <div className="text-[15px] leading-7 text-slate-700">
                         <span className="font-semibold text-slate-600">Flavor Profile: </span>

@@ -1,61 +1,93 @@
 # FlavorThresholdDB
 
-Live site: https://xqplayer.github.io/FlavorThresholdDB/
+[Public website](https://xqplayer.github.io/FlavorThresholdDB/) · [Search](https://xqplayer.github.io/FlavorThresholdDB/aroma-threshold/)
 
-FlavorThresholdDB is a bilingual local search interface for odor thresholds and flavor descriptors. It supports exact and fuzzy searches by CAS number, Chinese name, or English name, as well as batch list matching and CSV export.
+FlavorThresholdDB is a bilingual research database for traceable odor-threshold and flavor-descriptor retrieval. It supports exact and fuzzy searches by CAS number, Chinese name, or English name, plus batch matching and filter-aware CSV export.
 
-## Features
+## Version 1.3.0
 
-- Chinese and English interface
-- Single-compound and batch searches
-- Medium filters for air, water, and other matrices
-- Detection and recognition threshold filters
-- FEMA Flavor Ingredient Library lookups through a local proxy
-- Book excerpt search when a local index is supplied
-- Reorderable result sections and CSV export
+This release expands FlavorThresholdDB from a threshold lookup interface into a multi-source compound research workspace.
+
+- Unified compound profiles with Chinese name, common English name, CAS, and PubChem CID
+- PubChem 2D structures, interactive 3D conformers, crystal records, physicochemical properties, and structure downloads
+- SMARTS-based compound classification powered by RDKit
+- FEMA and FlavorDB descriptors displayed separately with source-specific colors
+- Threshold records prioritized by publication year and threshold value, with additional records collapsed
+- Filter-aware CSV export for selected media, threshold types, databases, and book results
+- Excel-safe CAS export to prevent values such as `60-12-8` from becoming dates
+- Updated scientific color system and consistent source/result-card styling
+- Live activity metrics and popular-compound visualization backed by Supabase
 
 ## Data sources
 
-The interface integrates records compiled from Van Gemert (2011), Fan and Xu (2020), and the FEMA Flavor Ingredient Library. Original source, measurement medium, threshold type, value, and unit are retained where available.
+- Van Gemert (2011), *Flavour Thresholds* (2nd ed.)
+- Fan, W. L., & Xu, Y. (2020), *Wine Flavor Chemistry*
+- FEMA Flavor Ingredient Library
+- PubChem PUG REST
+- FlavorDB
 
-This repository is intended for personal study and academic exchange. Verify the redistribution rights of any locally generated data or book index before publishing or sharing it.
+The interface preserves the original source, measurement medium, threshold type, value, and unit where available. Linked source pages are provided for verification.
+
+FlavorDB-derived records retain their source attribution and CC BY-NC-SA 3.0 license. This repository is intended for personal study and academic exchange. Verify redistribution rights before publishing local book indexes or derived datasets.
+
+## Public deployment
+
+The official GitHub Pages site is built automatically from `main` by `.github/workflows/deploy-pages.yml`.
+
+The public external-data API is already deployed at:
+
+```text
+https://flavorthresholddb-api.onrender.com
+```
+
+The repository variable `FEMA_API_URL` points to that service. The same API supplies the frontend with FEMA, PubChem, and FlavorDB results through `/fema`, `/compound`, `/pubchem`, and `/flavordb`.
+
+When deploying a fork, create a new Render service with the included Blueprint and set the fork's GitHub Actions variable `FEMA_API_URL` to the generated HTTPS URL:
+
+[Deploy the API to Render](https://render.com/deploy?repo=https://github.com/XQplayer/FlavorThresholdDB)
 
 ## Local development
 
 Requirements:
 
 - Node.js 20 or later
-- Python 3.10 or later for the optional FEMA proxy
+- pnpm 11 or later
+- Python 3.10 or later for the optional local external-data proxy
 
-Install and start the frontend:
+Install and run the frontend:
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
-Start the optional FEMA proxy from the repository root:
+Vite prints the actual local URL when it starts. With the configured base path, it is typically:
+
+```text
+http://127.0.0.1:5173/FlavorThresholdDB/
+```
+
+To use the local proxy instead of the public API, run from the repository root:
 
 ```bash
 python fema_proxy_server.py
 ```
 
-For public FEMA lookups, deploy the included Render Blueprint and set the GitHub Actions repository variable `FEMA_API_URL` to the resulting HTTPS service URL:
+The local proxy listens on `http://127.0.0.1:8787`. This address is for development only and is not required by visitors to the public website.
 
-[Deploy the FEMA API to Render](https://render.com/deploy?repo=https://github.com/XQplayer/FlavorThresholdDB)
-
-The frontend runs at `http://127.0.0.1:5173/FlavorThresholdDB/` by default. The FEMA proxy listens on `http://127.0.0.1:8787`.
-
-## Build
+## Quality checks
 
 ```bash
 cd frontend
-npm run build
+pnpm run lint
+pnpm run build
 ```
+
+The deployment workflow also creates `dist/404.html` so routed pages can load through GitHub Pages.
 
 ## References
 
-- Van Gemert, L. J. (2011). *Flavour Thresholds* (2nd ed.).
-- Fan, W. L., & Xu, Y. (2020). *Wine Flavor Chemistry*. China Light Industry Press.
-- FEMA Flavor Ingredient Library: https://www.femaflavor.org/flavor-library
+- [FEMA Flavor Ingredient Library](https://www.femaflavor.org/flavor-library)
+- [PubChem PUG REST](https://pubchem.ncbi.nlm.nih.gov/docs/pug-rest)
+- [FlavorDB](https://cosylab.iiitd.edu.in/flavordb/)

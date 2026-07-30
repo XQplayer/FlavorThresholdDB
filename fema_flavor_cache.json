@@ -358,5 +358,698 @@
     "source": "FEMA Flavor Library",
     "query": "109-60-4",
     "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=109-60-4"
+  },
+  "463-40-1": {
+    "found": false,
+    "query": "463-40-1",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=463-40-1",
+    "error": "No FEMA result"
+  },
+  "pubchem:64-19-7": {
+    "found": true,
+    "query": "64-19-7",
+    "cid": 176,
+    "title": "Acetic Acid",
+    "iupac_name": "acetic acid",
+    "molecular_formula": "C2H4O2",
+    "molecular_weight": "60.05",
+    "smiles": "CC(=O)O",
+    "connectivity_smiles": "CC(=O)O",
+    "inchi_key": "QTBSBXVTEAMEQO-UHFFFAOYSA-N",
+    "xlogp": -0.2,
+    "tpsa": 37.3,
+    "h_bond_donor_count": 1,
+    "h_bond_acceptor_count": 2,
+    "url": "https://pubchem.ncbi.nlm.nih.gov/compound/176",
+    "image_url": "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/176/PNG?image_size=240x240",
+    "source": "PubChem"
+  },
+  "flavordb:176": {
+    "found": true,
+    "cid": 176,
+    "common_name": "acetic acid",
+    "iupac_name": "acetic acid",
+    "cas_numbers": [
+      "77671-22-8",
+      "68475-71-8",
+      "834904-91-5",
+      "64-19-7"
+    ],
+    "flavor_profile": [
+      "sour",
+      "pungent",
+      "sharp",
+      "vinegar"
+    ],
+    "fema_flavor_profile": [
+      "Acid",
+      "Fruit",
+      "Pungent",
+      "Sour",
+      "Vinegar"
+    ],
+    "fema_number": "2006",
+    "taste": [
+      "burning taste"
+    ],
+    "odor": [
+      "pungent",
+      "sour",
+      "vinegar-like odor"
+    ],
+    "functional_groups": [
+      "carboxylic acid derivative",
+      "carboxylic acid"
+    ],
+    "fooddb_id": "FDB008299",
+    "smiles": "CC(=O)O",
+    "url": "https://cosylab.iiitd.edu.in/flavordb/molecules_details?id=176",
+    "json_url": "https://cosylab.iiitd.edu.in/flavordb/molecules_json?id=176",
+    "image_url": "https://cosylab.iiitd.edu.in/flavordb/static/molecules_images/176.png",
+    "source": "FlavorDB",
+    "license": "CC BY-NC-SA 3.0"
+  },
+  "pubchem:80-56-8": {
+    "found": true,
+    "query": "80-56-8",
+    "cid": 6654,
+    "title": "(+-)-alpha-Pinene",
+    "iupac_name": "2,6,6-trimethylbicyclo[3.1.1]hept-2-ene",
+    "molecular_formula": "C10H16",
+    "molecular_weight": "136.23",
+    "smiles": "CC1=CCC2CC1C2(C)C",
+    "connectivity_smiles": "CC1=CCC2CC1C2(C)C",
+    "inchi_key": "GRWFGVWFFZKLTI-UHFFFAOYSA-N",
+    "xlogp": 2.8,
+    "tpsa": 0,
+    "h_bond_donor_count": 0,
+    "h_bond_acceptor_count": 0,
+    "url": "https://pubchem.ncbi.nlm.nih.gov/compound/6654",
+    "image_path": "/pubchem-image?cid=6654",
+    "source": "PubChem"
+  },
+  "flavordb:6654": {
+    "found": true,
+    "cid": 6654,
+    "common_name": "Alpha-Pinene",
+    "iupac_name": "4,6,6-trimethylbicyclo[3.1.1]hept-3-ene",
+    "cas_numbers": [
+      "80-56-8",
+      "67762-73-6",
+      "25766-18-1",
+      "2437-95-8",
+      "7785-70-8"
+    ],
+    "flavor_profile": [
+      "harsh",
+      "turpentine",
+      "minty",
+      "fresh",
+      "earthy",
+      "sweet",
+      "woody",
+      "terpene",
+      "pine",
+      "camphor"
+    ],
+    "fema_flavor_profile": [
+      "Cedarwood",
+      "Pine",
+      "Sharp"
+    ],
+    "fema_number": "2902",
+    "taste": [],
+    "odor": [
+      "characteristic odor of pine",
+      "odor of turpentine"
+    ],
+    "functional_groups": [
+      "alkene"
+    ],
+    "fooddb_id": "FDB013765",
+    "smiles": "CC1=CCC2CC1C2(C)C",
+    "url": "https://cosylab.iiitd.edu.in/flavordb/molecules?pubchem_id=6654",
+    "json_url": "https://cosylab.iiitd.edu.in/flavordb/molecules_json?id=6654",
+    "image_url": "https://cosylab.iiitd.edu.in/flavordb/static/molecules_images/6654.png",
+    "source": "FlavorDB",
+    "license": "CC BY-NC-SA 3.0"
+  },
+  "151-67-7": {
+    "found": false,
+    "query": "151-67-7",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=151-67-7",
+    "error": "No FEMA result"
+  },
+  "100-50-5": {
+    "found": false,
+    "query": "100-50-5",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=100-50-5",
+    "error": "No FEMA result"
+  },
+  "71-55-6": {
+    "found": false,
+    "query": "71-55-6",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=71-55-6",
+    "error": "No FEMA result"
+  },
+  "15323-35-0": {
+    "found": false,
+    "query": "15323-35-0",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=15323-35-0",
+    "error": "No FEMA result"
+  },
+  "79-34-5": {
+    "found": false,
+    "query": "79-34-5",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=79-34-5",
+    "error": "No FEMA result"
+  },
+  "79-27-6": {
+    "found": false,
+    "query": "79-27-6",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=79-27-6",
+    "error": "No FEMA result"
+  },
+  "77-99-6": {
+    "found": false,
+    "query": "77-99-6",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=77-99-6",
+    "error": "No FEMA result"
+  },
+  "50-29-3": {
+    "found": false,
+    "query": "50-29-3",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=50-29-3",
+    "error": "No FEMA result"
+  },
+  "76-00-6": {
+    "found": false,
+    "query": "76-00-6",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=76-00-6",
+    "error": "No FEMA result"
+  },
+  "140-66-9": {
+    "found": false,
+    "query": "140-66-9",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=140-66-9",
+    "error": "No FEMA result"
+  },
+  "pubchem:151-67-7": {
+    "found": true,
+    "query": "151-67-7",
+    "cid": 3562,
+    "title": "Halothane",
+    "iupac_name": "2-bromo-2-chloro-1,1,1-trifluoroethane",
+    "molecular_formula": "C2HBrClF3",
+    "molecular_weight": "197.38",
+    "smiles": "C(C(F)(F)F)(Cl)Br",
+    "connectivity_smiles": "C(C(F)(F)F)(Cl)Br",
+    "inchi_key": "BCQZXOMGPXTTIC-UHFFFAOYSA-N",
+    "xlogp": 2.3,
+    "tpsa": 0,
+    "h_bond_donor_count": 0,
+    "h_bond_acceptor_count": 3,
+    "url": "https://pubchem.ncbi.nlm.nih.gov/compound/3562",
+    "image_path": "/pubchem-image?cid=3562",
+    "source": "PubChem"
+  },
+  "pubchem:463-40-1": {
+    "found": true,
+    "query": "463-40-1",
+    "cid": 5280934,
+    "title": "Linolenic Acid",
+    "iupac_name": "(9Z,12Z,15Z)-octadeca-9,12,15-trienoic acid",
+    "molecular_formula": "C18H30O2",
+    "molecular_weight": "278.4",
+    "smiles": "CC/C=C\\C/C=C\\C/C=C\\CCCCCCCC(=O)O",
+    "connectivity_smiles": "CCC=CCC=CCC=CCCCCCCCC(=O)O",
+    "inchi_key": "DTOSIQBPPRVQHS-PDBXOOCHSA-N",
+    "xlogp": 5.9,
+    "tpsa": 37.3,
+    "h_bond_donor_count": 1,
+    "h_bond_acceptor_count": 2,
+    "url": "https://pubchem.ncbi.nlm.nih.gov/compound/5280934",
+    "image_path": "/pubchem-image?cid=5280934",
+    "source": "PubChem"
+  },
+  "143-14-6": {
+    "found": true,
+    "name": "9-UNDECENAL",
+    "cas": "143-14-6",
+    "fema_number": "3094",
+    "jecfa_number": "329",
+    "flavor_profile": "Fruit",
+    "url": "https://www.femaflavor.org/flavor-library/9-undecenal",
+    "source": "FEMA Flavor Library",
+    "query": "143-14-6",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=143-14-6"
+  },
+  "flavordb:3562": {
+    "found": false,
+    "cid": "3562",
+    "error": "No FlavorDB result"
+  },
+  "flavordb:5280934": {
+    "found": true,
+    "cid": 5280934,
+    "common_name": "linolenic acid",
+    "iupac_name": "(9Z,12Z,15Z)-octadeca-9,12,15-trienoic acid",
+    "cas_numbers": [
+      "68424-45-3",
+      "463-40-1"
+    ],
+    "flavor_profile": [
+      "faint",
+      "bitter",
+      "fatty"
+    ],
+    "fema_flavor_profile": [],
+    "fema_number": "",
+    "taste": [],
+    "odor": [],
+    "functional_groups": [
+      "carboxylic acid derivative",
+      "carboxylic acid",
+      "alkene"
+    ],
+    "fooddb_id": "FDB012462",
+    "smiles": "CCC=CCC=CCC=CCCCCCCCC(=O)O",
+    "url": "https://cosylab.iiitd.edu.in/flavordb/molecules?pubchem_id=5280934",
+    "json_url": "https://cosylab.iiitd.edu.in/flavordb/molecules_json?id=5280934",
+    "image_url": "https://cosylab.iiitd.edu.in/flavordb/static/molecules_images/5280934.png",
+    "source": "FlavorDB",
+    "license": "CC BY-NC-SA 3.0"
+  },
+  "pubchem:123-96-6": {
+    "found": true,
+    "query": "123-96-6",
+    "cid": 20083,
+    "title": "2-Octanol",
+    "iupac_name": "octan-2-ol",
+    "molecular_formula": "C8H18O",
+    "molecular_weight": "130.23",
+    "smiles": "CCCCCCC(C)O",
+    "connectivity_smiles": "CCCCCCC(C)O",
+    "inchi_key": "SJWFXCIHNDVPSH-UHFFFAOYSA-N",
+    "xlogp": 2.9,
+    "tpsa": 20.2,
+    "h_bond_donor_count": 1,
+    "h_bond_acceptor_count": 1,
+    "url": "https://pubchem.ncbi.nlm.nih.gov/compound/20083",
+    "image_path": "/pubchem-image?cid=20083",
+    "source": "PubChem"
+  },
+  "flavordb:20083": {
+    "found": true,
+    "cid": 20083,
+    "common_name": "Octan-2-ol",
+    "iupac_name": "octan-2-ol",
+    "cas_numbers": [
+      "123-96-6",
+      "4128-31-8",
+      "25339-16-6"
+    ],
+    "flavor_profile": [
+      "fat",
+      "herbal",
+      "fresh",
+      "earthy",
+      "woody",
+      "mushroom",
+      "spicy",
+      "green"
+    ],
+    "fema_flavor_profile": [
+      "Fat",
+      "Mushroom"
+    ],
+    "fema_number": "2801",
+    "taste": [],
+    "odor": [
+      "characteristically disagreeable",
+      "but aromatic"
+    ],
+    "functional_groups": [
+      "hydroxy compound",
+      "alcohol",
+      "secondary alcohol"
+    ],
+    "fooddb_id": "FDB003342",
+    "smiles": "CCCCCCC(C)O",
+    "url": "https://cosylab.iiitd.edu.in/flavordb/molecules?pubchem_id=20083",
+    "json_url": "https://cosylab.iiitd.edu.in/flavordb/molecules_json?id=20083",
+    "image_url": "https://cosylab.iiitd.edu.in/flavordb/static/molecules_images/20083.png",
+    "source": "FlavorDB",
+    "license": "CC BY-NC-SA 3.0"
+  },
+  "pubchem:141-78-6": {
+    "found": true,
+    "query": "141-78-6",
+    "cid": 8857,
+    "title": "Ethyl Acetate",
+    "iupac_name": "ethyl acetate",
+    "molecular_formula": "C4H8O2",
+    "molecular_weight": "88.11",
+    "smiles": "CCOC(=O)C",
+    "connectivity_smiles": "CCOC(=O)C",
+    "inchi_key": "XEKOWRVHYACXOJ-UHFFFAOYSA-N",
+    "xlogp": 0.7,
+    "tpsa": 26.3,
+    "h_bond_donor_count": 0,
+    "h_bond_acceptor_count": 2,
+    "url": "https://pubchem.ncbi.nlm.nih.gov/compound/8857",
+    "image_path": "/pubchem-image?cid=8857",
+    "source": "PubChem"
+  },
+  "flavordb:8857": {
+    "found": true,
+    "cid": 8857,
+    "common_name": "Ethyl Acetate",
+    "iupac_name": "ethyl acetate",
+    "cas_numbers": [
+      "141-78-6"
+    ],
+    "flavor_profile": [
+      "pineapple",
+      "ethereal",
+      "sweet",
+      "anise",
+      "fruity",
+      "balsam",
+      "weedy",
+      "green"
+    ],
+    "fema_flavor_profile": [
+      "Aromatic",
+      "Brandy",
+      "Grape"
+    ],
+    "fema_number": "2414",
+    "taste": [
+      "pleasant taste when diluted",
+      "bittersweet",
+      "wine-like burning taste.",
+      "ethyl acetate ... contributes a fruity flavor to beer."
+    ],
+    "odor": [
+      "characteristic ether-like odor reminiscent of pineapple.",
+      "fragrant odor",
+      "ether-like",
+      "fruity odor",
+      "fruity with a brandy note"
+    ],
+    "functional_groups": [
+      "carboxylic acid derivative",
+      "carboxylic acid ester"
+    ],
+    "fooddb_id": "FDB003240",
+    "smiles": "CCOC(=O)C",
+    "url": "https://cosylab.iiitd.edu.in/flavordb/molecules?pubchem_id=8857",
+    "json_url": "https://cosylab.iiitd.edu.in/flavordb/molecules_json?id=8857",
+    "image_url": "https://cosylab.iiitd.edu.in/flavordb/static/molecules_images/8857.png",
+    "source": "FlavorDB",
+    "license": "CC BY-NC-SA 3.0"
+  },
+  "pubchem:111-62-6": {
+    "found": true,
+    "query": "111-62-6",
+    "cid": 5363269,
+    "title": "Ethyl Oleate",
+    "iupac_name": "ethyl (Z)-octadec-9-enoate",
+    "molecular_formula": "C20H38O2",
+    "molecular_weight": "310.5",
+    "smiles": "CCCCCCCC/C=C\\CCCCCCCC(=O)OCC",
+    "connectivity_smiles": "CCCCCCCCC=CCCCCCCCC(=O)OCC",
+    "inchi_key": "LVGKNOAMLMIIKO-QXMHVHEDSA-N",
+    "xlogp": 8,
+    "tpsa": 26.3,
+    "h_bond_donor_count": 0,
+    "h_bond_acceptor_count": 2,
+    "url": "https://pubchem.ncbi.nlm.nih.gov/compound/5363269",
+    "image_path": "/pubchem-image?cid=5363269",
+    "source": "PubChem"
+  },
+  "flavordb:5363269": {
+    "found": true,
+    "cid": 5363269,
+    "common_name": "Ethyl oleate",
+    "iupac_name": "ethyl (Z)-octadec-9-enoate",
+    "cas_numbers": [
+      "111-62-6"
+    ],
+    "flavor_profile": [],
+    "fema_flavor_profile": [
+      "Dairy"
+    ],
+    "fema_number": "2450",
+    "taste": [],
+    "odor": [],
+    "functional_groups": [
+      "carboxylic acid derivative",
+      "carboxylic acid ester",
+      "alkene"
+    ],
+    "fooddb_id": "",
+    "smiles": "CCCCCCCCC=CCCCCCCCC(=O)OCC",
+    "url": "https://cosylab.iiitd.edu.in/flavordb/molecules?pubchem_id=5363269",
+    "json_url": "https://cosylab.iiitd.edu.in/flavordb/molecules_json?id=5363269",
+    "image_url": "https://cosylab.iiitd.edu.in/flavordb/static/molecules_images/5363269.png",
+    "source": "FlavorDB",
+    "license": "CC BY-NC-SA 3.0"
+  },
+  "111-62-6": {
+    "found": true,
+    "name": "ETHYL OLEATE",
+    "cas": "111-62-6",
+    "fema_number": "2450",
+    "jecfa_number": "345",
+    "flavor_profile": "Dairy",
+    "url": "https://www.femaflavor.org/flavor-library/ethyl-oleate",
+    "source": "FEMA Flavor Library",
+    "query": "111-62-6",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=111-62-6"
+  },
+  "5452-75-5": {
+    "found": false,
+    "query": "5452-75-5",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=5452-75-5",
+    "error": "No FEMA result"
+  },
+  "623-51-8": {
+    "found": false,
+    "query": "623-51-8",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=623-51-8",
+    "error": "No FEMA result"
+  },
+  "141-97-9": {
+    "found": true,
+    "name": "ETHYL ACETOACETATE",
+    "cas": "141-97-9",
+    "fema_number": "2415",
+    "jecfa_number": "595",
+    "flavor_profile": "Onion",
+    "url": "https://www.femaflavor.org/flavor-library/ethyl-acetoacetate",
+    "source": "FEMA Flavor Library",
+    "query": "141-97-9",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=141-97-9"
+  },
+  "101-97-3": {
+    "found": true,
+    "name": "ETHYL PHENYLACETATE",
+    "cas": "101-97-3",
+    "fema_number": "2452",
+    "jecfa_number": "1009",
+    "flavor_profile": "Floral, Fruit, Honey, Rose",
+    "url": "https://www.femaflavor.org/flavor-library/ethyl-phenylacetate",
+    "source": "FEMA Flavor Library",
+    "query": "101-97-3",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=101-97-3"
+  },
+  "625-60-5": {
+    "found": true,
+    "name": "ETHYL THIOACETATE",
+    "cas": "625-60-5",
+    "fema_number": "3282",
+    "jecfa_number": "483",
+    "flavor_profile": "Coffee, Fruit, Sulfur",
+    "url": "https://www.femaflavor.org/flavor-library/ethyl-thioacetate",
+    "source": "FEMA Flavor Library",
+    "query": "625-60-5",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=625-60-5"
+  },
+  "4455-13-4": {
+    "found": true,
+    "name": "ETHYL 2-(METHYLTHIO)ACETATE",
+    "cas": "4455-13-4",
+    "fema_number": "3835",
+    "jecfa_number": "475",
+    "flavor_profile": "Fruit, Green, Onion, Radish, Sulfur",
+    "url": "https://www.femaflavor.org/flavor-library/ethyl-2-methylthioacetate",
+    "source": "FEMA Flavor Library",
+    "query": "4455-13-4",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=4455-13-4"
+  },
+  "pubchem:60-12-8": {
+    "found": true,
+    "query": "60-12-8",
+    "cid": 6054,
+    "title": "2-Phenylethanol",
+    "iupac_name": "2-phenylethanol",
+    "molecular_formula": "C8H10O",
+    "molecular_weight": "122.16",
+    "smiles": "C1=CC=C(C=C1)CCO",
+    "connectivity_smiles": "C1=CC=C(C=C1)CCO",
+    "inchi_key": "WRMNZCZEMHIOCP-UHFFFAOYSA-N",
+    "xlogp": 1.4,
+    "tpsa": 20.2,
+    "h_bond_donor_count": 1,
+    "h_bond_acceptor_count": 1,
+    "url": "https://pubchem.ncbi.nlm.nih.gov/compound/6054",
+    "image_path": "/pubchem-image?cid=6054",
+    "source": "PubChem"
+  },
+  "flavordb:6054": {
+    "found": true,
+    "cid": 6054,
+    "common_name": "2-Phenylethanol",
+    "iupac_name": "2-phenylethanol",
+    "cas_numbers": [
+      "1321-27-3",
+      "60-12-8"
+    ],
+    "flavor_profile": [
+      "lilac",
+      "rose",
+      "rose water",
+      "honey",
+      "rose flower",
+      "floral",
+      "spice",
+      "bitter",
+      "rose dried"
+    ],
+    "fema_flavor_profile": [
+      "Fruit",
+      "Honey",
+      "Lilac",
+      "Rose",
+      "Wine"
+    ],
+    "fema_number": "2858",
+    "taste": [
+      "initially slightly bitter taste then sweet & reminiscent of peach",
+      "sharp burning taste"
+    ],
+    "odor": [
+      "characteristic rose-like odor",
+      "pure pea has an extremely mild roselike odor. >",
+      "99% pure vary in odor because of the impurities present."
+    ],
+    "functional_groups": [
+      "hydroxy compound",
+      "alcohol",
+      "primary alcohol",
+      "aromatic compound"
+    ],
+    "fooddb_id": "FDB012152",
+    "smiles": "C1=CC=C(C=C1)CCO",
+    "url": "https://cosylab.iiitd.edu.in/flavordb/molecules?pubchem_id=6054",
+    "json_url": "https://cosylab.iiitd.edu.in/flavordb/molecules_json?id=6054",
+    "image_url": "https://cosylab.iiitd.edu.in/flavordb/static/molecules_images/6054.png",
+    "source": "FlavorDB",
+    "license": "CC BY-NC-SA 3.0"
+  },
+  "60-12-8": {
+    "found": true,
+    "name": "PHENETHYL ALCOHOL",
+    "cas": "60-12-8",
+    "fema_number": "2858",
+    "jecfa_number": "987",
+    "flavor_profile": "Fruit, Honey, Lilac, Rose, Wine",
+    "url": "https://www.femaflavor.org/flavor-library/phenethyl-alcohol",
+    "source": "FEMA Flavor Library",
+    "query": "60-12-8",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=60-12-8"
+  },
+  "pubchem:97-64-3": {
+    "found": true,
+    "query": "97-64-3",
+    "cid": 7344,
+    "title": "Ethyl Lactate",
+    "iupac_name": "ethyl 2-hydroxypropanoate",
+    "molecular_formula": "C5H10O3",
+    "molecular_weight": "118.13",
+    "smiles": "CCOC(=O)C(C)O",
+    "connectivity_smiles": "CCOC(=O)C(C)O",
+    "inchi_key": "LZCLXQDLBQLTDK-UHFFFAOYSA-N",
+    "xlogp": 0.2,
+    "tpsa": 46.5,
+    "h_bond_donor_count": 1,
+    "h_bond_acceptor_count": 3,
+    "url": "https://pubchem.ncbi.nlm.nih.gov/compound/7344",
+    "image_path": "/pubchem-image?cid=7344",
+    "source": "PubChem"
+  },
+  "flavordb:7344": {
+    "found": true,
+    "cid": 7344,
+    "common_name": "Ethyl Lactate",
+    "iupac_name": "ethyl 2-hydroxypropanoate",
+    "cas_numbers": [
+      "97-64-3"
+    ],
+    "flavor_profile": [
+      "butterscotch",
+      "butter",
+      "tart",
+      "sharp",
+      "fruit",
+      "fruity",
+      "buttery"
+    ],
+    "fema_flavor_profile": [
+      "Cheese",
+      "Floral",
+      "Fruit",
+      "Pungent",
+      "Rubber"
+    ],
+    "fema_number": "2440",
+    "taste": [
+      "sweet",
+      "fruity",
+      "creamy and pineapple like taste",
+      "milk cream taste"
+    ],
+    "odor": [
+      "buttery odor",
+      "fruity butterscotch"
+    ],
+    "functional_groups": [
+      "hydroxy compound",
+      "alcohol",
+      "secondary alcohol",
+      "carboxylic acid derivative",
+      "carboxylic acid ester"
+    ],
+    "fooddb_id": "FDB020545",
+    "smiles": "CCOC(=O)C(C)O",
+    "url": "https://cosylab.iiitd.edu.in/flavordb/molecules?pubchem_id=7344",
+    "json_url": "https://cosylab.iiitd.edu.in/flavordb/molecules_json?id=7344",
+    "image_url": "https://cosylab.iiitd.edu.in/flavordb/static/molecules_images/7344.png",
+    "source": "FlavorDB",
+    "license": "CC BY-NC-SA 3.0"
+  },
+  "97-64-3": {
+    "found": true,
+    "name": "ETHYL LACTATE",
+    "cas": "97-64-3",
+    "fema_number": "2440",
+    "jecfa_number": "931",
+    "flavor_profile": "Cheese, Floral, Fruit, Pungent, Rubber",
+    "url": "https://www.femaflavor.org/flavor-library/ethyl-lactate",
+    "source": "FEMA Flavor Library",
+    "query": "97-64-3",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=97-64-3"
   }
 }

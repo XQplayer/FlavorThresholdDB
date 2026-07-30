@@ -97,12 +97,22 @@ export default function SearchInsights({ isEnglish, onSelect }) {
           const tileWidth = leaf.x1 - leaf.x0;
           const tileHeight = leaf.y1 - leaf.y0;
           const strength = Number(item.search_count || 0) / maxCount;
+          const tileFontSize = Math.max(10, Math.min(18, tileWidth / 8.5, tileHeight / 4));
+          const tileLightness = 70 - (strength * 25);
           return (
             <button
               type="button"
               key={item.cas}
               className="compound-tile"
-              style={{ left: leaf.x0, top: leaf.y0, width: tileWidth, height: tileHeight, '--tile-strength': strength }}
+              style={{
+                left: leaf.x0,
+                top: leaf.y0,
+                width: tileWidth,
+                height: tileHeight,
+                '--tile-strength': strength,
+                '--tile-font-size': `${tileFontSize}px`,
+                '--tile-color': `hsl(218 72% ${tileLightness}%)`,
+              }}
               title={`${item.common_name} · CAS ${item.cas}${item.chinese_name ? ` · ${item.chinese_name}` : ''} · ${item.search_count} ${isEnglish ? 'searches' : '次检索'}`}
               onClick={() => onSelect(item)}
             >

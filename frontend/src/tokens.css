@@ -72,6 +72,36 @@
   --border-strong: var(--color-slate-300);
   --focus-ring: rgba(34, 211, 238, 0.76);
 
+  /* Scientific data-source and result tones */
+  --source-fema: #c4e4a4;
+  --source-fema-ink: #45652f;
+  --source-fema-border: #9fc77d;
+  --source-fema-soft: #f4faee;
+  --source-flavordb: #f4acac;
+  --source-flavordb-ink: #8b3f45;
+  --source-flavordb-border: #dd8888;
+  --source-flavordb-soft: #fff4f4;
+  --source-pubchem: #ecacd8;
+  --source-pubchem-ink: #7c245d;
+  --source-pubchem-border: #d987bd;
+  --source-pubchem-soft: #fff3fb;
+  --medium-water-shared: #1e95d4;
+  --medium-water-shared-ink: #0c6595;
+  --medium-water-shared-border: #1685bd;
+  --medium-water-shared-soft: #eef8fd;
+  --medium-air: #78cede;
+  --medium-air-ink: #246f79;
+  --medium-air-border: #5fbac9;
+  --medium-air-soft: #f1fbfc;
+  --medium-other: #b1e4e7;
+  --medium-other-ink: #3d7377;
+  --medium-other-border: #91cdd1;
+  --medium-other-soft: #f3fbfb;
+  --threshold-tone: #b4bccc;
+  --threshold-tone-ink: #50596b;
+  --threshold-tone-border: #929cad;
+  --threshold-tone-soft: #f5f6f8;
+
   /* Component */
   --navbar-height: 60px;
   --navbar-background: rgba(7, 17, 31, 0.76);
