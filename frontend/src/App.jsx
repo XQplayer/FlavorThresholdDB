@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import { Search, FileSpreadsheet, List, FileText, Download, AlertCircle, Loader2, Info, Upload, ExternalLink, X, Copy, Check, BookOpen, FlaskConical, Mail, MessageCircle, Network } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import './App.css';
+import SearchInsights from './components/SearchInsights';
+import { recordCompoundSearch } from './lib/supabase';
 
 const FEMA_API_URL = (import.meta.env.VITE_FEMA_API_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
 const APP_BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -44,6 +46,7 @@ export default function App() {
   const [draggedFilterKey, setDraggedFilterKey] = useState(null);
   const [exactMatch, setExactMatch] = useState(true); // Default to exact match
   const fileInputRef = useRef(null);
+  const trackedSearchesRef = useRef(new Set());
 
   // Use deferred values for smooth typing
   const deferredSingleQuery = useDeferredValue(singleQuery);
@@ -424,6 +427,41 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
         return true;
       });
   }, [queryMatchedResults, femaProfiles, includeFlavorDescriptions]);
+
+  useEffect(() => {
+    if (!queryMatchedResults.length) return;
+    const queryKey = searchMode === 'single'
+      ? deferredSingleQuery.trim().toLowerCase()
+      : deferredBulkQuery.trim().toLowerCase();
+    if (!queryKey) return;
+
+    const uniqueCompounds = [...new Map(
+      queryMatchedResults.filter(item => item.cas).map(item => [item.cas, item])
+    ).values()];
+
+    uniqueCompounds.forEach(item => {
+      const storageKey = `flavor-search:${queryKey}:${item.cas}`;
+      if (sessionStorage.getItem(storageKey) || trackedSearchesRef.current.has(storageKey)) return;
+      trackedSearchesRef.current.add(storageKey);
+      const sourceName = (femaProfiles[item.cas] || {}).name || item.english_name || item.cas;
+      const commonName = sourceName
+        .toString()
+        .replace(/\([^)]*\)/g, '')
+        .trim()
+        .toLowerCase()
+        .replace(/[A-Za-z]/, match => match.toUpperCase());
+      recordCompoundSearch({ cas: item.cas, commonName, chineseName: item.chinese_name })
+        .then(recorded => {
+          if (!recorded) {
+            trackedSearchesRef.current.delete(storageKey);
+            return;
+          }
+          sessionStorage.setItem(storageKey, '1');
+          window.dispatchEvent(new CustomEvent('flavor-search-recorded'));
+        })
+        .catch(() => trackedSearchesRef.current.delete(storageKey));
+    });
+  }, [queryMatchedResults, deferredSingleQuery, deferredBulkQuery, searchMode, femaProfiles]);
 
   const toggleMedium = (medium) => {
     setSelectedMedia(prev => 
@@ -934,6 +972,15 @@ FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from 
               </div>
             )}
           </header>
+          <SearchInsights
+            isEnglish={isEnglish}
+            onSelect={item => {
+              setSearchMode('single');
+              setExactMatch(true);
+              setSingleQuery(item.cas);
+              openSearchView();
+            }}
+          />
         </div>
       </section>
       )}
