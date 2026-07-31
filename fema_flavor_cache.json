@@ -1051,5 +1051,216 @@
     "source": "FEMA Flavor Library",
     "query": "97-64-3",
     "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=97-64-3"
+  },
+  "pubchem:78-83-1": {
+    "found": true,
+    "query": "78-83-1",
+    "cid": 6560,
+    "title": "Isobutanol",
+    "iupac_name": "2-methylpropan-1-ol",
+    "molecular_formula": "C4H10O",
+    "molecular_weight": "74.12",
+    "smiles": "CC(C)CO",
+    "connectivity_smiles": "CC(C)CO",
+    "inchi_key": "ZXEKIIBDNHEJCQ-UHFFFAOYSA-N",
+    "xlogp": 0.8,
+    "tpsa": 20.2,
+    "h_bond_donor_count": 1,
+    "h_bond_acceptor_count": 1,
+    "url": "https://pubchem.ncbi.nlm.nih.gov/compound/6560",
+    "image_path": "/pubchem-image?cid=6560",
+    "source": "PubChem"
+  },
+  "flavordb:6560": {
+    "found": true,
+    "cid": 6560,
+    "common_name": "2-Methyl-1-propanol",
+    "iupac_name": "2-methylpropan-1-ol",
+    "cas_numbers": [
+      "78-83-1",
+      "68989-27-5"
+    ],
+    "flavor_profile": [
+      "solvent",
+      "ether",
+      "wine",
+      "bitter"
+    ],
+    "fema_flavor_profile": [
+      "Apple",
+      "Bitter",
+      "Cocoa",
+      "Wine"
+    ],
+    "fema_number": "2179",
+    "taste": [
+      "sweet whiskey taste"
+    ],
+    "odor": [
+      "sweet",
+      "musty odor",
+      "odor like that of amyl alcohol",
+      "but weaker",
+      "penetrating",
+      "wine-like",
+      "disagreeable odor",
+      "suffocating odor of fusel oil",
+      "slightly suffocating",
+      "nonresidual alcoholic"
+    ],
+    "functional_groups": [
+      "hydroxy compound",
+      "alcohol",
+      "primary alcohol"
+    ],
+    "fooddb_id": "FDB003274",
+    "smiles": "CC(C)CO",
+    "url": "https://cosylab.iiitd.edu.in/flavordb/molecules?pubchem_id=6560",
+    "json_url": "https://cosylab.iiitd.edu.in/flavordb/molecules_json?id=6560",
+    "image_url": "https://cosylab.iiitd.edu.in/flavordb/static/molecules_images/6560.png",
+    "source": "FlavorDB",
+    "license": "CC BY-NC-SA 3.0"
+  },
+  "pubchem:101-97-3": {
+    "found": true,
+    "query": "101-97-3",
+    "cid": 7590,
+    "title": "Ethyl phenylacetate",
+    "iupac_name": "ethyl 2-phenylacetate",
+    "molecular_formula": "C10H12O2",
+    "molecular_weight": "164.20",
+    "smiles": "CCOC(=O)CC1=CC=CC=C1",
+    "connectivity_smiles": "CCOC(=O)CC1=CC=CC=C1",
+    "inchi_key": "DULCUDSUACXJJC-UHFFFAOYSA-N",
+    "xlogp": 2.3,
+    "tpsa": 26.3,
+    "h_bond_donor_count": 0,
+    "h_bond_acceptor_count": 2,
+    "url": "https://pubchem.ncbi.nlm.nih.gov/compound/7590",
+    "image_path": "/pubchem-image?cid=7590",
+    "source": "PubChem"
+  },
+  "flavordb:7590": {
+    "found": true,
+    "cid": 7590,
+    "common_name": "Ethyl Phenylacetate",
+    "iupac_name": "ethyl 2-phenylacetate",
+    "cas_numbers": [
+      "101-97-3"
+    ],
+    "flavor_profile": [
+      "grapefruit",
+      "balsam",
+      "rose",
+      "anise",
+      "chocolate",
+      "honey",
+      "melon",
+      "fruit",
+      "sweet",
+      "floral",
+      "raspberry",
+      "bitter",
+      "cocoa"
+    ],
+    "fema_flavor_profile": [
+      "Floral",
+      "Fruit",
+      "Honey",
+      "Rose"
+    ],
+    "fema_number": "2452",
+    "taste": [],
+    "odor": [],
+    "functional_groups": [
+      "carboxylic acid derivative",
+      "carboxylic acid ester",
+      "aromatic compound"
+    ],
+    "fooddb_id": "FDB010560",
+    "smiles": "CCOC(=O)CC1=CC=CC=C1",
+    "url": "https://cosylab.iiitd.edu.in/flavordb/molecules?pubchem_id=7590",
+    "json_url": "https://cosylab.iiitd.edu.in/flavordb/molecules_json?id=7590",
+    "image_url": "https://cosylab.iiitd.edu.in/flavordb/static/molecules_images/7590.png",
+    "source": "FlavorDB",
+    "license": "CC BY-NC-SA 3.0"
+  },
+  "pubchem:64-17-5": {
+    "found": true,
+    "query": "64-17-5",
+    "cid": 702,
+    "title": "Ethanol",
+    "iupac_name": "ethanol",
+    "molecular_formula": "C2H6O",
+    "molecular_weight": "46.07",
+    "smiles": "CCO",
+    "connectivity_smiles": "CCO",
+    "inchi_key": "LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
+    "xlogp": -0.1,
+    "tpsa": 20.2,
+    "h_bond_donor_count": 1,
+    "h_bond_acceptor_count": 1,
+    "url": "https://pubchem.ncbi.nlm.nih.gov/compound/702",
+    "image_path": "/pubchem-image?cid=702",
+    "source": "PubChem"
+  },
+  "64-17-5": {
+    "found": true,
+    "name": "ETHYL ALCOHOL",
+    "cas": "64-17-5",
+    "fema_number": "2419",
+    "jecfa_number": "41",
+    "flavor_profile": "",
+    "url": "https://www.femaflavor.org/flavor-library/ethyl-alcohol",
+    "source": "FEMA Flavor Library",
+    "query": "64-17-5",
+    "search_url": "https://www.femaflavor.org/flavor-library/search?fulltext=64-17-5"
+  },
+  "flavordb:702": {
+    "found": true,
+    "cid": 702,
+    "common_name": "ethanol",
+    "iupac_name": "ethanol",
+    "cas_numbers": [
+      "64-17-5",
+      "97281-11-3",
+      "71329-38-9",
+      "68475-56-9",
+      "68916-39-2",
+      "71076-86-3",
+      "64-17-5"
+    ],
+    "flavor_profile": [
+      "alcoholic",
+      "ethereal",
+      "medical",
+      "sweet",
+      "strong"
+    ],
+    "fema_flavor_profile": [],
+    "fema_number": "2419",
+    "taste": [
+      "burning"
+    ],
+    "odor": [
+      "mild",
+      "rather pleasant",
+      "like wine or whiskey",
+      "weak",
+      "ethereal",
+      "vinous odor"
+    ],
+    "functional_groups": [
+      "hydroxy compound",
+      "alcohol",
+      "primary alcohol"
+    ],
+    "fooddb_id": "FDB000753",
+    "smiles": "CCO",
+    "url": "https://cosylab.iiitd.edu.in/flavordb/molecules?pubchem_id=702",
+    "json_url": "https://cosylab.iiitd.edu.in/flavordb/molecules_json?id=702",
+    "image_url": "https://cosylab.iiitd.edu.in/flavordb/static/molecules_images/702.png",
+    "source": "FlavorDB",
+    "license": "CC BY-NC-SA 3.0"
   }
 }

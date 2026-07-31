@@ -6,6 +6,18 @@ import SearchInsights from './components/SearchInsights';
 import PubChemStructureViewer from './components/PubChemStructureViewer';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
+import {
+  getBookConflictQuality,
+  getBookDisplayCas,
+  getBookSourceLocator,
+  getBookThresholdReviewDetails,
+  getBookThresholdRowKey,
+  getThresholdsForBookHit,
+  mergeBookHitsByEntity,
+  groupBookThresholds,
+  searchBookIndex,
+  summarizeBookSources,
+} from './bookSearch';
 
 const FEMA_API_URL = (import.meta.env.VITE_FEMA_API_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
 const APP_BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, '');
@@ -118,6 +130,8 @@ export default function App() {
   const [interfaceLanguage, setInterfaceLanguage] = useState('zh');
   const [refsLookup, setRefsLookup] = useState({});
   const [bookIndex, setBookIndex] = useState([]);
+  const [bookEntities, setBookEntities] = useState([]);
+  const [bookThresholds, setBookThresholds] = useState([]);
   const [femaProfiles, setFemaProfiles] = useState({});
   const [compoundProfiles, setCompoundProfiles] = useState({});
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
@@ -197,6 +211,9 @@ export default function App() {
     openFema: isEnglish ? 'Open FEMA page' : '打开 FEMA 页面',
     bookResults: isEnglish ? 'Book search results' : '书籍检索结果',
     pageChunk: (page, chunk) => isEnglish ? `Page ${page} / excerpt ${chunk}` : `第 ${page} 页 / 片段 ${chunk}`,
+    pageChunks: (page, chunks) => isEnglish
+      ? `Page ${page} / excerpts ${chunks.join(', ')}`
+      : `第 ${page} 页 / 片段 ${chunks.join('、')}`,
     showOriginal: isEnglish ? 'View full original excerpt' : '查看原始片段全文',
     referenceDetails: isEnglish ? 'Reference details' : '文献来源详情',
     citationIndex: isEnglish ? 'Citation index' : '引文索引',
@@ -247,6 +264,8 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
         setData(dataJson);
         setRefsLookup(lookupJson);
         setBookIndex(bookJson.records || []);
+        setBookEntities(bookJson.entities || []);
+        setBookThresholds(bookJson.thresholds || []);
         
         const normKeys = Object.keys(refsJson).map(k => ({
           original: k,
@@ -484,30 +503,17 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
   const bookResults = useMemo(() => {
     if (!includeBookResults) return [];
     if (!bookIndex.length) return [];
-
-    const normalize = (value) => (value || "").toString().toLowerCase().trim();
-    const queries = searchMode === 'single'
-      ? [normalize(deferredSingleQuery)].filter(Boolean)
-      : deferredBulkQuery.split('\n').map(normalize).filter(Boolean);
-
-    if (!queries.length) return [];
-
-    return bookIndex
-      .map(item => {
-        const text = normalize(item.text);
-        const title = normalize(item.book_title);
-        let score = 0;
-        for (const q of queries) {
-          if (!q) continue;
-          if (title.includes(q)) score += 1;
-          if (text.includes(q)) score += 5;
-        }
-        return { ...item, score };
-      })
-      .filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score || a.page - b.page || a.chunk - b.chunk)
-      .slice(0, 20);
-  }, [bookIndex, deferredSingleQuery, deferredBulkQuery, searchMode, includeBookResults]);
+    const rawQueries = searchMode === 'single' ? [deferredSingleQuery] : deferredBulkQuery.split('\n');
+    const hits = searchBookIndex({
+      records: bookIndex,
+      rawQueries,
+      matchedCompounds: queryMatchedResults,
+      bookEntities,
+      exactMatch,
+      limit: 20,
+    });
+    return mergeBookHitsByEntity(hits);
+  }, [bookIndex, bookEntities, deferredSingleQuery, deferredBulkQuery, searchMode, includeBookResults, queryMatchedResults, exactMatch]);
 
   const getFilterOrderIndex = (key) => {
     const index = filterOrder.indexOf(key);
@@ -757,6 +763,67 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
     if (/酒|啤酒|白酒|葡萄酒|黄酒|果酒|酒精|乙醇/i.test(source)) tags.push(isEnglish ? 'Alcoholic beverages' : '酒类');
     return tags.length ? [...new Set(tags)] : [isEnglish ? 'Excerpt' : '片段'];
   };
+
+  const getBookMatchReasonLabel = (reason) => ({
+    query: isEnglish ? 'Query phrase' : '检索词命中',
+    cas: isEnglish ? 'CAS exact match' : 'CAS 精确关联',
+    chineseName: isEnglish ? 'Chinese name' : '中文名关联',
+    englishName: isEnglish ? 'English name' : '英文名关联',
+    bookEntity: isEnglish ? 'Book entity' : '书籍实体关联',
+  }[reason] || reason);
+
+  const getStructuredThresholdsForHit = (hit) => getThresholdsForBookHit(bookThresholds, hit);
+
+  const getBookMediumGroupLabel = (key) => ({
+    air: isEnglish ? 'Air' : '空气',
+    water: isEnglish ? 'Water' : '水',
+    ethanolWater: isEnglish ? 'Ethanol-water' : '乙醇-水',
+    wine: isEnglish ? 'Wine' : '葡萄酒',
+    beer: isEnglish ? 'Beer' : '啤酒',
+    other: isEnglish ? 'Other' : '其他',
+  }[key] || key);
+
+  const getBookThresholdEvidenceLabel = (threshold) => {
+    if (threshold.entity_cas) return isEnglish ? 'Direct CAS association' : 'CAS 直接绑定';
+    if (threshold.subject_resolution?.resolution_type?.startsWith('source_verified_')) {
+      return isEnglish ? 'Verified contextual association' : '已核验上下文关联';
+    }
+    return isEnglish ? 'Contextual association' : '上下文关联';
+  };
+
+  const formatBookThresholdValues = (item) => (item.values || []).map(value => {
+    const range = value.high ? `${value.low}～${value.high}` : value.low;
+    return `${range} ${value.unit}`;
+  }).join('；') || '—';
+
+  const getBookThresholdTypeLabel = (item) => ({
+    odor: isEnglish ? 'Odor threshold' : '嗅觉阈值',
+    taste: isEnglish ? 'Taste threshold' : '味觉阈值',
+    detection: isEnglish ? 'Detection threshold' : '觉察阈',
+    recognition: isEnglish ? 'Recognition threshold' : '识别阈',
+    sensory: isEnglish ? 'Sensory threshold' : '感官阈值',
+    unspecified: isEnglish ? 'Threshold' : '阈值',
+  }[item.threshold_type] || item.threshold_type || (isEnglish ? 'Threshold' : '阈值'));
+
+  const getThresholdReviewLabel = (category) => ({
+    ambiguous_unit: isEnglish ? 'Ambiguous OCR unit' : '单位存在 OCR 歧义',
+    unknown_medium: isEnglish ? 'Medium not identified' : '介质未识别',
+    missing_entity: isEnglish ? 'Compound identity unresolved' : '化合物身份未解析',
+    suspicious_magnitude: isEnglish ? 'Magnitude needs review' : '数值量级需复核',
+  }[category] || category);
+
+  const getConflictLabel = (quality) => ({
+    nameVariant: isEnglish ? 'Source name variant' : '原书名称变体',
+    likelyOcrError: isEnglish ? 'Likely OCR name error' : '疑似 OCR 名称错误',
+    insufficientExtraction: isEnglish ? 'Identity extraction incomplete' : '身份信息提取不完整',
+    identityConflict: isEnglish ? 'Identity conflict requires review' : '化合物身份冲突，需人工核验',
+    verifiedSourceConflict: isEnglish ? 'Verified source CAS/name mismatch' : '已核验：原书 CAS 与名称不一致',
+    verifiedNameVariant: isEnglish ? 'Verified source name variant' : '已核验：原书名称与规范身份一致',
+  }[quality.reason]);
+
+  const formatRetentionIndices = (entity) => (entity?.retention_indices || [])
+    .map(item => `${item.type}: ${(item.values || []).join(' / ')}`)
+    .join(' · ');
 
   const splitBookSentences = (text) => {
     return (text || '')
@@ -1023,31 +1090,13 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
 
     const getBookMatchesForItem = (item, fema, commonName) => {
       if (!includeBookResults || !bookIndex.length) return [];
-      const queries = [
-        item.cas,
-        item.chinese_name,
-        item.english_name,
-        commonName,
-        fema?.name
-      ]
-        .map(value => (value || '').toString().toLowerCase().replace(/\([^)]*\)/g, '').trim())
-        .filter(value => value.length >= 3);
-
-      if (!queries.length) return [];
-
-      return bookIndex
-        .map(hit => {
-          const text = (hit.text || '').toString().toLowerCase();
-          let score = 0;
-          queries.forEach(query => {
-            if (!query) return;
-            if (text.includes(query)) score += query === (item.cas || '').toLowerCase() ? 10 : 4;
-          });
-          return { ...hit, score };
-        })
-        .filter(hit => hit.score > 0)
-        .sort((a, b) => b.score - a.score || a.page - b.page || a.chunk - b.chunk)
-        .slice(0, 3);
+      return searchBookIndex({
+        records: bookIndex,
+        rawQueries: [item.cas, item.chinese_name, item.english_name, commonName, fema?.name].filter(Boolean),
+        matchedCompounds: [item],
+        bookEntities,
+        limit: 3,
+      });
     };
     
     let detailedRowIndex = 0;
@@ -1932,34 +1981,187 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
               {bookResults.map((item) => {
                 const summary = summarizeBookHit(item.text, getActiveBookQueries());
                 const tags = getBookHitTags(item.text);
+                const structuredThresholds = getStructuredThresholdsForHit(item);
+                const thresholdGroups = groupBookThresholds(structuredThresholds);
+                const sourceSummary = summarizeBookSources(structuredThresholds);
+                const indexPages = sourceSummary.pages.length ? sourceSummary.pages : (item.pages || [item.page]).filter(Number.isFinite);
+                const sourceHits = item.source_hits?.length ? item.source_hits : [item];
+                const applicationGroup = summary.groups.find(group => (
+                  group.title === '酒类应用' || group.title === 'Applications in alcoholic beverages'
+                ));
+                const entityName = item.entity?.chinese_name || item.matched_subject_label || item.subject_label;
+                const englishName = item.entity?.english_names?.[0] || item.entity?.english_name || '';
+                const displayCas = getBookDisplayCas(item, structuredThresholds);
+                const conflictQuality = item.entity?.canonical_conflict
+                  ? getBookConflictQuality(item.entity.canonical_conflict)
+                  : null;
                 return (
                   <div key={item.id} className="result-entity book-result-entity bg-white overflow-hidden">
                     <div className="entity-header">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <span className="source-label">
-                          {isEnglish ? 'Wine Flavor Chemistry' : item.book_title}
-                        </span>
-                        <span className="text-sm font-semibold text-slate-600">
-                          {ui.pageChunk(item.page, item.chunk)}
-                        </span>
+                      <div className="book-card-identity">
+                        <div className="book-card-title-row">
+                          <strong className="book-card-title">{entityName || (isEnglish ? 'Book result' : '书籍结果')}</strong>
+                          {englishName && <span className="book-card-english-name">{englishName}</span>}
+                          {displayCas && <code className="book-card-cas compound-cas">CAS {displayCas}</code>}
+                        </div>
+                        <div className="book-card-index">
+                          《{isEnglish ? 'Wine Flavor Chemistry' : item.book_title}》
+                          {' · '}
+                          {indexPages.length > 1
+                            ? `${isEnglish ? 'Pages' : '第'} ${indexPages.join('、')}${isEnglish ? '' : ' 页'}`
+                            : `${isEnglish ? 'Page' : '第'} ${indexPages[0] || item.page}${isEnglish ? '' : ' 页'}`}
+                        </div>
+                        {(item.chapters?.length || item.sections?.length || item.chapter || item.section) && (
+                          <div className="book-card-chapter">{[
+                            ...(item.chapters || (item.chapter ? [item.chapter] : [])),
+                            ...(item.sections || (item.section ? [item.section] : [])),
+                          ].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' · ')}</div>
+                        )}
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="book-card-evidence">
+                        {(item.matchReasonCodes || []).slice(0, 2).map(reason => (
+                          <span key={`match-${reason}`} className="data-tag">
+                            {getBookMatchReasonLabel(reason)}
+                          </span>
+                        ))}
                         {tags.map(tag => (
                           <span key={tag} className="data-tag">
                             {tag}
                           </span>
                         ))}
+                        {formatRetentionIndices(item.entity) && (
+                          <span className="book-card-retention">{formatRetentionIndices(item.entity)}</span>
+                        )}
                       </div>
                     </div>
 
                     <div className="p-5 md:p-6 space-y-4">
+                      {item.entity?.canonical_conflict && conflictQuality && (
+                        <div className="book-conflict-notice" data-conflict={conflictQuality.level}>
+                          <div className="font-bold">{getConflictLabel(conflictQuality)}</div>
+                          <div>
+                            {isEnglish ? 'Master database: ' : '主库对应名称：'}
+                            {item.entity.canonical_conflict.chinese_name} / {item.entity.canonical_conflict.english_name}
+                          </div>
+                          {item.entity.canonical_conflict.resolution && (
+                            <div>
+                              {isEnglish ? 'Verification: ' : '核验说明：'}
+                              {item.entity.canonical_conflict.resolution.verification_note}
+                              {' · '}
+                              {item.entity.canonical_conflict.resolution.authority_url ? (
+                                <a
+                                  href={item.entity.canonical_conflict.resolution.authority_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  {item.entity.canonical_conflict.resolution.authority}
+                                </a>
+                              ) : (
+                                <span>{item.entity.canonical_conflict.resolution.authority}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {item.identity_correction && (
+                        <div className="book-conflict-notice" data-conflict="verified">
+                          <div className="font-bold">
+                            {isEnglish ? 'Source-verified identity correction' : '来源页核实的身份修正'}
+                          </div>
+                          <div>
+                            {item.identity_correction.source_name} · CAS {item.identity_correction.corrected_cas}
+                          </div>
+                          <div>{item.identity_correction.reason}</div>
+                          <div>
+                            {isEnglish ? 'Evidence' : '页图依据'}：{item.identity_correction.source_page_evidence}
+                          </div>
+                        </div>
+                      )}
+                      {item.table_metadata && (
+                        <div className="book-table-notice">
+                          <div className="font-bold">
+                            {isEnglish ? `Table ${item.table_metadata.table_id}` : `表 ${item.table_metadata.table_id}`}
+                            {item.table_metadata.title ? ` · ${item.table_metadata.title}` : ''}
+                          </div>
+                          <div>
+                            {item.table_metadata.unit && `${isEnglish ? 'Unit' : '单位'}：${item.table_metadata.unit} · `}
+                            {item.table_metadata.needs_review
+                              ? (isEnglish ? 'Linearized OCR table; verify row/column structure against the source page.' : '线性 OCR 表格；行列结构需结合原书页复核。')
+                              : (isEnglish ? 'Rows verified against the source page.' : '行列已对照原书页面核验。')}
+                          </div>
+                          {item.table_metadata.rows?.length > 0 && (
+                            <div className="book-structured-table-wrap">
+                              <table className="book-structured-table">
+                                <thead>
+                                  <tr>
+                                    {item.table_metadata.columns.map(column => (
+                                      <th key={column.key}>{column.label}</th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {item.table_metadata.rows.map((row, rowIndex) => (
+                                    <tr key={`${item.table_metadata.table_id}-${rowIndex}`}>
+                                      {item.table_metadata.columns.map(column => (
+                                        <td key={column.key}>{row[column.key] ?? '—'}</td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {thresholdGroups.length > 0 && (
+                        <div className="book-threshold-table-wrap">
+                          <table className="book-threshold-table">
+                            <thead>
+                              <tr>
+                                <th>{isEnglish ? 'System' : '阈值体系'}</th>
+                                <th>{isEnglish ? 'Value and type' : '数值与类型'}</th>
+                                <th>{isEnglish ? 'Medium detail' : '介质细节'}</th>
+                                <th>{isEnglish ? 'Evidence' : '证据'}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {thresholdGroups.flatMap(group => group.thresholds.map((threshold, thresholdIndex) => {
+                                const reviewDetails = getBookThresholdReviewDetails(threshold);
+                                const locator = getBookSourceLocator(threshold);
+                                const medium = (threshold.media || []).join(' / ') || (isEnglish ? 'Not specified' : '原文未说明');
+                                return (
+                                  <tr key={getBookThresholdRowKey(threshold, group.key, thresholdIndex)}>
+                                    <th scope="row" data-label={isEnglish ? 'System' : '阈值体系'}>{getBookMediumGroupLabel(group.key)}</th>
+                                    <td data-label={isEnglish ? 'Value and type' : '数值与类型'}>
+                                      <strong>{formatBookThresholdValues(threshold)}</strong>
+                                      <span>{getBookThresholdTypeLabel(threshold)}</span>
+                                      {reviewDetails.length > 0 && (
+                                        <span className="book-review-reasons">{reviewDetails.map(getThresholdReviewLabel).join('；')}</span>
+                                      )}
+                                    </td>
+                                    <td data-label={isEnglish ? 'Medium detail' : '介质细节'}>
+                                      {medium}{threshold.medium_detail ? ` · ${threshold.medium_detail}` : ''}
+                                    </td>
+                                    <td data-label={isEnglish ? 'Evidence' : '证据'}>
+                                      <span className="book-evidence-label">
+                                        {getBookThresholdEvidenceLabel(threshold)}
+                                        {locator.page ? ` · ${isEnglish ? `page ${locator.page}` : `第 ${locator.page} 页`}` : ''}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              }))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                       {summary.groups.length === 0 && (
                         <div className="text-[15px] leading-7 text-slate-700 bg-slate-50 border border-slate-100 rounded-xl p-4">
                           {summary.excerpt}
                         </div>
                       )}
 
-                      {summary.groups.length > 0 && (
+                      {structuredThresholds.length === 0 && summary.groups.length > 0 && (
                         <div className="grid grid-cols-1 gap-3">
                           {summary.groups.map(group => (
                             <div key={group.title} className="border border-slate-100 rounded-xl p-4 bg-white">
@@ -1976,14 +2178,33 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
                         </div>
                       )}
 
-                      <details className="group">
-                        <summary className="book-original-trigger">
-                          {ui.showOriginal}
-                        </summary>
-                        <div className="mt-3 max-h-64 overflow-y-auto whitespace-pre-wrap text-sm leading-7 text-slate-600 bg-slate-50 border border-slate-100 rounded-xl p-4">
-                          {item.text}
-                        </div>
-                      </details>
+                      {applicationGroup?.lines.length > 0 && (
+                        <details className="book-application-panel" open>
+                          <summary>
+                            <span>{isEnglish ? 'Applications in alcoholic beverages' : '酒类应用'}</span>
+                            <span>{applicationGroup.lines.length} {isEnglish ? 'records' : '条记录'}</span>
+                          </summary>
+                          <ul>
+                            {applicationGroup.lines.map((line, lineIndex) => <li key={lineIndex}>{line}</li>)}
+                          </ul>
+                        </details>
+                      )}
+
+                      <div className="book-card-footer">
+                        <details className="book-original-sources">
+                          <summary className="book-original-trigger">{ui.showOriginal}</summary>
+                          <div className="book-original-list">
+                            {sourceHits.map((sourceHit, sourceIndex) => (
+                              <details key={`${sourceHit.id || sourceHit.page}-${sourceHit.chunk || sourceIndex}`} className="book-original-source" open>
+                                <summary>
+                                  {isEnglish ? `Page ${sourceHit.page ?? '—'} · block ${sourceHit.chunk ?? '—'}` : `第 ${sourceHit.page ?? '—'} 页 · 块 ${sourceHit.chunk ?? '—'}`}
+                                </summary>
+                                <div className="book-original-content">{sourceHit.text}</div>
+                              </details>
+                            ))}
+                          </div>
+                        </details>
+                      </div>
                     </div>
                   </div>
                 );

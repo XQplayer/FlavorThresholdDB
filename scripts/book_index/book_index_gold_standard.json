@@ -1,0 +1,44 @@
+[
+  {
+    "cas": "141-78-6",
+    "chinese_name": "乙酸乙酯",
+    "english_alias": "ethyl acetate",
+    "first_page": 182,
+    "forbidden_aliases": ["S-ethyl thioacetate"]
+  },
+  {
+    "cas": "554-12-1",
+    "chinese_name": "丙酸乙酯",
+    "english_alias": "ethyl propanoate",
+    "first_page": 183,
+    "forbidden_aliases": ["ethyl 3-mercaptopropionate"]
+  },
+  {
+    "cas": "123-66-0",
+    "chinese_name": "己酸乙酯",
+    "english_alias": "ethyl hexanoate",
+    "first_page": 185,
+    "forbidden_aliases": ["methyl hexanoate"]
+  },
+  {
+    "cas": "60-12-8",
+    "chinese_name": "苯乙醇",
+    "english_alias": "2-phenylethanol",
+    "first_page": 222,
+    "forbidden_aliases": ["ethyl phenylacetate"]
+  },
+  {
+    "cas": "80-56-8",
+    "chinese_name": "α-蒎烯",
+    "english_alias": "alpha-pinene",
+    "first_page": 511,
+    "forbidden_aliases": ["28387-44-2"]
+  },
+  {
+    "cas": "3796-70-1",
+    "chinese_name": "（E）-香叶基丙酮",
+    "english_alias": "(E)-geranylacetone",
+    "first_page": 529,
+    "forbidden_aliases": ["106-23-0"]
+  }
+]

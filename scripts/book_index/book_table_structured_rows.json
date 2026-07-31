@@ -1,0 +1,438 @@
+[
+  {
+    "table_id": "1-7",
+    "page": 24,
+    "title": "一些化合物在水和啤酒中的阈值",
+    "columns": [
+      {"key": "compound", "label": "化合物"},
+      {"key": "water", "label": "水中"},
+      {"key": "beer", "label": "啤酒中"},
+      {"key": "unit", "label": "单位"}
+    ],
+    "rows": [
+      {"compound": "正丁醇", "water": "0.5", "beer": "200", "unit": "mg/kg"},
+      {"compound": "3-甲基丁醇", "water": "0.25", "beer": "70", "unit": "mg/kg"},
+      {"compound": "二甲基硫", "water": "0.00033", "beer": "0.05", "unit": "mg/kg"},
+      {"compound": "(E)-2-壬烯醛", "water": "0.00008", "beer": "0.00011", "unit": "mg/kg"}
+    ],
+    "source_page_evidence": "page-024.jpg",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "1-8",
+    "page": 24,
+    "title": "酒精浓度对葡萄酒中一些化合物空气阈值的影响",
+    "columns": [
+      {"key": "compound", "label": "化合物"},
+      {"key": "without_alcohol", "label": "没有酒精(x)"},
+      {"key": "with_alcohol", "label": "有酒精(y)"},
+      {"key": "ratio", "label": "y/x"},
+      {"key": "unit", "label": "单位"}
+    ],
+    "rows": [
+      {"compound": "异丁酸乙酯", "without_alcohol": "0.3", "with_alcohol": "38", "ratio": "127", "unit": "ng/L"},
+      {"compound": "丁酸乙酯", "without_alcohol": "2.5", "with_alcohol": "200", "ratio": "80", "unit": "ng/L"},
+      {"compound": "己酸乙酯", "without_alcohol": "9", "with_alcohol": "90", "ratio": "10", "unit": "ng/L"},
+      {"compound": "2-甲基丙醇", "without_alcohol": "640", "with_alcohol": "200000", "ratio": "312", "unit": "ng/L"},
+      {"compound": "3-甲基丁醇", "without_alcohol": "125", "with_alcohol": "6300", "ratio": "50", "unit": "ng/L"}
+    ],
+    "source_page_evidence": "page-024.jpg",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "1-9",
+    "page": 24,
+    "title": "酒精-糖和酒精-酸对化合物阈值影响",
+    "columns": [
+      {"key": "compound", "label": "化合物"},
+      {"key": "water", "label": "水"},
+      {"key": "alcohol_acid", "label": "酒精-水溶液+酸"},
+      {"key": "alcohol_sugar", "label": "酒精-水溶液+糖"},
+      {"key": "unit", "label": "单位"}
+    ],
+    "rows": [
+      {"compound": "乙酸乙酯", "water": "25", "alcohol_acid": "40", "alcohol_sugar": null, "unit": "mg/L"},
+      {"compound": "己酸乙酯", "water": "36", "alcohol_acid": "37", "alcohol_sugar": "56", "unit": "μg/L"},
+      {"compound": "戊醇类（混合）", "water": "1.9", "alcohol_acid": "12.5", "alcohol_sugar": "60", "unit": "mg/L"},
+      {"compound": "β-紫罗兰酮", "water": "7", "alcohol_acid": "800", "alcohol_sugar": null, "unit": "ng/L"},
+      {"compound": "β-大马酮", "water": "2", "alcohol_acid": "45", "alcohol_sugar": null, "unit": "ng/L"}
+    ],
+    "source_page_evidence": "page-024.jpg",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "1-2",
+    "page": 20,
+    "title": "一些风味化合物在水中气味阈值（20℃）",
+    "columns": [
+      {"key": "compound", "label": "化合物"},
+      {"key": "threshold", "label": "水中气味阈值"},
+      {"key": "unit", "label": "单位"}
+    ],
+    "rows": [
+      {"compound": "乙醇", "threshold": "100", "unit": "mg/L"},
+      {"compound": "麦芽酚（maltol）", "threshold": "9", "unit": "mg/L"},
+      {"compound": "糠醛", "threshold": "3.0", "unit": "mg/L"},
+      {"compound": "己醇", "threshold": "2.5", "unit": "mg/L"},
+      {"compound": "苯甲醛", "threshold": "0.35", "unit": "mg/L"},
+      {"compound": "香兰素", "threshold": "0.02", "unit": "mg/L"},
+      {"compound": "覆盆子（树莓）酮（raspberry ketone）", "threshold": "0.01", "unit": "mg/L"},
+      {"compound": "苯乙醛", "threshold": "0.004", "unit": "mg/L"},
+      {"compound": "异丁醛", "threshold": "0.001", "unit": "mg/L"},
+      {"compound": "丁酸乙酯", "threshold": "0.001", "unit": "mg/L"},
+      {"compound": "(+)-诺卡酮（nootkatone）", "threshold": "0.001", "unit": "mg/L"},
+      {"compound": "(-)-诺卡酮", "threshold": "1.0", "unit": "mg/L"},
+      {"compound": "榛酮（filbertone）", "threshold": "0.00005", "unit": "mg/L"},
+      {"compound": "甲硫醇", "threshold": "0.00002", "unit": "mg/L"},
+      {"compound": "柠檬烯（limonene）", "threshold": "0.01", "unit": "mg/L"},
+      {"compound": "里那醇（linalool）", "threshold": "0.006", "unit": "mg/L"},
+      {"compound": "己醛", "threshold": "0.0045", "unit": "mg/L"},
+      {"compound": "2-异丁基-3-甲氧基吡嗪", "threshold": "0.000002", "unit": "mg/L"},
+      {"compound": "1-p-孟烯-8-硫醇", "threshold": "0.00000002", "unit": "mg/L"}
+    ],
+    "source_page_evidence": "page-020.jpg; page-021.jpg（续表）",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "1-3",
+    "page": 21,
+    "title": "饱和醛和(E)-2-烯醛在空气中气味阈值",
+    "columns": [
+      {"key": "series", "label": "系列"},
+      {"key": "compound", "label": "化合物"},
+      {"key": "threshold", "label": "OT"},
+      {"key": "unit", "label": "单位"}
+    ],
+    "rows": [
+      {"series": "饱和醛", "compound": "5:0", "threshold": "125", "unit": "10^-12 mol/m³"},
+      {"series": "饱和醛", "compound": "6:0", "threshold": "80", "unit": "10^-12 mol/m³"},
+      {"series": "饱和醛", "compound": "7:0", "threshold": "66", "unit": "10^-12 mol/m³"},
+      {"series": "饱和醛", "compound": "8:0", "threshold": "4", "unit": "10^-12 mol/m³"},
+      {"series": "饱和醛", "compound": "9:0", "threshold": "7", "unit": "10^-12 mol/m³"},
+      {"series": "饱和醛", "compound": "10:0", "threshold": "30", "unit": "10^-12 mol/m³"},
+      {"series": "(E)-2-烯醛", "compound": "5:1", "threshold": "1600", "unit": "10^-12 mol/m³"},
+      {"series": "(E)-2-烯醛", "compound": "6:1", "threshold": "900", "unit": "10^-12 mol/m³"},
+      {"series": "(E)-2-烯醛", "compound": "7:1", "threshold": "1250", "unit": "10^-12 mol/m³"},
+      {"series": "(E)-2-烯醛", "compound": "8:1", "threshold": "100", "unit": "10^-12 mol/m³"},
+      {"series": "(E)-2-烯醛", "compound": "9:1", "threshold": "0.4", "unit": "10^-12 mol/m³"},
+      {"series": "(E)-2-烯醛", "compound": "10:1", "threshold": "25", "unit": "10^-12 mol/m³"}
+    ],
+    "source_page_evidence": "page-021.jpg",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "1-4",
+    "page": 21,
+    "title": "C6~C9醛双键位置与几何结构对阈值的影响",
+    "columns": [
+      {"key": "carbon_series", "label": "醛系列"},
+      {"key": "compound", "label": "双键位置与构型"},
+      {"key": "threshold", "label": "OT"},
+      {"key": "unit", "label": "单位"}
+    ],
+    "rows": [
+      {"carbon_series": "C6醛", "compound": "(E)-2-6:1", "threshold": "900", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C6醛", "compound": "(Z)-2-6:1", "threshold": "600", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C6醛", "compound": "(E)-3-6:1", "threshold": ">400", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C6醛", "compound": "(Z)-3-6:1", "threshold": "1.4", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C6醛", "compound": "(E)-4-6:1", "threshold": "77", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C9醛", "compound": "(E)-2-9:1", "threshold": "0.4", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C9醛", "compound": "(Z)-2-9:1", "threshold": "0.014", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C9醛", "compound": "(E)-3-9:1", "threshold": "0.5", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C9醛", "compound": "(Z)-3-9:1", "threshold": "0.2", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C9醛", "compound": "(E)-4-9:1", "threshold": "9", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C9醛", "compound": "(Z)-4-9:1", "threshold": "1.6", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C9醛", "compound": "(E)-5-9:1", "threshold": "70", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C9醛", "compound": "(E)-6-9:1", "threshold": "0.05", "unit": "10^-12 mol/m³"},
+      {"carbon_series": "C9醛", "compound": "(Z)-6-9:1", "threshold": "1.3", "unit": "10^-12 mol/m³"}
+    ],
+    "source_page_evidence": "page-021.jpg",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "1-5",
+    "page": 23,
+    "title": "呋喃扭尔水溶液对一些化合物气味阈值的影响",
+    "columns": [
+      {"key": "compound", "label": "化合物"},
+      {"key": "water_threshold", "label": "水中阈值 I"},
+      {"key": "furaneol_threshold", "label": "呋喃扭尔水溶液中阈值 II"},
+      {"key": "ratio", "label": "II:I"},
+      {"key": "unit", "label": "单位"}
+    ],
+    "rows": [
+      {"compound": "4-乙烯基愈创木酚", "water_threshold": "100", "furaneol_threshold": "90", "ratio": "≈1", "unit": "μg/L"},
+      {"compound": "2,3-丁二酮", "water_threshold": "15", "furaneol_threshold": "105", "ratio": "7", "unit": "μg/L"},
+      {"compound": "2,3-戊二酮", "water_threshold": "30", "furaneol_threshold": "150", "ratio": "5", "unit": "μg/L"},
+      {"compound": "2-糠硫醇", "water_threshold": "0.012", "furaneol_threshold": "0.25", "ratio": "20", "unit": "μg/L"},
+      {"compound": "β-大马酮", "water_threshold": "0.002", "furaneol_threshold": "0.18", "ratio": "90", "unit": "μg/L"}
+    ],
+    "source_page_evidence": "page-023.jpg；呋喃扭尔浓度6.75 mg/L",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "1-6",
+    "page": 23,
+    "title": "4-羟基-5-甲基-3(2H)-呋喃酮和呋喃扭尔在不同pH水溶液中的阈值",
+    "columns": [
+      {"key": "ph", "label": "pH"},
+      {"key": "hmfuranone", "label": "4-羟基-5-甲基-3(2H)-呋喃酮"},
+      {"key": "furaneol", "label": "呋喃扭尔"},
+      {"key": "unit", "label": "单位"}
+    ],
+    "rows": [
+      {"ph": "7.0", "hmfuranone": "23000", "furaneol": "60", "unit": "原表未标注"},
+      {"ph": "4.5", "hmfuranone": "2100", "furaneol": "31", "unit": "原表未标注"},
+      {"ph": "3.0", "hmfuranone": "2500", "furaneol": "21", "unit": "原表未标注"}
+    ],
+    "source_page_evidence": "page-023.jpg",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "9-2",
+    "page": 351,
+    "title": "葡萄酒内酯非对映异构体的阈值",
+    "columns": [
+      {"key": "number", "label": "序号"},
+      {"key": "stereochemistry", "label": "立体异构体构造"},
+      {"key": "threshold", "label": "空气中阈值"},
+      {"key": "unit", "label": "单位"}
+    ],
+    "rows": [
+      {"number": "1", "stereochemistry": "(3S,3aS,7aS)", "threshold": "0.007~0.014", "unit": "ng/L"},
+      {"number": "2", "stereochemistry": "(3R,3aR,7aR)", "threshold": "14~28", "unit": "ng/L"},
+      {"number": "3", "stereochemistry": "(3R,3aR,7aS)", "threshold": ">1000", "unit": "ng/L"},
+      {"number": "4", "stereochemistry": "(3R,3aS,7aS)", "threshold": "8~16", "unit": "ng/L"},
+      {"number": "5", "stereochemistry": "(3S,3aR,7aR)", "threshold": "0.05~0.2", "unit": "ng/L"},
+      {"number": "6", "stereochemistry": "(3S,3aS,7aR)", "threshold": "0.00001~0.00004", "unit": "ng/L"},
+      {"number": "7", "stereochemistry": "(3S,3aR,7aS)", "threshold": "80~160", "unit": "ng/L"},
+      {"number": "8", "stereochemistry": "(3R,3aS,7aR)", "threshold": ">1000", "unit": "ng/L"}
+    ],
+    "source_page_evidence": "page-351.jpg",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "14-1",
+    "page": 578,
+    "title": "部分甜味剂的味阈值",
+    "columns": [
+      {"key": "compound", "label": "风味物质"},
+      {"key": "threshold", "label": "味阈值"},
+      {"key": "unit", "label": "单位"}
+    ],
+    "rows": [
+      {"compound": "葡萄糖", "threshold": "48.0, 10.2, 90, 18.0, 15.6[D-(+)-型]", "unit": "mmol/L"},
+      {"compound": "果糖", "threshold": "5.0, 18.0, 52.0, 10.2", "unit": "mmol/L"},
+      {"compound": "阿拉伯糖", "threshold": "17.7", "unit": "mmol/L"},
+      {"compound": "半乳糖", "threshold": "50.0", "unit": "mmol/L"},
+      {"compound": "木糖", "threshold": "12.5", "unit": "mmol/L"},
+      {"compound": "鼠李糖", "threshold": "11.8", "unit": "mmol/L"},
+      {"compound": "蔗糖", "threshold": "24.0", "unit": "mmol/L"},
+      {"compound": "甘油", "threshold": "57.0, 81.1, 81.2", "unit": "mmol/L"},
+      {"compound": "1,2-丙二醇", "threshold": "44.2", "unit": "mmol/L"},
+      {"compound": "环己六醇", "threshold": "17.7", "unit": "mmol/L"},
+      {"compound": "赤藓糖醇", "threshold": "36.3", "unit": "mmol/L"},
+      {"compound": "阿拉伯糖醇", "threshold": "43.1", "unit": "mmol/L"},
+      {"compound": "甘露糖醇", "threshold": "20.0, 40.0", "unit": "mmol/L"},
+      {"compound": "山梨糖醇", "threshold": "33.8", "unit": "mmol/L"},
+      {"compound": "木糖醇", "threshold": "12.5或20.2", "unit": "mmol/L"},
+      {"compound": "核糖醇", "threshold": "45.3", "unit": "mmol/L"},
+      {"compound": "L-丙氨酸", "threshold": "8.0, 12", "unit": "mmol/L"},
+      {"compound": "L-丝氨酸", "threshold": "30.0, 25", "unit": "mmol/L"},
+      {"compound": "L-鸟氨酸", "threshold": "3.5", "unit": "mmol/L"},
+      {"compound": "L-脯氨酸", "threshold": "26.0, 25.0", "unit": "mmol/L"},
+      {"compound": "氨基乙酸", "threshold": "30.0, 25", "unit": "mmol/L"},
+      {"compound": "L-苏氨酸", "threshold": "40.0, 35", "unit": "mmol/L"},
+      {"compound": "L-甲硫氨酸", "threshold": "5", "unit": "mmol/L"}
+    ],
+    "source_page_evidence": "page-578.jpg",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "15-1",
+    "page": 607,
+    "title": "部分咸味无机盐的阈值",
+    "columns": [
+      {"key": "compound", "label": "风味物质"},
+      {"key": "english_name", "label": "英文名"},
+      {"key": "threshold", "label": "味阈值"},
+      {"key": "note", "label": "备注"},
+      {"key": "unit", "label": "单位"}
+    ],
+    "rows": [
+      {"compound": "氯化钠", "english_name": "sodium chloride", "threshold": "3.90, 7.5", "note": null, "unit": "mmol/L"},
+      {"compound": "氯化铵", "english_name": "ammonium chloride", "threshold": "5.0", "note": null, "unit": "mmol/L"},
+      {"compound": "磷酸钠", "english_name": "sodium phosphate", "threshold": "5.0", "note": null, "unit": "mmol/L"},
+      {"compound": "氯化钙", "english_name": "calcium chloride", "threshold": "3.1, 6.2", "note": "苦味", "unit": "mmol/L"},
+      {"compound": "磷酸二氢钾", "english_name": "potassium dihydrogenphosphate", "threshold": "15.0", "note": null, "unit": "mmol/L"},
+      {"compound": "氯化钾", "english_name": "potassium chloride", "threshold": "13.0, 15, 12.6", "note": null, "unit": "mmol/L"},
+      {"compound": "氯化镁", "english_name": "magnesium chloride", "threshold": "3.2, 4.0, 6.4", "note": "苦味", "unit": "mmol/L"},
+      {"compound": "磷酸钾", "english_name": "potassium phosphate", "threshold": "7.5", "note": null, "unit": "mmol/L"},
+      {"compound": "磷酸钠", "english_name": "sodium phosphate", "threshold": "5.0", "note": null, "unit": "mmol/L"}
+    ],
+    "source_page_evidence": "page-607.jpg",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "1-1",
+    "page": 16,
+    "title": "一些化合物在不同溶剂中38℃时的半衰期",
+    "columns": [
+      {"key": "compound", "label": "醛类化合物"},
+      {"key": "alcohol_water", "label": "2%vol酒精水溶液"},
+      {"key": "buffered_alcohol", "label": "2%vol酒精+缓冲液"},
+      {"key": "triacetin", "label": "甘油醋酸酯（triacetin）"},
+      {"key": "unit", "label": "单位"}
+    ],
+    "rows": [
+      {"compound": "己醛", "alcohol_water": "100", "buffered_alcohol": "91", "triacetin": "86", "unit": "h"},
+      {"compound": "(E)-2-己烯醛", "alcohol_water": "256", "buffered_alcohol": "183", "triacetin": "71", "unit": "h"},
+      {"compound": "(Z)-3-己烯醛", "alcohol_water": "42", "buffered_alcohol": "36", "triacetin": "26", "unit": "h"},
+      {"compound": "庚醛", "alcohol_water": "79", "buffered_alcohol": "76", "triacetin": "73", "unit": "h"},
+      {"compound": "(E)-2-庚烯醛", "alcohol_water": "175", "buffered_alcohol": "137", "triacetin": "57", "unit": "h"},
+      {"compound": "(Z)-4-庚烯醛", "alcohol_water": "200", "buffered_alcohol": "174", "triacetin": "64", "unit": "h"}
+    ],
+    "source_page_evidence": "page-016.jpg；缓冲液为pH 3.5柠檬酸钠缓冲液（0.2 mol/L）",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "2-1",
+    "page": 37,
+    "title": "常见醇类的物理常数",
+    "columns": [
+      {"key": "compound", "label": "名称"}, {"key": "appearance", "label": "外观"},
+      {"key": "melting_point_c", "label": "熔点/℃"}, {"key": "boiling_point_c", "label": "沸点/℃"},
+      {"key": "relative_density", "label": "相对密度"}, {"key": "solubility", "label": "水或有机溶剂溶解情况"},
+      {"key": "refractive_index", "label": "折射率"}
+    ],
+    "rows": [
+      {"compound": "甲醇", "appearance": "无色液体", "melting_point_c": "-97", "boiling_point_c": "64.7", "relative_density": "0.792", "solubility": "溶于水、乙醇等有机溶剂", "refractive_index": "1.3288"},
+      {"compound": "乙醇", "appearance": "无色液体", "melting_point_c": "-114", "boiling_point_c": "78.3", "relative_density": "0.789", "solubility": "溶于水", "refractive_index": "1.3611"},
+      {"compound": "丙醇", "appearance": "无色液体", "melting_point_c": "-126", "boiling_point_c": "97.2", "relative_density": "0.804", "solubility": "溶于水、乙醇等有机溶剂", "refractive_index": "1.3850"},
+      {"compound": "2-丙醇", "appearance": "无色液体", "melting_point_c": "-88", "boiling_point_c": "82.3", "relative_density": "0.785~0.786", "solubility": "溶于水、乙醇等有机溶剂", "refractive_index": "1.377~1.378"},
+      {"compound": "1-丁醇", "appearance": "无色液体", "melting_point_c": "-90", "boiling_point_c": "117~118", "relative_density": "0.809~0.810", "solubility": "溶于水（7.9%质量分数）、乙醇等溶剂", "refractive_index": "1.399~1.400"},
+      {"compound": "异丁醇", "appearance": "无色液体", "melting_point_c": "-108", "boiling_point_c": "108", "relative_density": "0.810", "solubility": "溶于水（10.0%质量分数）、乙醇等有机溶剂", "refractive_index": "1.3993"},
+      {"compound": "仲丁醇", "appearance": "无色液体", "melting_point_c": "-114", "boiling_point_c": "99.5", "relative_density": "0.808", "solubility": "溶于水（12.5%质量分数）、乙醇等有机溶剂", "refractive_index": "1.3959"},
+      {"compound": "叔丁醇", "appearance": "无色液体", "melting_point_c": "25", "boiling_point_c": "82.5", "relative_density": "0.789", "solubility": "溶于水、乙醇等有机溶剂", "refractive_index": "1.3878"},
+      {"compound": "正戊醇", "appearance": "无色液体", "melting_point_c": "-78.5", "boiling_point_c": "138", "relative_density": "0.817", "solubility": "溶于水（2.4%质量分数）、乙醇等有机溶剂", "refractive_index": "1.4101"},
+      {"compound": "3-甲基丁醇", "appearance": "无色液体", "melting_point_c": null, "boiling_point_c": "132", "relative_density": "0.812~0.813", "solubility": "微溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.407~1.408"},
+      {"compound": "1-己醇", "appearance": "无色液体", "melting_point_c": "-52", "boiling_point_c": "157~158", "relative_density": "0.818~0.819", "solubility": "微溶于水（0.6%质量分数），溶于乙醇等有机溶剂", "refractive_index": "1.417~1.418"},
+      {"compound": "1-庚醇", "appearance": "无色液体", "melting_point_c": "-34", "boiling_point_c": "175", "relative_density": "0.820~0.824", "solubility": "不溶于水（0.2%质量分数），溶于乙醇等有机溶剂", "refractive_index": "1.423~1.427"},
+      {"compound": "1-辛醇", "appearance": "无色液体", "melting_point_c": "-15", "boiling_point_c": "194~195", "relative_density": "0.822~0.830", "solubility": "微溶于水（0.05%质量分数），溶于乙醇等有机溶剂", "refractive_index": "1.428~1.431"},
+      {"compound": "1-壬醇", "appearance": "无色至浅黄色液体", "melting_point_c": null, "boiling_point_c": "213~215", "relative_density": "0.824~0.830", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.431~1.435"},
+      {"compound": "1-癸醇", "appearance": "无色黏稠液体", "melting_point_c": "6", "boiling_point_c": "231~232", "relative_density": "0.826~0.831", "solubility": "不溶于水和甘油中，溶于乙醇等有机溶剂", "refractive_index": "1.435~1.439"},
+      {"compound": "1-十一醇", "appearance": "无色液体", "melting_point_c": "19", "boiling_point_c": "243", "relative_density": "0.8298", "solubility": "不溶于水，能溶于乙醇和乙醚", "refractive_index": null},
+      {"compound": "1-十二醇", "appearance": "无色液体", "melting_point_c": "24", "boiling_point_c": "255~259", "relative_density": "0.830~0.836", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.440~1.444"}
+    ],
+    "source_page_evidence": "page-037.jpg; page-038.jpg（续表）",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "3-1",
+    "page": 75,
+    "title": "常见醛类物理常数",
+    "columns": [
+      {"key": "compound", "label": "名称"}, {"key": "fema", "label": "FEMA号"}, {"key": "appearance", "label": "外观"},
+      {"key": "melting_point_c", "label": "熔点/℃"}, {"key": "boiling_point_c", "label": "沸点/℃"},
+      {"key": "relative_density", "label": "相对密度"}, {"key": "solubility", "label": "水或有机溶剂溶解情况"},
+      {"key": "refractive_index", "label": "折射率"}
+    ],
+    "rows": [
+      {"compound": "甲醛", "fema": null, "appearance": "无色液体", "melting_point_c": "-92", "boiling_point_c": "-21", "relative_density": null, "solubility": "易溶于水", "refractive_index": null},
+      {"compound": "乙醛", "fema": "2003", "appearance": "无色液体", "melting_point_c": "-121", "boiling_point_c": "20.8", "relative_density": null, "solubility": "可溶于水、乙醇等有机溶剂", "refractive_index": null},
+      {"compound": "戊醛", "fema": "3098", "appearance": "无色液体", "melting_point_c": null, "boiling_point_c": "103~104", "relative_density": "0.819", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.388~1.394"},
+      {"compound": "己醛", "fema": "2557", "appearance": "无色液体", "melting_point_c": null, "boiling_point_c": "128", "relative_density": "0.814~0.818", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.403~1.405"},
+      {"compound": "庚醛", "fema": "2540", "appearance": "无色至淡黄色液体", "melting_point_c": null, "boiling_point_c": "152~153", "relative_density": "0.814~0.819", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.412~1.420"},
+      {"compound": "辛醛", "fema": "2797", "appearance": "无色至淡黄色液体", "melting_point_c": null, "boiling_point_c": "171~173", "relative_density": "0.821", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.417~1.425"},
+      {"compound": "壬醛", "fema": "2782", "appearance": "无色至淡黄色液体", "melting_point_c": null, "boiling_point_c": "191~192", "relative_density": "0.820~0.830", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.422~1.429"},
+      {"compound": "癸醛", "fema": "2363", "appearance": "无色至淡黄色液体", "melting_point_c": "17~18", "boiling_point_c": "207~209", "relative_density": "0.823~0.832", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.426~1.430"},
+      {"compound": "十一醛", "fema": "3092", "appearance": "无色至淡黄色液体", "melting_point_c": null, "boiling_point_c": "118~120（2.6 kPa）", "relative_density": "0.832~0.835", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.430~1.435"},
+      {"compound": "十二醛", "fema": "2615", "appearance": "无色至淡黄色液体", "melting_point_c": "8~11", "boiling_point_c": "249", "relative_density": "0.826~0.836", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.433~1.439"},
+      {"compound": "反-2-反-4-己二烯醛", "fema": "3429", "appearance": "无色液体", "melting_point_c": null, "boiling_point_c": "76（3.99 kPa）", "relative_density": "0.908~0.909", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.537~1.538"},
+      {"compound": "2,6-二甲基-5-庚烯醛", "fema": "2389", "appearance": "黄色油状液体", "melting_point_c": null, "boiling_point_c": null, "relative_density": "0.845~0.855", "solubility": "微溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.441~1.447"},
+      {"compound": "反-2-顺-6-壬二烯醛", "fema": "3377", "appearance": "无色至淡黄色液体", "melting_point_c": null, "boiling_point_c": "187", "relative_density": "0.8678", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.4460"},
+      {"compound": "3-己基丙烯醛", "fema": "3210", "appearance": "无色至淡黄色液体", "melting_point_c": null, "boiling_point_c": "92（1.5 kPa）", "relative_density": "0.8418", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.4502"},
+      {"compound": "1,1-二乙氧基乙烷", "fema": "2002", "appearance": "无色液体", "melting_point_c": null, "boiling_point_c": "97~112", "relative_density": "0.826~0.830", "solubility": "微溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.3805"}
+    ],
+    "source_page_evidence": "page-075.jpg; page-076.jpg（续表）",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "9-1",
+    "page": 343,
+    "title": "部分内酯类化合物的物理性质",
+    "columns": [
+      {"key": "compound", "label": "名称"}, {"key": "fema", "label": "FEMA号"}, {"key": "appearance", "label": "外观"},
+      {"key": "boiling_point_c", "label": "沸点/℃"}, {"key": "relative_density", "label": "相对密度"},
+      {"key": "solubility", "label": "水或有机溶剂溶解情况"}, {"key": "refractive_index", "label": "折射率"}
+    ],
+    "rows": [
+      {"compound": "γ-庚内酯", "fema": "2539", "appearance": "无色液体", "boiling_point_c": "151", "relative_density": "0.997~1.004", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.435~1.445"},
+      {"compound": "γ-壬内酯", "fema": "2781", "appearance": "无色至浅黄色液体", "boiling_point_c": "243", "relative_density": "0.958~0.966", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.446~1.450"},
+      {"compound": "γ-癸内酯", "fema": "2360", "appearance": "无色液体", "boiling_point_c": "153（2 kPa）", "relative_density": null, "solubility": "微溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.461"},
+      {"compound": "γ-十一内酯", "fema": "3091", "appearance": "无色至浅黄色黏稠液体", "boiling_point_c": "297", "relative_density": "0.942~0.945", "solubility": "不溶于水和甘油中，溶于乙醇等有机溶剂", "refractive_index": "1.450~1.454"},
+      {"compound": "δ-辛内酯", "fema": "3214", "appearance": "浅黄色液体", "boiling_point_c": "115~117（1.6 kPa）", "relative_density": "0.971~0.973", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.447~1.449"},
+      {"compound": "δ-壬内酯", "fema": "3356", "appearance": "无色黏稠液体", "boiling_point_c": "137~138（1.46 kPa）", "relative_density": "0.987~0.988", "solubility": "不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.456~1.457"},
+      {"compound": "δ-癸内酯", "fema": "2361", "appearance": "无色黏稠液体", "boiling_point_c": "281", "relative_density": "0.950", "solubility": "几乎不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.455"},
+      {"compound": "δ-十一内酯", "fema": "3294", "appearance": "无色黏稠液体", "boiling_point_c": "152~155（1.4 kPa）", "relative_density": "0.968", "solubility": "几乎不溶于水，溶于乙醇等有机溶剂", "refractive_index": "1.462"}
+    ],
+    "source_page_evidence": "page-343.jpg",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "11-2",
+    "page": 439,
+    "title": "厌氧环境下起始于转氨酶产生的风味氨基酸代谢物",
+    "columns": [
+      {"key": "amino_acid", "label": "氨基酸"}, {"key": "alpha_keto_acid", "label": "α-酮酸"},
+      {"key": "aldehyde", "label": "醛"}, {"key": "alcohol", "label": "醇"},
+      {"key": "carboxylic_acid", "label": "羧酸"}, {"key": "other", "label": "其他"}
+    ],
+    "rows": [
+      {"amino_acid": "Leu", "alpha_keto_acid": "α-酮-异己酸盐", "aldehyde": "3-甲基丁醛", "alcohol": "3-甲基丁醇", "carboxylic_acid": "3-甲基丁酸", "other": null},
+      {"amino_acid": "Ile", "alpha_keto_acid": "α-酮-β-甲基戊酸盐", "aldehyde": "2-甲基丁醛", "alcohol": "2-甲基丁醇", "carboxylic_acid": "2-甲基丁酸", "other": null},
+      {"amino_acid": "Val", "alpha_keto_acid": "α-酮-异戊酸盐", "aldehyde": "2-甲基丙醛", "alcohol": "2-甲基丙醇", "carboxylic_acid": "2-甲基丙酸", "other": null},
+      {"amino_acid": "Phe", "alpha_keto_acid": "苯丙酮酸盐", "aldehyde": "苯乙醛", "alcohol": "苯乙醇", "carboxylic_acid": "苯乙酸", "other": null},
+      {"amino_acid": "Tyr", "alpha_keto_acid": "p-OH-苯丙酮酸盐", "aldehyde": "p-OH-苯乙醛", "alcohol": "p-OH-苯乙醇", "carboxylic_acid": "p-OH-苯乙酸", "other": "p-甲酚"},
+      {"amino_acid": "Trp", "alpha_keto_acid": "吲哚丙酮酸盐", "aldehyde": "吲哚-3-乙醛", "alcohol": "色醇", "carboxylic_acid": "吲哚-3-乙酸", "other": "粪臭素"},
+      {"amino_acid": "Met", "alpha_keto_acid": "α-酮-丁酸盐", "aldehyde": "3-甲硫基丙醛", "alcohol": "3-甲硫基丙醇", "carboxylic_acid": "3-甲硫基丙酸", "other": "甲硫醇"},
+      {"amino_acid": "Asp", "alpha_keto_acid": "草酰乙酸", "aldehyde": null, "alcohol": null, "carboxylic_acid": "苹果酸", "other": "双乙酰、乙偶姻"}
+    ],
+    "source_page_evidence": "page-439.jpg",
+    "verification": "manual_source_page"
+  },
+  {
+    "table_id": "13-1",
+    "page": 503,
+    "title": "萜烯类化合物的基本物理性质",
+    "columns": [
+      {"key": "compound", "label": "名称"}, {"key": "fema", "label": "FEMA号"}, {"key": "formula", "label": "分子式"},
+      {"key": "molar_mass", "label": "摩尔质量/(g/mol)"}, {"key": "density", "label": "密度/(g/mL)"},
+      {"key": "melting_point_c", "label": "熔点/℃"}, {"key": "boiling_point_c", "label": "沸点/℃"},
+      {"key": "refractive_index", "label": "折射率"}
+    ],
+    "rows": [
+      {"compound": "柠檬油精", "fema": "2633", "formula": "C10H16", "molar_mass": "136.24", "density": "0.8411", "melting_point_c": "-95", "boiling_point_c": "176", "refractive_index": "1.470~1.474"},
+      {"compound": "α-蒎烯", "fema": null, "formula": "C10H16", "molar_mass": "136.24", "density": null, "melting_point_c": null, "boiling_point_c": "155~156", "refractive_index": null},
+      {"compound": "β-蒎烯", "fema": null, "formula": "C10H16", "molar_mass": "136.24", "density": null, "melting_point_c": null, "boiling_point_c": "165~168", "refractive_index": null},
+      {"compound": "坎烯", "fema": null, "formula": "C10H16", "molar_mass": "136.24", "density": "0.842", "melting_point_c": "51~52", "boiling_point_c": "159", "refractive_index": null},
+      {"compound": "香茅醛", "fema": "2307", "formula": "C10H18O", "molar_mass": "154.25", "density": "0.855", "melting_point_c": null, "boiling_point_c": "204~206", "refractive_index": "1.446~1.456"},
+      {"compound": "香叶醛", "fema": "2507", "formula": "C10H18O", "molar_mass": "154.25", "density": "0.889", "melting_point_c": "15", "boiling_point_c": "229", "refractive_index": "1.469~1.478"},
+      {"compound": "橙花醛", "fema": "2770", "formula": "C10H18O", "molar_mass": "154.25", "density": "0.881", "melting_point_c": null, "boiling_point_c": "225~227", "refractive_index": "1.475~1.478"},
+      {"compound": "β-香茅醇", "fema": "2309", "formula": "C10H20O", "molar_mass": "156.27", "density": "0.855", "melting_point_c": null, "boiling_point_c": "225", "refractive_index": "1.454~1.462"},
+      {"compound": "里那醇", "fema": "2636", "formula": "C10H18O", "molar_mass": "154.25", "density": "0.860", "melting_point_c": null, "boiling_point_c": "198", "refractive_index": "1.460~1.463"},
+      {"compound": "α-萜品醇", "fema": "3045", "formula": "C10H18O", "molar_mass": "154.25", "density": "0.933", "melting_point_c": "37", "boiling_point_c": "219", "refractive_index": "1.482~1.485"},
+      {"compound": "2-茨醇", "fema": "2157", "formula": "C10H18O", "molar_mass": "154.25", "density": "1.011", "melting_point_c": "208", "boiling_point_c": "212~214", "refractive_index": null},
+      {"compound": "α-法呢醇", "fema": "2478", "formula": "C15H26O", "molar_mass": "222.36", "density": "0.888", "melting_point_c": null, "boiling_point_c": "263", "refractive_index": "1.489~1.491"},
+      {"compound": "橙花叔醇", "fema": "2772", "formula": "C15H26O", "molar_mass": "222.36", "density": "0.880", "melting_point_c": null, "boiling_point_c": "276", "refractive_index": "1.480"},
+      {"compound": "乙酸香叶酯", "fema": null, "formula": "C12H20O2", "molar_mass": "196.29", "density": "0.912", "melting_point_c": null, "boiling_point_c": "228", "refractive_index": "1.458~1.464"},
+      {"compound": "丙酸香叶酯", "fema": null, "formula": "C13H22O2", "molar_mass": "210.31", "density": "0.896~0.913", "melting_point_c": null, "boiling_point_c": "252~254", "refractive_index": "1.457~1.464"},
+      {"compound": "丁酸香叶酯", "fema": null, "formula": "C14H24O2", "molar_mass": "224.34", "density": "0.894", "melting_point_c": null, "boiling_point_c": "252~253", "refractive_index": "1.456~1.462"},
+      {"compound": "异丁酸香叶酯", "fema": null, "formula": "C14H24O2", "molar_mass": "224.34", "density": "0.884~0.892", "melting_point_c": null, "boiling_point_c": "245", "refractive_index": null},
+      {"compound": "异戊酸香叶酯", "fema": null, "formula": "C15H26O2", "molar_mass": "238.37", "density": "0.890", "melting_point_c": null, "boiling_point_c": "276~277", "refractive_index": "1.453~1.454"},
+      {"compound": "己酸香叶酯", "fema": null, "formula": "C16H28O2", "molar_mass": "252.39", "density": "0.880~0.890", "melting_point_c": null, "boiling_point_c": "240", "refractive_index": null}
+    ],
+    "source_page_evidence": "page-503.jpg; page-504.jpg（续表）",
+    "verification": "manual_source_page"
+  }
+]

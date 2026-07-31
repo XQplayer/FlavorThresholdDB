@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/create-static-routes.mjs",
     "lint": "eslint .",
+    "test:book-search": "node --test src/bookSearch.test.mjs",
+    "test:static-routes": "node --test src/staticRoutes.test.mjs",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"

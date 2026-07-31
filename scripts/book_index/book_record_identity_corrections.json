@@ -1,0 +1,24 @@
+[
+  {
+    "page": 511,
+    "start_block": 3,
+    "end_block": 5,
+    "corrected_cas": "80-56-8",
+    "source_name": "α-蒎烯",
+    "source_english_name": "alpha-pinene",
+    "fema_number": "2902",
+    "source_page_evidence": "page-511.jpg",
+    "reason": "原书页面明确印有 α-蒎烯及 CAS 80-56-8，但 OCR 漏失 CAS 所在行，导致记录错误继承上一化合物身份。"
+  },
+  {
+    "page": 529,
+    "start_block": 8,
+    "end_block": 12,
+    "corrected_cas": "3796-70-1",
+    "source_name": "（E）-香叶基丙酮",
+    "source_english_name": "(E)-geranylacetone",
+    "fema_number": "3542",
+    "source_page_evidence": "page-529.jpg",
+    "reason": "原书的 CAS 3796-70-1 被 OCR 拆成相邻两块中的“3796-”和“70-1”，常规 CAS 正则无法恢复，导致阈值记录失去实体身份。"
+  }
+]

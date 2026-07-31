@@ -48,6 +48,9 @@ jobs:
 
       - name: Add SPA fallback
         working-directory: frontend
+        # The build already creates dist/aroma-threshold/index.html so the
+        # documented direct search URL returns HTTP 200. This fallback covers
+        # any other client-side route GitHub Pages does not know about.
         run: cp dist/index.html dist/404.html
 
       - name: Configure Pages

@@ -1,0 +1,23 @@
+{
+  "minimum_counts": {
+    "pages": 640,
+    "records": 4800,
+    "entities": 628,
+    "thresholds": 1970,
+    "tables": 17,
+    "structured_tables": 17,
+    "structured_table_rows": 180
+  },
+  "maximum_anomalies": {
+    "unknown_medium": 0,
+    "missing_entity": 0,
+    "ambiguous_unit": 0,
+    "suspicious_magnitude": 0,
+    "canonical_identity_conflict": 0,
+    "canonical_insufficient_extraction": 0,
+    "canonical_likely_ocr_error": 0
+  },
+  "require_zero_bad_patterns": true,
+  "require_all_gold": true,
+  "require_no_missed_queries": true
+}

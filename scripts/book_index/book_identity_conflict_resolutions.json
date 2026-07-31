@@ -1,0 +1,142 @@
+[
+  {
+    "cas": "554-12-1",
+    "page": 183,
+    "source_name": "丙酸乙酯",
+    "source_english_name": "ethyl propanoate",
+    "authoritative_name": "methyl propanoate",
+    "authoritative_cid": 11124,
+    "resolution_type": "source_cas_name_conflict",
+    "authority": "PubChem",
+    "authority_url": "https://pubchem.ncbi.nlm.nih.gov/compound/11124",
+    "verification_note": "原书页面清楚印为丙酸乙酯，但该 CAS 的权威化学身份为丙酸甲酯；保留书源名称并以主库身份作为规范检索名。",
+    "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "578-58-5",
+    "page": 228,
+    "source_name": "茴香醛",
+    "source_english_name": "o-anisaldehyde",
+    "authoritative_name": "2-methylanisole",
+    "authoritative_cid": 33637,
+    "resolution_type": "source_cas_name_conflict",
+    "authority": "PubChem",
+    "authority_url": "https://pubchem.ncbi.nlm.nih.gov/compound/33637",
+    "verification_note": "原书页面清楚印为邻茴香醛，但该 CAS 的权威化学身份为邻甲基苯甲醚；保留书源名称并以主库身份作为规范检索名。",
+    "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "18829-55-5", "page": 86, "source_name": "丁基丙烯醛", "authoritative_name": "(E)-2-heptenal", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "原页完整名称为反-2-庚烯醛，丁基丙烯醛是同条目俗名；按 CAS 规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "3913-81-3", "page": 88, "source_name": "庚基丙烯醛", "authoritative_name": "(E)-2-decenal", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "原页完整名称为反-2-癸烯醛，3-庚基丙烯醛是同条目俗名；按 CAS 规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "142-83-6", "page": 90, "source_name": "山梨醛", "authoritative_name": "2,4-hexadienal", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "原页完整名称为反,反-2,4-己二烯醛，山梨醛为俗名；按 CAS 规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "3681-71-8", "page": 202, "source_name": "叶乙酸酯", "authoritative_name": "(Z)-3-hexenyl acetate", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "原页完整名称为乙酸-顺-3-己烯酯，叶乙酸酯为俗名；按 CAS 规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "3025-30-7", "page": 202, "source_name": "梨酯", "authoritative_name": "ethyl (E,Z)-2,4-decadienoate", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "原页完整名称为反,顺-2,4-癸二烯酸乙酯，梨酯为俗名；按 CAS 规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "122-97-4", "page": 224, "source_name": "二氢肉桂醇", "authoritative_name": "3-phenyl-1-propanol", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "二氢肉桂醇与氢化肉桂醇及3-苯丙醇为同条目名称；按 CAS 规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "100-52-7", "page": 225, "source_name": "最简单的芳香醛类化合物", "authoritative_name": "benzaldehyde", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取捕获了引导语；原页随后明确写苯甲醛及 CAS 100-52-7。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "100-66-3", "page": 229, "source_name": "最简单的芳香醚类化合物", "authoritative_name": "anisole", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取捕获了引导语；原页随后明确写茴香醚、甲氧基苯及 CAS 100-66-3。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "120-80-9", "page": 262, "source_name": "邻苯二酚", "authoritative_name": "1,2-dihydroxybenzene", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "邻苯二酚、儿茶酚和1,2-二羟基苯为同条目名称；按 CAS 规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "108-46-3", "page": 262, "source_name": "间苯二酚", "authoritative_name": "1,3-dihydroxybenzene", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "间苯二酚、雷琐酚和1,3-二羟基苯为同条目名称；按 CAS 规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "97-53-0", "page": 275, "source_name": "4", "authoritative_name": "eugenol", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "OCR实体名仅残留IUPAC片段；原页条目与 CAS 明确对应丁香酚。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "91-10-1", "page": 280, "source_name": "1,3-二甲氧基-2-羟基苯", "authoritative_name": "2,6-dimethoxyphenol", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "1,3-二甲氧基-2-羟基苯与2,6-二甲氧基苯酚为同一结构命名；按 CAS 规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "98-01-1", "page": 332, "source_name": "2-呋喃甲醛", "authoritative_name": "furfural", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "2-呋喃甲醛是糠醛的系统名称之一；原页同条目并列两者。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "698-10-2", "page": 342, "source_name": "枫叶呋喃酮", "authoritative_name": "ethylsotolon", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "原页完整结构名、枫叶呋喃酮俗名与 CAS 一致；按主库名称规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "96-48-0", "page": 344, "source_name": "4-羟基丁酸内酯", "authoritative_name": "gamma-butyrolactone", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "4-羟基丁酸内酯与γ-丁内酯为同一条目名称；按 CAS 规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "695-06-7", "page": 345, "source_name": "乙基--丁内酯", "authoritative_name": "gamma-hexalactone", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "OCR漏失γ字符；原页同条目并列γ-己内酯与γ-乙基-γ-丁内酯。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "105-21-5", "page": 345, "source_name": "庚-1，4-内酯", "authoritative_name": "gamma-heptalactone", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "庚-1,4-内酯为γ-庚内酯俗名；原页同条目并列。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "104-61-0", "page": 346, "source_name": "基氧杂环戊-2-酮", "authoritative_name": "gamma-nonalactone", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取仅保留IUPAC尾部；原页条目及 CAS 明确对应γ-壬内酯。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "706-14-9", "page": 347, "source_name": "癸-1，4-内酯", "authoritative_name": "gamma-decalactone", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "癸-1,4-内酯为γ-癸内酯俗名；原页同条目并列。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "2305-05-7", "page": 348, "source_name": "十二-1，4-内酯", "authoritative_name": "gamma-dodecalactone", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "十二-1,4-内酯为γ-十二内酯俗名；原页同条目并列。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "104-67-6", "page": 348, "source_name": "14醛", "authoritative_name": "gamma-undecalactone", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "OCR抽取到C-14醛俗名尾部；原页完整条目为γ-十一内酯。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "698-76-0", "page": 354, "source_name": "名6-丙基氧杂环己烷-2-酮", "authoritative_name": "delta-octalactone", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取捕获IUPAC尾部；原页条目及 CAS 明确对应δ-辛内酯。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "25773-40-4", "page": 380, "source_name": "3", "authoritative_name": "2-isopropyl-3-methoxypyrazine", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取仅保留IUPAC片段；原页条目及 CAS 明确对应异丙基甲氧基吡嗪。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "133447-37-7", "page": 391, "source_name": "1", "authoritative_name": "2-propionyl-1-pyrroline", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取仅保留俗名片段；原页首句明确为2-丙酰基-1-吡咯啉。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "16630-55-0", "page": 465, "source_name": "乙酸蛋氨酯", "authoritative_name": "3-(methylthio)propyl acetate", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "乙酸蛋氨酯与乙酸3-甲硫基丙酯为同条目名称；按 CAS 规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "13679-70-4", "page": 471, "source_name": "5-甲基-2-甲醛噻吩", "authoritative_name": "2-formyl-5-methylthiophene", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "5-甲基-2-甲醛噻吩与2-甲酰基-5-甲基噻吩为同一结构命名。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "137-00-8", "page": 473, "source_name": "5-噻唑乙醇", "authoritative_name": "5-(2-hydroxyethyl)-4-methylthiazole", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "原页完整名称为4-甲基-5-噻唑乙醇，并列硫噻唑及系统名称；按 CAS 规范化。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "30364-38-6", "page": 514, "source_name": "1,6-三甲基-1,2-二氢萘", "authoritative_name": "1,2-dihydro-1,1,6-trimethylnaphthalene", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "原页标题OCR重复并漏失一个1；CAS、英文名和TDN缩写与主库一致。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "562-74-3", "page": 523, "source_name": "4-品醇", "authoritative_name": "terpinen-4-ol", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "OCR将萜识别为品；原页并列4-terpineol与1-terpinen-4-ol。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "18374-76-0", "page": 540, "source_name": "5", "authoritative_name": "rotundone", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取仅保留IUPAC片段；原页首句明确为(-)-莎草奥酮rotundone。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "34995-77-2", "page": 544, "source_name": ",5-三甲基-2-呋喃甲醇", "authoritative_name": "linalool oxide A", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取捕获IUPAC尾部；原页首句及俗名明确为trans-里那醇氧化物A。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "24347-58-8", "page": 56, "source_name": "2,3-丁二醇，俗称", "authoritative_name": "levo-2,3-butanediol", "authoritative_chinese_name": "(2R,3R)-2,3-丁二醇", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取截断于俗称引导语；原页完整名称、立体构型与 CAS 一致。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "25152-84-5", "page": 90, "source_name": "最重要的多不饱和醛", "authoritative_name": "(E,E)-2,4-decadienal", "authoritative_chinese_name": "反,反-2,4-癸二烯醛", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取捕获了引导语；原页随后明确写反,反-2,4-癸二烯醛及 CAS。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "104-53-0", "page": 227, "source_name": "216酒类风味化学", "authoritative_name": "3-phenylpropanal", "authoritative_chinese_name": "氢化肉桂醛", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "跨页实体抽取误收页眉；原页续文英文名、IUPAC名和 CAS 明确对应氢化肉桂醛。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "121-33-5", "page": 276, "source_name": "最重要的酚类化合物是愈创木酚-4-醛", "authoritative_name": "vanillin", "authoritative_chinese_name": "香兰素", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取捕获引导语；原页明确写愈创木酚-4-醛即香草醛/香兰素及 CAS。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "55013-32-6", "page": 350, "source_name": "9-32", "authoritative_name": "(3R,4R)-oak lactone", "authoritative_chinese_name": "(3R,4R)-橡木内酯", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取误收结构编号C9-32；原页完整立体名称、IUPAC名和 CAS 一致。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "87-44-5", "page": 512, "source_name": "反", "authoritative_name": "beta-caryophyllene", "authoritative_chinese_name": "β-石竹烯", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取只保留反式修饰词；原页并列β-石竹烯、(E)-石竹烯及对应 CAS。", "verified_on": "2026-08-01"
+  },
+  {
+    "cas": "5989-33-3", "page": 544, "source_name": "名2", "authoritative_name": "linalool oxide B", "authoritative_chinese_name": "cis-里那醇氧化物B", "resolution_type": "source_alias_matches_canonical_cas", "authority": "原书页面与项目阈值主库", "verification_note": "实体抽取仅保留IUPAC引导语片段；原页完整名称、俗名及 CAS 一致。", "verified_on": "2026-08-01"
+  }
+]

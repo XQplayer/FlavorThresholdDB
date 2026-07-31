@@ -4,6 +4,11 @@ Scripts/
 Include/
 /Lib/
 
+# Keep project-owned reproducible data pipelines; `Scripts/` above is only for
+# root-level Python virtual environments and is case-insensitive on Windows.
+!/scripts/
+!/scripts/**
+
 # 编译和缓存文件
 __pycache__/
 *.pyc
@@ -37,5 +42,10 @@ semiquant_summary.json
 *.pid
 *.err
 supabase/.temp/
+
+# Local release candidates, verification artifacts, and offline backups.
+# These files must never be committed or deployed.
+_local/
+.media-build/
 
 # 由于前端有自己的 .gitignore，所以 node_modules 会被默认过滤

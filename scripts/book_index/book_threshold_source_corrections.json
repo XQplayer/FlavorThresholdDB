@@ -1,0 +1,660 @@
+[
+  {
+    "page": 183,
+    "record_id": "book-flavor-chemistry-p0183-b11",
+    "entity_cas": "554-12-1",
+    "source_text": "啤酒中嗅阈值1000pg/L",
+    "corrected_text": "啤酒中嗅阈值1000μg/L",
+    "source_page_evidence": "page-183.jpg"
+  },
+  {
+    "page": 183,
+    "record_id": "book-flavor-chemistry-p0183-b11",
+    "entity_cas": "554-12-1",
+    "source_text": "20pg/L",
+    "corrected_text": "20μg/L",
+    "source_page_evidence": "page-183.jpg"
+  },
+  {
+    "page": 78,
+    "record_id": "book-flavor-chemistry-p0078-b04",
+    "entity_cas": "75-07-0",
+    "source_text": "1200pg/L",
+    "corrected_text": "1200μg/L",
+    "source_page_evidence": "page-078.jpg"
+  },
+  {
+    "page": 27,
+    "record_id": "book-flavor-chemistry-p0027-b06",
+    "entity_cas": null,
+    "source_text": "10pg/kg",
+    "corrected_text": "10μg/kg",
+    "source_page_evidence": "page-027.jpg"
+  },
+  {
+    "page": 45,
+    "record_id": "book-flavor-chemistry-p0045-b04",
+    "entity_cas": "112-42-5",
+    "source_text": "500pg/L",
+    "corrected_text": "500μg/L",
+    "source_page_evidence": "page-045.jpg"
+  },
+  {
+    "page": 52,
+    "record_id": "book-flavor-chemistry-p0052-b04",
+    "entity_cas": "928-96-1",
+    "source_text": "400pg/L",
+    "corrected_text": "400μg/L",
+    "source_page_evidence": "page-052.jpg"
+  },
+  {
+    "page": 54,
+    "record_id": "book-flavor-chemistry-p0054-b04",
+    "entity_cas": "3391-86-4",
+    "source_text": "0.005~100pg/L",
+    "corrected_text": "0.005~100μg/L",
+    "source_page_evidence": "page-054.jpg"
+  },
+  {
+    "page": 54,
+    "record_id": "book-flavor-chemistry-p0054-b04",
+    "entity_cas": "3391-86-4",
+    "source_text": "20pg/L",
+    "corrected_text": "20μg/L",
+    "source_page_evidence": "page-054.jpg"
+  },
+  {
+    "page": 54,
+    "record_id": "book-flavor-chemistry-p0054-b04",
+    "entity_cas": "3391-86-4",
+    "source_text": "40pg/L",
+    "corrected_text": "40μg/L",
+    "source_page_evidence": "page-054.jpg"
+  },
+  {
+    "page": 54,
+    "record_id": "book-flavor-chemistry-p0054-b04",
+    "entity_cas": "3391-86-4",
+    "source_text": "200pg/L",
+    "corrected_text": "200μg/L",
+    "source_page_evidence": "page-054.jpg"
+  },
+  {
+    "page": 54,
+    "record_id": "book-flavor-chemistry-p0054-b04",
+    "entity_cas": "3391-86-4",
+    "source_text": "嘎阈值",
+    "corrected_text": "嗅阈值",
+    "source_page_evidence": "page-054.jpg"
+  },
+  {
+    "page": 80,
+    "record_id": "book-flavor-chemistry-p0080-b08",
+    "entity_cas": "66-25-1",
+    "source_text": "30pg/L",
+    "corrected_text": "30μg/L",
+    "source_page_evidence": "page-080.jpg"
+  },
+  {
+    "page": 81,
+    "record_id": "book-flavor-chemistry-p0081-b05",
+    "entity_cas": "124-13-0",
+    "source_text": "640pg/L",
+    "corrected_text": "640μg/L",
+    "source_page_evidence": "page-081.jpg"
+  },
+  {
+    "page": 83,
+    "record_id": "book-flavor-chemistry-p0083-b03",
+    "entity_cas": "78-84-2",
+    "source_text": "1300pg/L",
+    "corrected_text": "1300μg/L",
+    "source_page_evidence": "page-083.jpg"
+  },
+  {
+    "page": 83,
+    "record_id": "book-flavor-chemistry-p0083-b07",
+    "entity_cas": "96-17-3",
+    "source_text": "4pg/L",
+    "corrected_text": "4μg/L",
+    "source_page_evidence": "page-083.jpg"
+  },
+  {
+    "page": 86,
+    "record_id": "book-flavor-chemistry-p0086-b07",
+    "entity_cas": "6728-26-3",
+    "source_text": "110pg/L",
+    "corrected_text": "110μg/L",
+    "source_page_evidence": "page-086.jpg"
+  },
+  {
+    "page": 86,
+    "record_id": "book-flavor-chemistry-p0086-b08",
+    "entity_cas": "6728-26-3",
+    "source_text": "250pg/kg",
+    "corrected_text": "250μg/kg",
+    "source_page_evidence": "page-086.jpg"
+  },
+  {
+    "page": 89,
+    "record_id": "book-flavor-chemistry-p0089-b03",
+    "entity_cas": "53448-07-0",
+    "source_text": "0.78pg/L",
+    "corrected_text": "0.78μg/L",
+    "source_page_evidence": "page-089.jpg"
+  },
+  {
+    "page": 89,
+    "record_id": "book-flavor-chemistry-p0089-b07",
+    "entity_cas": "6789-80-6",
+    "source_text": "0.12pg/L",
+    "corrected_text": "0.12μg/L",
+    "source_page_evidence": "page-089.jpg"
+  },
+  {
+    "page": 89,
+    "record_id": "book-flavor-chemistry-p0089-b09",
+    "entity_cas": null,
+    "source_text": "0.2pg/L",
+    "corrected_text": "0.2μg/L",
+    "source_page_evidence": "page-089.jpg"
+  },
+  {
+    "page": 94,
+    "record_id": "book-flavor-chemistry-p0094-b04",
+    "entity_cas": "7789-92-6",
+    "source_text": "3700pg/L",
+    "corrected_text": "3700μg/L",
+    "source_page_evidence": "page-094.jpg"
+  },
+  {
+    "page": 98,
+    "record_id": "book-flavor-chemistry-p0098-b06",
+    "entity_cas": "111-13-7",
+    "source_text": "250pg/L",
+    "corrected_text": "250μg/L",
+    "source_page_evidence": "page-098.jpg"
+  },
+  {
+    "page": 99,
+    "record_id": "book-flavor-chemistry-p0099-b02",
+    "entity_cas": "693-54-9",
+    "source_text": "250pg/L",
+    "corrected_text": "250μg/L",
+    "source_page_evidence": "page-099.jpg"
+  },
+  {
+    "page": 99,
+    "record_id": "book-flavor-chemistry-p0099-b08",
+    "entity_cas": "106-68-3",
+    "source_text": "500pg/L",
+    "corrected_text": "500μg/L",
+    "source_page_evidence": "page-099.jpg"
+  },
+  {
+    "page": 100,
+    "record_id": "book-flavor-chemistry-p0100-b02",
+    "entity_cas": "4312-99-6",
+    "source_text": "0.05pg/L",
+    "corrected_text": "0.05μg/L",
+    "source_page_evidence": "page-100.jpg"
+  },
+  {
+    "page": 140,
+    "record_id": "book-flavor-chemistry-p0140-b06",
+    "entity_cas": "334-48-5",
+    "source_text": "130pg/L",
+    "corrected_text": "130μg/L",
+    "source_page_evidence": "page-140.jpg"
+  },
+  {
+    "page": 145,
+    "record_id": "book-flavor-chemistry-p0145-b04",
+    "entity_cas": "503-74-2",
+    "source_text": "490pg/L",
+    "corrected_text": "490μg/L",
+    "source_page_evidence": "page-145.jpg"
+  },
+  {
+    "page": 184,
+    "record_id": "book-flavor-chemistry-p0184-b08",
+    "entity_cas": "105-54-4",
+    "source_text": "0.1pg/L",
+    "corrected_text": "0.1μg/L",
+    "source_page_evidence": "page-184.jpg"
+  },
+  {
+    "page": 191,
+    "record_id": "book-flavor-chemistry-p0191-b09",
+    "entity_cas": "7452-79-1",
+    "source_text": "7～20pg/L",
+    "corrected_text": "7～20μg/L",
+    "source_page_evidence": "page-191.jpg"
+  },
+  {
+    "page": 195,
+    "record_id": "book-flavor-chemistry-p0195-b09",
+    "entity_cas": "142-92-7",
+    "source_text": "670pg/L",
+    "corrected_text": "670μg/L",
+    "source_page_evidence": "page-195.jpg"
+  },
+  {
+    "page": 199,
+    "record_id": "book-flavor-chemistry-p0199-b04",
+    "entity_cas": "111-11-5",
+    "source_text": "200pg/L",
+    "corrected_text": "200μg/L",
+    "source_page_evidence": "page-199.jpg"
+  },
+  {
+    "page": 199,
+    "record_id": "book-flavor-chemistry-p0199-b10",
+    "entity_cas": "105-66-8",
+    "source_text": "160pg/L",
+    "corrected_text": "160μg/L",
+    "source_page_evidence": "page-199.jpg"
+  },
+  {
+    "page": 225,
+    "record_id": "book-flavor-chemistry-p0225-b07",
+    "entity_cas": "100-52-7",
+    "source_text": "350~3500pg/L",
+    "corrected_text": "350~3500μg/L",
+    "source_page_evidence": "page-225.jpg"
+  },
+  {
+    "page": 227,
+    "record_id": "book-flavor-chemistry-p0227-b08",
+    "entity_cas": "123-11-5",
+    "source_text": "50~200pg/L",
+    "corrected_text": "50~200μg/L",
+    "source_page_evidence": "page-227.jpg"
+  },
+  {
+    "page": 228,
+    "record_id": "book-flavor-chemistry-p0228-b03",
+    "entity_cas": "591-31-1",
+    "source_text": "174pg/L",
+    "corrected_text": "174μg/L",
+    "source_page_evidence": "page-228.jpg"
+  },
+  {
+    "page": 228,
+    "record_id": "book-flavor-chemistry-p0228-b04",
+    "entity_cas": "578-58-5",
+    "source_text": "250pg/L",
+    "corrected_text": "250μg/L",
+    "source_page_evidence": "page-228.jpg"
+  },
+  {
+    "page": 236,
+    "record_id": "book-flavor-chemistry-p0236-b02",
+    "entity_cas": "2021-28-5",
+    "source_text": "1.9pg/L",
+    "corrected_text": "1.9μg/L",
+    "source_page_evidence": "page-236.jpg"
+  },
+  {
+    "page": 257,
+    "record_id": "book-flavor-chemistry-p0257-b09",
+    "entity_cas": "108-39-4",
+    "source_text": "68~200pg/L",
+    "corrected_text": "68~200μg/L",
+    "source_page_evidence": "page-257.jpg"
+  },
+  {
+    "page": 258,
+    "record_id": "book-flavor-chemistry-p0258-b02",
+    "entity_cas": "106-44-5",
+    "source_text": "64pg/L",
+    "corrected_text": "64μg/L",
+    "source_page_evidence": "page-258.jpg"
+  },
+  {
+    "page": 260,
+    "record_id": "book-flavor-chemistry-p0260-b04",
+    "entity_cas": "620-17-7",
+    "source_text": "1.7pg/L",
+    "corrected_text": "1.7μg/L",
+    "source_page_evidence": "page-260.jpg"
+  },
+  {
+    "page": 271,
+    "record_id": "book-flavor-chemistry-p0271-b02",
+    "entity_cas": "90-05-1",
+    "source_text": "2pg/L",
+    "corrected_text": "2μg/L",
+    "source_page_evidence": "page-271.jpg"
+  },
+  {
+    "page": 273,
+    "record_id": "book-flavor-chemistry-p0273-b02",
+    "entity_cas": "2785-89-9",
+    "source_text": "140pg/L",
+    "corrected_text": "140μg/L",
+    "source_page_evidence": "page-273.jpg"
+  },
+  {
+    "page": 275,
+    "record_id": "book-flavor-chemistry-p0275-b09",
+    "entity_cas": "97-54-1",
+    "source_text": "6pg/L",
+    "corrected_text": "6μg/L",
+    "source_page_evidence": "page-275.jpg"
+  },
+  {
+    "page": 276,
+    "record_id": "book-flavor-chemistry-p0276-b08",
+    "entity_cas": "121-33-5",
+    "source_text": "320pg/L",
+    "corrected_text": "320μg/L",
+    "source_page_evidence": "page-276.jpg"
+  },
+  {
+    "page": 341,
+    "record_id": "book-flavor-chemistry-p0341-b05",
+    "entity_cas": "28664-35-9",
+    "source_text": "0.49pg/L",
+    "corrected_text": "0.49μg/L",
+    "source_page_evidence": "page-341.jpg"
+  },
+  {
+    "page": 342,
+    "record_id": "book-flavor-chemistry-p0342-b03",
+    "entity_cas": "87068-70-0",
+    "source_text": "121pg/L",
+    "corrected_text": "121μg/L",
+    "source_page_evidence": "page-342.jpg"
+  },
+  {
+    "page": 346,
+    "record_id": "book-flavor-chemistry-p0346-b11",
+    "entity_cas": "104-61-0",
+    "source_text": "90.66pg/L",
+    "corrected_text": "90.66μg/L",
+    "source_page_evidence": "page-346.jpg"
+  },
+  {
+    "page": 459,
+    "record_id": "book-flavor-chemistry-p0459-b06",
+    "entity_cas": "7783-06-4",
+    "source_text": "10~80pg/L",
+    "corrected_text": "10~80μg/L",
+    "source_page_evidence": "page-459.jpg"
+  },
+  {
+    "page": 460,
+    "record_id": "book-flavor-chemistry-p0460-b05",
+    "entity_cas": "75-18-3",
+    "source_text": "5~10pg/L",
+    "corrected_text": "5~10μg/L",
+    "source_page_evidence": "page-460.jpg"
+  },
+  {
+    "page": 460,
+    "record_id": "book-flavor-chemistry-p0460-b05",
+    "entity_cas": "75-18-3",
+    "source_text": "10~160pg/L",
+    "corrected_text": "10~160μg/L",
+    "source_page_evidence": "page-460.jpg"
+  },
+  {
+    "page": 461,
+    "record_id": "book-flavor-chemistry-p0461-b03",
+    "entity_cas": "352-93-2",
+    "source_text": "0.93～18.00pg/L",
+    "corrected_text": "0.93～18.00μg/L",
+    "source_page_evidence": "page-461.jpg"
+  },
+  {
+    "page": 461,
+    "record_id": "book-flavor-chemistry-p0461-b07",
+    "entity_cas": "3268-49-3",
+    "source_text": "0.2pg/L",
+    "corrected_text": "0.2μg/L",
+    "source_page_evidence": "page-461.jpg"
+  },
+  {
+    "page": 464,
+    "record_id": "book-flavor-chemistry-p0464-b04",
+    "entity_cas": "34300-94-2",
+    "source_text": "1.3pg/L",
+    "corrected_text": "1.3μg/L",
+    "source_page_evidence": "page-464.jpg"
+  },
+  {
+    "page": 467,
+    "record_id": "book-flavor-chemistry-p0467-b06",
+    "entity_cas": "624-92-0",
+    "source_text": "0.16pg/L",
+    "corrected_text": "0.16μg/L",
+    "source_page_evidence": "page-467.jpg"
+  },
+  {
+    "page": 467,
+    "record_id": "book-flavor-chemistry-p0467-b06",
+    "entity_cas": "624-92-0",
+    "source_text": "7.6pg/L",
+    "corrected_text": "7.6μg/L",
+    "source_page_evidence": "page-467.jpg"
+  },
+  {
+    "page": 467,
+    "record_id": "book-flavor-chemistry-p0467-b13",
+    "entity_cas": "110-81-6",
+    "source_text": "20pg/L",
+    "corrected_text": "20μg/L",
+    "source_page_evidence": "page-467.jpg"
+  },
+  {
+    "page": 467,
+    "record_id": "book-flavor-chemistry-p0467-b13",
+    "entity_cas": "110-81-6",
+    "source_text": "4.3~40.0pg/L",
+    "corrected_text": "4.3~40.0μg/L",
+    "source_page_evidence": "page-467.jpg"
+  },
+  {
+    "page": 507,
+    "record_id": "book-flavor-chemistry-p0507-b03",
+    "entity_cas": "138-86-3",
+    "source_text": "1.5pg/L",
+    "corrected_text": "1.5μg/L",
+    "source_page_evidence": "page-507.jpg"
+  },
+  {
+    "page": 508,
+    "record_id": "book-flavor-chemistry-p0508-b03",
+    "entity_cas": "99-87-6",
+    "source_text": "11.4pg/L",
+    "corrected_text": "11.4μg/L",
+    "source_page_evidence": "page-508.jpg"
+  },
+  {
+    "page": 509,
+    "record_id": "book-flavor-chemistry-p0509-b04",
+    "entity_cas": "99-85-4",
+    "source_text": "260pg/L",
+    "corrected_text": "260μg/L",
+    "source_page_evidence": "page-509.jpg"
+  },
+  {
+    "page": 511,
+    "record_id": "book-flavor-chemistry-p0511-b05",
+    "entity_cas": "80-56-8",
+    "source_text": "14pg/L",
+    "corrected_text": "14μg/L",
+    "source_page_evidence": "page-511.jpg"
+  },
+  {
+    "page": 511,
+    "record_id": "book-flavor-chemistry-p0511-b05",
+    "entity_cas": "80-56-8",
+    "source_text": "6pg/L",
+    "corrected_text": "6μg/L",
+    "source_page_evidence": "page-511.jpg"
+  },
+  {
+    "page": 512,
+    "record_id": "book-flavor-chemistry-p0512-b04",
+    "entity_cas": "87-44-5",
+    "source_text": "390pg/L",
+    "corrected_text": "390μg/L",
+    "source_page_evidence": "page-512.jpg"
+  },
+  {
+    "page": 517,
+    "record_id": "book-flavor-chemistry-p0517-b03",
+    "entity_cas": "106-25-2",
+    "source_text": "300pg/L",
+    "corrected_text": "300μg/L",
+    "source_page_evidence": "page-517.jpg"
+  },
+  {
+    "page": 522,
+    "record_id": "book-flavor-chemistry-p0522-b02",
+    "entity_cas": "98-55-5",
+    "source_text": "450pg/L",
+    "corrected_text": "450μg/L",
+    "source_page_evidence": "page-522.jpg"
+  },
+  {
+    "page": 522,
+    "record_id": "book-flavor-chemistry-p0522-b03",
+    "entity_cas": "98-55-5",
+    "source_text": "300pg/L",
+    "corrected_text": "300μg/L",
+    "source_page_evidence": "page-522.jpg"
+  },
+  {
+    "page": 527,
+    "record_id": "book-flavor-chemistry-p0527-b02",
+    "entity_cas": "2371-42-8",
+    "source_text": "0.055pg/L",
+    "corrected_text": "0.055μg/L",
+    "source_page_evidence": "page-527.jpg"
+  },
+  {
+    "page": 531,
+    "record_id": "book-flavor-chemistry-p0531-b07",
+    "entity_cas": "43052-87-5",
+    "source_text": "0.05pg/L",
+    "corrected_text": "0.05μg/L",
+    "source_page_evidence": "page-531.jpg"
+  },
+  {
+    "page": 531,
+    "record_id": "book-flavor-chemistry-p0531-b08",
+    "entity_cas": "43052-87-5",
+    "source_text": "1600pg/L",
+    "corrected_text": "1600μg/L",
+    "source_page_evidence": "page-531.jpg"
+  },
+  {
+    "page": 536,
+    "record_id": "book-flavor-chemistry-p0536-b02",
+    "entity_cas": "14901-07-6",
+    "source_text": "1.6pg/L",
+    "corrected_text": "1.6μg/L",
+    "source_page_evidence": "page-536.jpg"
+  },
+  {
+    "page": 351,
+    "record_id": "book-flavor-chemistry-p0351-b04",
+    "entity_cas": "182699-77-0",
+    "source_text": "0.02pg/L",
+    "corrected_text": "0.02pg/L",
+    "reason": "source_verified_literal_unit",
+    "source_page_evidence": "page-351.jpg"
+  },
+  {
+    "page": 602,
+    "record_id": "book-flavor-chemistry-p0602-b11",
+    "entity_cas": "88-06-2",
+    "source_text": "300pg/L",
+    "corrected_text": "300pg/L",
+    "reason": "source_verified_literal_unit",
+    "source_page_evidence": "page-602.jpg"
+  },
+  {
+    "page": 602,
+    "record_id": "book-flavor-chemistry-p0602-b11",
+    "entity_cas": "88-06-2",
+    "source_text": "30 pg/L",
+    "corrected_text": "30 pg/L",
+    "reason": "source_verified_literal_unit",
+    "source_page_evidence": "page-602.jpg"
+  },
+  {
+    "page": 606,
+    "record_id": "book-flavor-chemistry-p0606-b04",
+    "entity_cas": "1825-21-4",
+    "source_text": "4pg/L",
+    "corrected_text": "4μg/L",
+    "source_page_evidence": "page-606.jpg"
+  },
+  {
+    "page": 27,
+    "record_id": "book-flavor-chemistry-p0027-b06",
+    "entity_cas": null,
+    "source_text": "0.0lμg/kg",
+    "corrected_text": "0.01μg/kg",
+    "reason": "source_verified_literal_magnitude",
+    "source_page_evidence": "page-027.jpg"
+  },
+  {
+    "page": 27,
+    "record_id": "book-flavor-chemistry-p0027-b06",
+    "entity_cas": null,
+    "source_text": "3x 10μg/kg",
+    "corrected_text": "0.00003μg/kg",
+    "reason": "source_verified_literal_magnitude",
+    "source_page_evidence": "page-027.jpg"
+  },
+  {
+    "page": 40,
+    "record_id": "book-flavor-chemistry-p0040-b03",
+    "entity_cas": null,
+    "source_text": "2000mg/L",
+    "corrected_text": "2000mg/L",
+    "reason": "source_verified_literal_magnitude",
+    "source_page_evidence": "page-040.jpg"
+  },
+  {
+    "page": 49,
+    "record_id": "book-flavor-chemistry-p0049-b08",
+    "entity_cas": "78-92-2",
+    "source_text": "1000mg/L",
+    "corrected_text": "1000mg/L",
+    "reason": "source_verified_literal_magnitude",
+    "source_page_evidence": "page-049.jpg"
+  },
+  {
+    "page": 139,
+    "record_id": "book-flavor-chemistry-p0139-b03",
+    "entity_cas": "124-07-2",
+    "source_text": ">1000mg/L",
+    "corrected_text": ">1000mg/L",
+    "reason": "source_verified_literal_magnitude",
+    "source_page_evidence": "page-139.jpg"
+  },
+  {
+    "page": 334,
+    "record_id": "book-flavor-chemistry-p0334-b02",
+    "entity_cas": "67-47-0",
+    "source_text": "1000mg/L",
+    "corrected_text": "1000mg/L",
+    "reason": "source_verified_literal_magnitude",
+    "source_page_evidence": "page-334.jpg"
+  },
+  {
+    "page": 335,
+    "record_id": "book-flavor-chemistry-p0335-b06",
+    "entity_cas": "98-00-0",
+    "source_text": "3000mg/L",
+    "corrected_text": "3000mg/L",
+    "reason": "source_verified_literal_magnitude",
+    "source_page_evidence": "page-335.jpg"
+  }
+]

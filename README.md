@@ -1,6 +1,6 @@
 # FlavorThresholdDB
 
-[Public website](https://xqplayer.github.io/FlavorThresholdDB/) · [Search](https://xqplayer.github.io/FlavorThresholdDB/aroma-threshold/)
+[Public website](https://xqplayer.github.io/FlavorThresholdDB/) | [Search](https://xqplayer.github.io/FlavorThresholdDB/aroma-threshold/) | [Project history](PROJECT_HISTORY.md)
 
 FlavorThresholdDB is a bilingual research database for traceable odor-threshold and flavor-descriptor retrieval. It supports exact and fuzzy searches by CAS number, Chinese name, or English name, plus batch matching and filter-aware CSV export.
 
@@ -94,6 +94,18 @@ pnpm run build
 ```
 
 The deployment workflow also creates `dist/404.html` so routed pages can load through GitHub Pages.
+
+## Project documentation
+
+- [Changelog](CHANGELOG.md)
+- [Project history](PROJECT_HISTORY.md)
+- [Release workflow](RELEASE_WORKFLOW.md)
+- [Data dictionary](docs/DATA_DICTIONARY.md)
+- [Data sources and use boundaries](docs/DATA_SOURCES.md)
+- [Deployment guide](docs/DEPLOYMENT.md)
+- [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [Book OCR and knowledge-index pipeline](docs/BOOK_INDEX_PIPELINE.md)
+- [Migration from Aroma analysis](docs/MIGRATION_FROM_AROMA_ANALYSIS.md)
 
 ## References
 
