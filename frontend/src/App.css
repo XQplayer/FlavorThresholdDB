@@ -2468,6 +2468,7 @@ select:focus-visible,
 .result-export-button {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-2);
   min-height: 40px;
   padding: 0 var(--space-4);
   border: 1px solid #16a34a;
@@ -2487,6 +2488,63 @@ select:focus-visible,
 .search-toolbar-export {
   flex: 0 0 auto;
   margin-left: auto;
+}
+
+.export-menu {
+  position: relative;
+}
+
+.export-menu-chevron {
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.export-menu-chevron.open {
+  transform: rotate(180deg);
+}
+
+.export-menu-popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 260px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: var(--shadow-lg);
+}
+
+.export-menu-popover button {
+  display: flex;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.export-menu-popover button:hover,
+.export-menu-popover button:focus-visible {
+  background: var(--surface-subtle);
+  outline: none;
+}
+
+.export-menu-popover span {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.export-menu-popover small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .entity-medium,

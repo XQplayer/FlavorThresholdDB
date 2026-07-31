@@ -4,6 +4,15 @@
 
 FlavorThresholdDB is a bilingual research database for traceable odor-threshold and flavor-descriptor retrieval. It supports exact and fuzzy searches by CAS number, Chinese name, or English name, plus batch matching and filter-aware CSV export.
 
+## Version 1.3.1
+
+This small update adds two CSV export formats while preserving the current filter-aware workflow.
+
+- Compact export: one row per compound with CAS, Chinese and common English names, compound class, molecular formula, FEMA descriptors, and horizontally grouped threshold fields for every selected medium
+- Detailed export: one row per threshold record, retaining all current compound, source, medium, threshold, database, and book-result fields
+- Export filenames identify the selected format, and CAS values remain Excel-safe
+- Accessible export menu with bilingual labels and concise format descriptions
+
 ## Version 1.3.0
 
 This release expands FlavorThresholdDB from a threshold lookup interface into a multi-source compound research workspace.

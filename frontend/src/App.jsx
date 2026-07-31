@@ -120,6 +120,7 @@ export default function App() {
   const [bookIndex, setBookIndex] = useState([]);
   const [femaProfiles, setFemaProfiles] = useState({});
   const [compoundProfiles, setCompoundProfiles] = useState({});
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const isEnglish = interfaceLanguage === 'en';
 
@@ -882,7 +883,7 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
     return lower.replace(/[A-Za-z]/, match => match.toUpperCase());
   };
 
-  const exportCSV = () => {
+  const exportCSV = (exportMode) => {
     if (!results.length) return;
     
     const headers = [
@@ -928,6 +929,87 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
         ? `="${cas}"`
         : csvCell(cas);
     };
+    const getThresholdUnit = medium => medium === '空气' ? 'mg/m3' : 'mg/kg';
+    const downloadCsv = (csvRows, mode) => {
+      const csvContent = "\uFEFF" + csvRows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const modeLabel = mode === 'compact'
+        ? (isEnglish ? 'compact' : '精简版')
+        : (isEnglish ? 'detailed' : '详细版');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `${isEnglish ? 'odor_threshold_export' : '香气阈值查询导出'}_${modeLabel}_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      setExportMenuOpen(false);
+    };
+
+    if (exportMode === 'compact') {
+      const selectedMediaInOrder = filterOrder
+        .filter(key => key.startsWith('medium:'))
+        .map(key => key.replace('medium:', ''))
+        .filter(medium => selectedMedia.includes(medium));
+      const compactHeaders = [
+        '序号',
+        'CAS号',
+        '化合物中文名',
+        '常用英文名',
+        '化合物类别',
+        '分子式',
+        'FEMA风味描述',
+        ...selectedMediaInOrder.flatMap(medium => [
+          `${medium}-文献来源`,
+          `${medium}-阈值类型(d/r)`,
+          `${medium}-阈值数值`,
+          `${medium}-阈值单位`
+        ])
+      ];
+      const compactRows = [compactHeaders.map(csvCell).join(',')];
+      const compounds = new Map();
+
+      orderedResults.forEach(item => {
+        if (!compounds.has(item.cas)) compounds.set(item.cas, { item, media: new Map() });
+        compounds.get(item.cas).media.set(item.medium, item);
+      });
+
+      [...compounds.values()].forEach(({ item, media }, index) => {
+        const fema = femaProfiles[item.cas] || {};
+        const profile = compoundProfiles[item.cas] || {};
+        const pubchem = profile.pubchem || {};
+        const primaryClass = profile.smart_classification || { zh: '其他类', en: 'Others' };
+        const commonEnglishNameText = formatCommonEnglishName(fema.name || item.english_name);
+        const thresholdCells = selectedMediaInOrder.flatMap(medium => {
+          const mediumItem = media.get(medium);
+          const firstThreshold = mediumItem ? getFilteredThresholds(mediumItem)[0] : '';
+          const parsed = firstThreshold
+            ? parseThresholdStr(firstThreshold)
+            : { author: '', type: '', value: '' };
+          return [
+            csvCell(parsed.author),
+            csvCell(parsed.type),
+            csvCell(parsed.value),
+            csvCell(firstThreshold ? getThresholdUnit(medium) : '')
+          ];
+        });
+
+        compactRows.push([
+          csvCell(index + 1),
+          csvCasCell(item.cas),
+          csvCell(item.chinese_name),
+          csvCell(commonEnglishNameText),
+          csvCell(isEnglish ? primaryClass.en : primaryClass.zh),
+          csvCell(pubchem.molecular_formula),
+          csvCell(splitDescriptorValues(fema.flavor_profile).join('; ')),
+          ...thresholdCells
+        ].join(','));
+      });
+
+      downloadCsv(compactRows, exportMode);
+      return;
+    }
 
     const classifyBookHit = (text) => {
       const source = (text || '').toString();
@@ -968,22 +1050,26 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
         .slice(0, 3);
     };
     
-    orderedResults.forEach((item, index) => {
+    let detailedRowIndex = 0;
+    orderedResults.forEach(item => {
       const fema = femaProfiles[item.cas] || {};
       const profile = compoundProfiles[item.cas] || {};
       const pubchem = profile.pubchem || {};
       const flavordb = profile.flavordb || {};
       const commonEnglishNameText = formatCommonEnglishName(fema.name || item.english_name);
       const bookMatches = getBookMatchesForItem(item, fema, commonEnglishNameText);
-      const firstThreshold = getFilteredThresholds(item)[0];
-      const parsed = firstThreshold
-        ? parseThresholdStr(firstThreshold)
-        : { author: '', type: '', value: '' };
+      const filteredThresholds = getFilteredThresholds(item);
+      const thresholdRecords = filteredThresholds.length ? filteredThresholds : [''];
       const functionalGroups = flavordb.functional_groups || [];
       const primaryClass = profile.smart_classification || { zh: '其他类', en: 'Others' };
 
-      rows.push([
-        index + 1,
+      thresholdRecords.forEach(threshold => {
+        const parsed = threshold
+          ? parseThresholdStr(threshold)
+          : { author: '', type: '', value: '' };
+        detailedRowIndex += 1;
+        rows.push([
+        detailedRowIndex,
         csvCasCell(item.cas),
         csvCell(item.chinese_name),
         csvCell(commonEnglishNameText),
@@ -1015,7 +1101,7 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
         csvCell(parsed.author),
         csvCell(parsed.type),
         csvCell(parsed.value),
-        csvCell(item.medium === '空气' ? 'mg/m3' : 'mg/kg'),
+        csvCell(threshold ? getThresholdUnit(item.medium) : ''),
         ...(includeFlavorDescriptions ? [
           csvCell(fema.fema_number),
           csvCell(fema.flavor_profile),
@@ -1027,18 +1113,11 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
           csvCell([...new Set(bookMatches.map(hit => classifyBookHit(hit.text)))].join('; ')),
           csvCell(bookMatches.map(hit => `[第 ${hit.page} 页 / 片段 ${hit.chunk}] ${hit.text}`).join('\n\n'))
         ] : [])
-      ].join(','));
+        ].join(','));
+      });
     });
 
-    const csvContent = "\uFEFF" + rows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `${isEnglish ? 'odor_threshold_export' : '香气阈值查询导出'}_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsv(rows, 'detailed');
   };
 
   const handleFileUpload = (e) => {
@@ -1268,14 +1347,31 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
               </button>
             </div>
             {results.length > 0 && (
-              <button
-                type="button"
-                onClick={exportCSV}
-                className="result-export-button search-toolbar-export"
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                {ui.exportCsv}
-              </button>
+              <div className="export-menu search-toolbar-export">
+                <button
+                  type="button"
+                  onClick={() => setExportMenuOpen(open => !open)}
+                  className="result-export-button"
+                  aria-haspopup="menu"
+                  aria-expanded={exportMenuOpen}
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  {ui.exportCsv}
+                  <ChevronDown className={`w-4 h-4 export-menu-chevron${exportMenuOpen ? ' open' : ''}`} />
+                </button>
+                {exportMenuOpen && (
+                  <div className="export-menu-popover" role="menu">
+                    <button type="button" role="menuitem" onClick={() => exportCSV('compact')}>
+                      <span>{isEnglish ? 'Compact CSV' : '精简版'}</span>
+                      <small>{isEnglish ? 'One row per compound' : '每种化合物一行，介质横向展示'}</small>
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => exportCSV('detailed')}>
+                      <span>{isEnglish ? 'Detailed CSV' : '详细版'}</span>
+                      <small>{isEnglish ? 'All selected threshold records' : '导出全部已选阈值记录'}</small>
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
