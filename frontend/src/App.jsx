@@ -258,7 +258,7 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
       fetch(`${import.meta.env.BASE_URL}aroma_data_merged.json`).then(res => res.json()),
       fetch(`${import.meta.env.BASE_URL}references.json`).then(res => res.json()),
       fetch(`${import.meta.env.BASE_URL}references_lookup.json`).then(res => res.json()).catch(() => ({})),
-      fetch(`${import.meta.env.BASE_URL}book_flavor_chemistry_index.json`).then(res => res.json()).catch(() => ({ records: [] }))
+      fetch(`${import.meta.env.BASE_URL}book_flavor_chemistry_index.json?v=1.3.1`).then(res => res.json()).catch(() => ({ records: [] }))
     ])
       .then(([dataJson, refsJson, lookupJson, bookJson]) => {
         setData(dataJson);
