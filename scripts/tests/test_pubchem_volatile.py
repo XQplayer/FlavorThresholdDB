@@ -260,15 +260,21 @@ class PubChemVolatilePropertyQueryTests(unittest.TestCase):
         self.assertEqual(result["status"], "ok")
         self.assertIn("retrieved_at", result)
 
-    def test_empty_payload_is_no_data_with_stable_property_keys(self):
-        result = fema_proxy_server.query_pubchem_volatile_properties(
-            "8857", lambda _url: '{"Record": {"Section": [], "Reference": []}}'
-        )
-
-        self.assertEqual(result["status"], "no_data")
-        self.assertEqual(set(result["properties"]), PROPERTY_KEYS)
-        self.assertTrue(all(value == [] for value in result["properties"].values()))
-        self.assertIn("retrieved_at", result)
+    def test_optional_record_collections_are_valid_no_data(self):
+        for body in (
+            '{"Record": {}}',
+            '{"Record": {"Section": []}}',
+            '{"Record": {"Reference": []}}',
+            '{"Record": {"Section": [], "Reference": []}}',
+        ):
+            with self.subTest(body=body):
+                result = fema_proxy_server.query_pubchem_volatile_properties(
+                    "8857", lambda _url, value=body: value
+                )
+                self.assertEqual(result["status"], "no_data")
+                self.assertEqual(set(result["properties"]), PROPERTY_KEYS)
+                self.assertTrue(all(value == [] for value in result["properties"].values()))
+                self.assertIn("retrieved_at", result)
 
     def test_invalid_cid_does_not_fetch(self):
         for cid in ("8x57", "0", "-1", "１２３"):
@@ -319,6 +325,25 @@ class PubChemVolatilePropertyQueryTests(unittest.TestCase):
 
     def test_missing_record_is_invalid_response_without_calling_parser(self):
         for body in ("{}", '{"unexpected": true}'):
+            with (
+                self.subTest(body=body),
+                patch.object(fema_proxy_server, "parse_pubchem_volatile_properties") as parser,
+            ):
+                result = fema_proxy_server.query_pubchem_volatile_properties(
+                    "8857", lambda _url, value=body: value
+                )
+                self.assertEqual(result["status"], "invalid_response")
+                parser.assert_not_called()
+
+    def test_malformed_optional_record_collections_do_not_call_parser(self):
+        for body in (
+            '{"Record": {"Section": null}}',
+            '{"Record": {"Section": "bad"}}',
+            '{"Record": {"Section": {}}}',
+            '{"Record": {"Reference": null}}',
+            '{"Record": {"Reference": "bad"}}',
+            '{"Record": {"Reference": {}}}',
+        ):
             with (
                 self.subTest(body=body),
                 patch.object(fema_proxy_server, "parse_pubchem_volatile_properties") as parser,

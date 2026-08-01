@@ -486,7 +486,10 @@ def query_pubchem_volatile_properties(cid: int | str, fetcher=None) -> dict:
     if not isinstance(payload, dict) or not isinstance(payload.get("Record"), dict):
         return _empty_pubchem_volatile(cid_text, "invalid_response")
     record = payload["Record"]
-    if not isinstance(record.get("Section"), list) or not isinstance(record.get("Reference"), list):
+    if (
+        ("Section" in record and not isinstance(record["Section"], list))
+        or ("Reference" in record and not isinstance(record["Reference"], list))
+    ):
         return _empty_pubchem_volatile(cid_text, "invalid_response")
 
     result = parse_pubchem_volatile_properties(payload, cid_text)
