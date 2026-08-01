@@ -167,6 +167,93 @@ def query_pubchem(cas_or_query: str) -> dict:
     }
 
 
+PUBCHEM_VOLATILE_PROPERTY_HEADINGS = {
+    "Boiling Point": "boiling_point",
+    "Vapor Pressure": "vapor_pressure",
+    "Henry's Law Constant": "henrys_law_constant",
+    "Solubility": "water_solubility",
+    "LogP": "experimental_logp",
+    "Density": "density",
+    "Melting Point": "melting_point",
+    "Physical Description": "physical_state",
+}
+
+
+def _pubchem_information_strings(information: dict) -> list[str]:
+    value = information.get("Value", {})
+    strings = []
+    for item in value.get("StringWithMarkup", []):
+        text = item.get("String", "") if isinstance(item, dict) else str(item)
+        if text.strip():
+            strings.append(text.strip())
+    if not strings and isinstance(value.get("String"), str) and value["String"].strip():
+        strings.append(value["String"].strip())
+    return strings
+
+
+def _parse_pubchem_volatile_record(information: dict, references: dict) -> list[dict]:
+    reference_number = information.get("ReferenceNumber")
+    reference = references.get(reference_number, {})
+    records = []
+    for raw_value in _pubchem_information_strings(information):
+        record = {
+            "raw_value": raw_value,
+            "reference_number": reference_number,
+            "source": reference.get("SourceName", ""),
+        }
+        temperature = re.search(r"-?\d+(?:\.\d+)?\s*°\s*C", raw_value, re.I)
+        if temperature:
+            record["temperature"] = re.sub(r"\s*°\s*", " °", temperature.group(0))
+        if reference.get("URL"):
+            record["source_url"] = reference["URL"]
+        records.append(record)
+    return records
+
+
+def _deduplicate_pubchem_records(records: list[dict]) -> list[dict]:
+    unique = []
+    seen = set()
+    for record in records:
+        key = (record.get("raw_value"), record.get("reference_number"))
+        if key not in seen:
+            seen.add(key)
+            unique.append(record)
+    return unique
+
+
+def parse_pubchem_volatile_properties(payload: dict, cid: int | str) -> dict:
+    properties = {key: [] for key in PUBCHEM_VOLATILE_PROPERTY_HEADINGS.values()}
+    record = payload.get("Record", {})
+    references = {
+        reference.get("ReferenceNumber"): reference
+        for reference in record.get("Reference", [])
+        if reference.get("ReferenceNumber") is not None
+    }
+
+    def parse_property_sections(sections: list[dict]) -> None:
+        for section in sections or []:
+            property_key = PUBCHEM_VOLATILE_PROPERTY_HEADINGS.get(section.get("TOCHeading"))
+            if property_key:
+                parsed = []
+                for information in section.get("Information", []):
+                    parsed.extend(_parse_pubchem_volatile_record(information, references))
+                properties[property_key].extend(parsed)
+            parse_property_sections(section.get("Section", []))
+
+    parse_property_sections(record.get("Section", []))
+    for property_key, records in properties.items():
+        properties[property_key] = _deduplicate_pubchem_records(records)
+
+    cid_text = str(cid)
+    return {
+        "found": any(properties.values()),
+        "cid": cid_text,
+        "properties": properties,
+        "source": "PubChem PUG View",
+        "url": f"{PUBCHEM_BASE_URL}/compound/{cid_text}#section=Experimental-Properties",
+    }
+
+
 def query_pubchem_crystal_structures(cid: str) -> dict:
     url = f"{PUBCHEM_BASE_URL}/rest/pug_view/data/compound/{cid}/JSON?heading=Crystal%20Structures"
     payload = json.loads(fetch_text(url))
