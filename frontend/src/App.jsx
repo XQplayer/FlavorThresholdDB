@@ -1209,6 +1209,12 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
     if (fileInputRef.current) fileInputRef.current.value = null;
   };
 
+  const summaryEntity = queryMatchedResults[0] || {};
+  const summaryIntegrated = integratedCompoundResults.find(({ item }) => item.cas === summaryEntity.cas) || integratedCompoundResults[0] || {};
+  const summaryPubChem = summaryIntegrated.profile?.pubchem || {};
+  const summaryFema = summaryIntegrated.fema || {};
+  const summaryFlavorDb = summaryIntegrated.profile?.flavordb || {};
+
   return (
     <div className={`app-shell ${currentView === 'home' ? 'home-view' : 'search-view'}`}>
       {currentView === 'home' && (
@@ -1523,6 +1529,53 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
         </div>
 
         {/* Results Section */}
+        {!loading && (singleQuery.trim() || bulkQuery.trim()) && (
+          <section className="search-summary-strip" aria-label={isEnglish ? 'Search summary' : '检索摘要'}>
+            <div className="search-summary-main">
+              <span className="search-summary-kicker">{isEnglish ? 'Search scope' : '检索范围'}</span>
+              {exactMatch && queryMatchedResults[0]?.cas && <code>CAS {queryMatchedResults[0].cas}</code>}
+              {['flavor', 'flavordb', 'pubchem', 'medium:水', 'medium:空气', 'book', 'threshold:d', 'threshold:r']
+                .map(key => filterOptions.find(option => option.key === key))
+                .filter(option => option?.active)
+                .map(option => <span key={option.key} className="search-summary-chip">{option.key === 'flavor' ? 'FEMA' : option.label}</span>)}
+              <strong>{exactMatch ? (isEnglish ? 'Exact entity match' : '精确实体匹配') : (isEnglish ? 'Contextual search' : '上下文检索')}</strong>
+            </div>
+            <div className="search-summary-quick" aria-label={isEnglish ? 'Hit summary' : '命中信息'}>
+              <span className="search-summary-kicker">{isEnglish ? 'Threshold hit counts' : '阈值命中数'}</span>
+              {[
+                ['水', results.filter(item => item.medium === '水').reduce((total, item) => total + (item.threshold_data?.length || 0), 0)],
+                ['空气', results.filter(item => item.medium === '空气').reduce((total, item) => total + (item.threshold_data?.length || 0), 0)],
+                ['酒类', bookResults.reduce((total, item) => total + (summarizeBookHit(item.text, getActiveBookQueries()).groups.find(group => group.title === '酒类应用')?.lines.length || 0), 0)],
+                ['其他', results.filter(item => item.medium === '其他介质').reduce((total, item) => total + (item.threshold_data?.length || 0), 0)],
+              ].map(([label, count]) => <span key={label} className="search-summary-metric"><span>{label}</span><strong>{count}</strong><span>{isEnglish ? 'thresholds' : '条'}</span></span>)}
+            </div>
+            <div className="search-summary-quick search-summary-flavor" aria-label={isEnglish ? 'Flavor description hits' : '风味描述词命中'}>
+              <span className="search-summary-kicker">{isEnglish ? 'Flavor descriptors' : '风味描述词'}</span>
+              <span className="search-summary-metric"><span>FEMA</span><strong>{integratedCompoundResults.reduce((total, entry) => total + (groupFlavorDescriptors(entry.fema, entry.profile?.flavordb || {}).find(group => group.key === 'fema')?.descriptors.length || 0), 0)}</strong><span>条</span></span>
+              <span className="search-summary-metric"><span>FlavorDB</span><strong>{integratedCompoundResults.reduce((total, entry) => total + (groupFlavorDescriptors({}, entry.profile?.flavordb || {}).find(group => group.key === 'flavordb')?.descriptors.length || 0), 0)}</strong><span>条</span></span>
+            </div>
+            {queryMatchedResults[0] && (
+              <div className="search-data-summary" aria-label={isEnglish ? 'Data summary' : '数据摘要'}>
+                <span className="search-summary-kicker">{isEnglish ? 'Data summary' : '数据摘要'}</span>
+                <div className="search-data-grid">
+                  {[
+                    ['CAS', summaryEntity.cas],
+                    ['CID', summaryPubChem.cid || summaryFlavorDb.cid],
+                    ['中文名', summaryEntity.chinese_name],
+                    ['英文名', summaryEntity.english_name || summaryEntity.common_english_name],
+                    ['分子式', summaryPubChem.molecular_formula],
+                    ['主要官能团', summaryFlavorDb.functional_groups],
+                    ['化合物分类', summaryIntegrated.profile?.smart_classification?.zh || summaryIntegrated.profile?.smart_classification?.en],
+                    ['风味描述词', summaryFema.flavor_profile],
+                    ['风味分类', summaryFema.flavor_categories || summaryFlavorDb.categories],
+                    ['阈值信息', results.length ? `${results.length} 条` : '—'],
+                  ].filter(([, value]) => value != null && value !== '').map(([label, value]) => <div key={label}><span>{label}</span><strong>{Array.isArray(value) ? value.join('、') : value}</strong></div>)}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
         {!loading && selectedMedia.length > 0 && (singleQuery.trim() || bulkQuery.trim()) && (
           <div
             className="result-section space-y-6"

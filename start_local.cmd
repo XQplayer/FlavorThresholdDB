@@ -64,7 +64,7 @@ where npm >nul 2>nul
 if not errorlevel 1 (
   call npm run dev -- --host 127.0.0.1 --port 5173
 ) else if exist "%CODEX_PNPM%" (
-  call "%CODEX_PNPM%" run dev -- --host 127.0.0.1 --port 5173
+  call "%CODEX_PNPM%" run dev --host 127.0.0.1 --port 5173
 ) else (
   echo npm or pnpm was not found.
   exit /b 1

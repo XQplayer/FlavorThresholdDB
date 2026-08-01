@@ -21,6 +21,7 @@ export default function PubChemStructureViewer({
   const [style, setStyle] = useState('stick');
   const [crystalData, setCrystalData] = useState(null);
   const [crystalStatus, setCrystalStatus] = useState('idle');
+  const [openDownloadMenu, setOpenDownloadMenu] = useState(null);
   const viewerHostRef = useRef(null);
   const viewerInstanceRef = useRef(null);
 
@@ -76,6 +77,7 @@ export default function PubChemStructureViewer({
   };
 
   const handleViewChange = async (view) => {
+    setOpenDownloadMenu(null);
     setActiveView(view);
     if (view === '3d' && !sdf && threeDStatus === 'idle') {
       setThreeDStatus('loading');
@@ -124,27 +126,28 @@ export default function PubChemStructureViewer({
 
       {activeView !== 'crystal' && (
         <div className="structure-download-bar">
-          <details className="structure-download-menu">
-            <summary><ImageIcon aria-hidden="true" />{isEnglish ? 'Get image' : '获取图片'}</summary>
+          <details className="structure-download-menu" open={openDownloadMenu === 'image'}>
+            <summary onClick={event => { event.preventDefault(); setOpenDownloadMenu(current => current === 'image' ? null : 'image'); }}><ImageIcon aria-hidden="true" />{isEnglish ? 'Get image' : '获取图片'}</summary>
             <div className="structure-download-popover image-download-options">
               {[100, 300, 500].map(size => (
                 <a
                   key={size}
                   href={`${apiUrl}/pubchem-image?cid=${encodeURIComponent(cid)}&size=${size}x${size}&download=1`}
+                  onClick={() => setOpenDownloadMenu(null)}
                 >
                   {size} × {size} pixels
                 </a>
               ))}
               {activeView === '3d' && sdf && (
-                <button type="button" onClick={downloadCurrent3DImage}>
+                <button type="button" onClick={() => { setOpenDownloadMenu(null); downloadCurrent3DImage(); }}>
                   {isEnglish ? 'Current view' : '当前视图'}
                 </button>
               )}
             </div>
           </details>
 
-          <details className="structure-download-menu coordinate-download-menu">
-            <summary><Download aria-hidden="true" />{isEnglish ? 'Download coordinates' : '下载坐标'}</summary>
+          <details className="structure-download-menu coordinate-download-menu" open={openDownloadMenu === 'coordinates'}>
+            <summary onClick={event => { event.preventDefault(); setOpenDownloadMenu(current => current === 'coordinates' ? null : 'coordinates'); }}><Download aria-hidden="true" />{isEnglish ? 'Download coordinates' : '下载坐标'}</summary>
             <div className="structure-download-popover coordinate-download-options">
               {['sdf', 'json', 'xml', 'asnt'].map(format => {
                 const recordType = activeView === '3d' ? '3d' : '2d';
@@ -152,7 +155,7 @@ export default function PubChemStructureViewer({
                 return (
                   <div key={format}>
                     <strong>{format.toUpperCase()}</strong>
-                    <a href={`${baseUrl}&download=1`}><Download aria-hidden="true" />{isEnglish ? 'Save' : '保存'}</a>
+                    <a href={`${baseUrl}&download=1`} onClick={() => setOpenDownloadMenu(null)}><Download aria-hidden="true" />{isEnglish ? 'Save' : '保存'}</a>
                     <a href={baseUrl} target="_blank" rel="noreferrer">{isEnglish ? 'Display' : '查看'}<ExternalLink aria-hidden="true" /></a>
                   </div>
                 );
