@@ -199,9 +199,12 @@ def parse_pubchem_property_text(raw_value: str) -> dict:
     }
     text = str(raw_value)
 
-    state_match = re.search(r"\b(liquid|solid|gas)\b", text, re.I)
-    if state_match:
-        result["normalized_value"] = state_match.group(1).lower()
+    state_matches = re.findall(r"\b(liquid|solid|gas)\b", text, re.I)
+    has_state_negation = re.search(r"\b(?:not|no|without)\b|\bnon[- ]", text, re.I)
+    if len(state_matches) == 1 and not has_state_negation:
+        result["normalized_value"] = state_matches[0].lower()
+        return result
+    if state_matches:
         return result
 
     temperature = re.search(r"(-?\d+(?:\.\d+)?)\s*°\s*C\b", text, re.I)

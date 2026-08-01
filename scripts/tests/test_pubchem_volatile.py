@@ -84,6 +84,16 @@ class PubChemVolatilePropertyParserTests(unittest.TestCase):
                 self.assertEqual(record["raw_value"], raw)
                 self.assertEqual(record["normalized_value"], state)
 
+    def test_leaves_negated_or_multiple_physical_states_empty(self):
+        cases = [
+            "liquid or gas",
+            "not a liquid, but a solid",
+        ]
+        for raw in cases:
+            with self.subTest(raw=raw):
+                parsed = parse_pubchem_property_text(raw)
+                self.assertIsNone(parsed["normalized_value"])
+
     def test_parses_nested_experimental_properties_and_references(self):
         payload = {
             "Record": {
@@ -118,6 +128,10 @@ class PubChemVolatilePropertyParserTests(unittest.TestCase):
 
         self.assertTrue(result["found"])
         self.assertEqual(result["cid"], "8857")
+        self.assertEqual(
+            result["url"],
+            "https://pubchem.ncbi.nlm.nih.gov/compound/8857#section=Experimental-Properties",
+        )
         self.assertEqual(result["properties"]["boiling_point"][0]["raw_value"], "77.1 °C")
         self.assertEqual(result["properties"]["boiling_point"][0]["source"], "HSDB")
         self.assertEqual(result["properties"]["boiling_point"][0]["source_url"], "https://example.test/hsdb/1")
