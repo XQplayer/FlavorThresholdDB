@@ -586,9 +586,10 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
       .filter(({ item, fema, profile }) => {
         if (!item.cas || seenCas.has(item.cas)) return false;
         const hasFema = includeFlavorDescriptions && fema.found;
+        const hasPendingPubChem = includePubChem && profile.loading;
         const hasPubChem = includePubChem && profile.pubchem?.found;
         const hasFlavorDB = includeFlavorDB && profile.flavordb?.found;
-        if (!hasFema && !hasPubChem && !hasFlavorDB) return false;
+        if (!hasFema && !hasPendingPubChem && !hasPubChem && !hasFlavorDB) return false;
         seenCas.add(item.cas);
         return true;
       });
@@ -1717,6 +1718,16 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
               {integratedCompoundResults.map(({ item, fema, profile }) => {
                 const pubchem = profile.pubchem || {};
                 const flavordb = profile.flavordb || {};
+                const showPubChemVolatile = includePubChem && (profile.loading || pubchem.found);
+                const volatileData = profile.loading
+                  ? {
+                      status: 'loading',
+                      loading: true,
+                      found: false,
+                      properties: {},
+                    }
+                  : profile.pubchem_volatile;
+
                 const descriptorGroups = groupFlavorDescriptors(
                   includeFlavorDescriptions && selectedFlavorSources.includes('FEMA') ? fema : {},
                   includeFlavorDB && selectedFlavorSources.includes('FlavorDB') ? flavordb : {}
@@ -1852,9 +1863,9 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
                         )}
                       </section>
                     </div>
-                    {includePubChem && pubchem.found && (
+                    {showPubChemVolatile && (
                       <PubChemVolatileProperties
-                        data={profile.pubchem_volatile}
+                        data={volatileData}
                         isEnglish={isEnglish}
                       />
                     )}
