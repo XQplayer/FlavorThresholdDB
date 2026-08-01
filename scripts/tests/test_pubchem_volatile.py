@@ -38,6 +38,31 @@ def information(raw_value, reference_number):
 
 
 class PubChemVolatilePropertyParserTests(unittest.TestCase):
+    def test_solubility_section_keeps_only_explicitly_aqueous_records(self):
+        payload = {
+            "Record": {
+                "Section": [{
+                    "TOCHeading": "Solubility",
+                    "Information": [
+                        information("In water, 8.0X10+4 mg/L at 25 °C", 1),
+                        information("Aqueous solubility: 1200 mg/L", 2),
+                        information("In ethanol, 5000 mg/L", 3),
+                        information("Miscible with chloroform and ether", 4),
+                        information("900 mg/L at 20 °C", 5),
+                    ],
+                }],
+            },
+        }
+
+        records = parse_pubchem_volatile_properties(payload, 8857)["properties"]["water_solubility"]
+
+        self.assertEqual(
+            [record["raw_value"] for record in records],
+            ["In water, 8.0X10+4 mg/L at 25 °C", "Aqueous solubility: 1200 mg/L"],
+        )
+        joined = " ".join(record["raw_value"].lower() for record in records)
+        self.assertNotRegex(joined, r"ethanol|chloroform|ether|\boil\b")
+
     def test_maps_all_supported_upstream_headings_to_stable_keys(self):
         cases = [
             ("Boiling Point", "boiling_point"),
@@ -50,11 +75,12 @@ class PubChemVolatilePropertyParserTests(unittest.TestCase):
             ("Physical Description", "physical_state"),
         ]
         for heading, expected_key in cases:
+            raw_value = "In water, reported value" if heading == "Solubility" else "reported value"
             payload = {
                 "Record": {
                     "Section": [{
                         "TOCHeading": heading,
-                        "Information": [information("reported value", 1)],
+                        "Information": [information(raw_value, 1)],
                     }],
                 },
             }

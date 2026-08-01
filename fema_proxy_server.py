@@ -273,9 +273,9 @@ def parse_pubchem_property_text(raw_value: str, property_key: str = "") -> dict:
             result["normalized_value"] = next(iter(states))
         return result
 
-    medium = re.search(r"\b(?:in|soluble in)\s+(water)\b", text, re.I)
-    if medium:
-        result["medium"] = medium.group(1).lower()
+    aqueous_medium = re.search(r"\bwater\b|\baqueous\b|\baqua(?:tic)?\b", text, re.I)
+    if aqueous_medium:
+        result["medium"] = "water"
 
     number_pattern = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:(?:[eE][+-]?\d+)|(?:\s*[x×]\s*10[+-]?\d+))?"
     malformed_exponent = re.search(r"\d(?:\.\d+)?[eE](?:[+-](?!\d)|(?![+\-\d]))", text)
@@ -369,11 +369,31 @@ def _pubchem_information_strings(information: dict) -> list[str]:
     return strings
 
 
+def _pubchem_has_aqueous_context(information: dict, raw_value: str) -> bool:
+    context_parts = [raw_value]
+
+    def collect_strings(value: object) -> None:
+        if isinstance(value, str):
+            context_parts.append(value)
+        elif isinstance(value, dict):
+            for nested in value.values():
+                collect_strings(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                collect_strings(nested)
+
+    collect_strings(information.get("Description", ""))
+    context = " ".join(context_parts)
+    return bool(re.search(r"\bwater\b|\baqueous\b|\baqua(?:tic)?\b", context, re.I))
+
+
 def _parse_pubchem_volatile_record(information: dict, references: dict, property_key: str) -> list[dict]:
     reference_number = information.get("ReferenceNumber")
     reference = references.get(reference_number, {})
     records = []
     for raw_value in _pubchem_information_strings(information):
+        if property_key == "water_solubility" and not _pubchem_has_aqueous_context(information, raw_value):
+            continue
         record = {
             "raw_value": raw_value,
             "reference_number": reference_number,
