@@ -4022,6 +4022,8 @@ select:focus-visible,
 
   .integrated-source-links a {
     width: 100%;
+  }
+}
 
 .pubchem-volatile {
   margin: 0 24px 24px;
@@ -4239,7 +4241,5 @@ select:focus-visible,
 
   .pubchem-volatile-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-}
   }
 }
