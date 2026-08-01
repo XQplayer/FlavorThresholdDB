@@ -245,7 +245,7 @@ class PubChemVolatilePropertyQueryTests(unittest.TestCase):
 
     def test_fetches_experimental_properties_once_at_exact_url(self):
         calls = []
-        payload = {"Record": {"Section": [{
+        payload = {"Record": {"Reference": [], "Section": [{
             "TOCHeading": "Boiling Point",
             "Information": [information("77.1 C", 1)],
         }]}}
@@ -261,7 +261,9 @@ class PubChemVolatilePropertyQueryTests(unittest.TestCase):
         self.assertIn("retrieved_at", result)
 
     def test_empty_payload_is_no_data_with_stable_property_keys(self):
-        result = fema_proxy_server.query_pubchem_volatile_properties("8857", lambda _url: '{"Record": {}}')
+        result = fema_proxy_server.query_pubchem_volatile_properties(
+            "8857", lambda _url: '{"Record": {"Section": [], "Reference": []}}'
+        )
 
         self.assertEqual(result["status"], "no_data")
         self.assertEqual(set(result["properties"]), PROPERTY_KEYS)
@@ -280,7 +282,8 @@ class PubChemVolatilePropertyQueryTests(unittest.TestCase):
     def test_canonicalizes_leading_zero_cid(self):
         calls = []
         result = fema_proxy_server.query_pubchem_volatile_properties(
-            "0008857", lambda url: calls.append(url) or '{"Record": {}}'
+            "0008857",
+            lambda url: calls.append(url) or '{"Record": {"Section": [], "Reference": []}}',
         )
         self.assertEqual(result["cid"], "8857")
         self.assertIn("/compound/8857/", calls[0])
@@ -303,10 +306,28 @@ class PubChemVolatilePropertyQueryTests(unittest.TestCase):
                 self.assertEqual(result["status"], "upstream_unavailable")
 
     def test_classifies_invalid_json_and_html(self):
-        for body in ("not json", "<!doctype html><html></html>", "[]", '{"Record": []}'):
+        for body in (
+            "not json",
+            "<!doctype html><html></html>",
+            "[]",
+            '{"Record": null}',
+            '{"Record": []}',
+        ):
             with self.subTest(body=body):
                 result = fema_proxy_server.query_pubchem_volatile_properties("8857", lambda _url, value=body: value)
                 self.assertEqual(result["status"], "invalid_response")
+
+    def test_missing_record_is_invalid_response_without_calling_parser(self):
+        for body in ("{}", '{"unexpected": true}'):
+            with (
+                self.subTest(body=body),
+                patch.object(fema_proxy_server, "parse_pubchem_volatile_properties") as parser,
+            ):
+                result = fema_proxy_server.query_pubchem_volatile_properties(
+                    "8857", lambda _url, value=body: value
+                )
+                self.assertEqual(result["status"], "invalid_response")
+                parser.assert_not_called()
 
     def test_does_not_hide_parser_programming_errors(self):
         for error in (KeyError("bug"), TypeError("bug")):
@@ -316,7 +337,7 @@ class PubChemVolatilePropertyQueryTests(unittest.TestCase):
                     self.assertRaises(type(error)),
                 ):
                     fema_proxy_server.query_pubchem_volatile_properties(
-                        "8857", lambda _url: '{"Record": {}}'
+                        "8857", lambda _url: '{"Record": {"Section": [], "Reference": []}}'
                     )
 
     def test_throttle_enforces_five_requests_per_second_without_real_sleep(self):
