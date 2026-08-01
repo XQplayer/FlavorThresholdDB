@@ -21,6 +21,9 @@ All notable changes to FlavorThresholdDB are recorded here. Versions follow
 
 - Added project history and maintainership documentation.
 - Established local-only release-candidate and backup directories.
+- Added one-request PubChem PUG View retrieval for eight experimental-property groups: boiling point, vapor pressure, Henry's law constant, water solubility, experimental LogP/LogKow, density, melting point, and physical state.
+- Added responsive, keyboard-accessible multi-source property evidence in the compound UI, preserving raw records, source citations, and links instead of averaging experimental values.
+- Isolated PubChem experimental-property failures so local records, FEMA, FlavorDB2, and basic PubChem identity and structure data remain available.
 
 ## [1.3.0] - 2026-07-31
 

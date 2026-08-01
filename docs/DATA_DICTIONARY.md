@@ -39,6 +39,56 @@ provide a FEMA number, common name, and flavor profile.
 External values must retain a source label and a verification link. A missing
 external result is not evidence that the compound or property does not exist.
 
+## PubChem experimental-property contract
+
+`GET /pubchem-volatile?cid=<CID>` returns the same PubChem experimental-property
+object embedded at `compound.pubchem_volatile` in the integrated `GET /compound`
+response. The contract key is `pubchem_volatile` (not `volatile_properties`).
+
+The response has eight stable top-level keys:
+
+| Key | Meaning |
+| --- | --- |
+| `found` | `true` when at least one experimental record was retained in any property array. |
+| `status` | One of `ok`, `no_data`, `invalid_cid`, `upstream_unavailable`, or `invalid_response`. |
+| `cid` | Canonical decimal CID text; leading zeros are removed after validation. Invalid input is returned trimmed but is not queried. |
+| `source` | Stable source label `PubChem PUG View`. |
+| `url` | PubChem compound link to the Experimental Properties section. |
+| `retrieved_at` | UTC retrieval timestamp for successful upstream responses and 404 `no_data` responses; it may be absent for failures occurring before a valid response. |
+| `cached` | Whether this response was served from a successfully persisted cache entry. |
+| `properties` | Object whose eight stable keys each contain an array of retained source records. |
+
+The stable `properties` keys are `boiling_point`, `vapor_pressure`,
+`henrys_law_constant`, `water_solubility`, `experimental_logp`, `density`,
+`melting_point`, and `physical_state`. Every extracted record retains
+`raw_value`, `normalized_value`, `unit`, `temperature`, `pressure`, `medium`,
+`reference_number`, and `source`; `source_url` is included when PubChem supplies
+one for that reference. `raw_value` is the primary evidence. There is no
+separate record-level `description`, `evidence`, or `physical_state` field:
+descriptive physical-state text remains in `raw_value`, under the
+`properties.physical_state` array, and its conservative parsed state is stored
+in `normalized_value`.
+
+Normalization is best-effort and deliberately conservative. Empty conditions
+or a null `normalized_value` do not invalidate the retained raw record. All
+distinct experimental records are preserved (deduplicated only by identical
+`raw_value` plus `reference_number`); values are never averaged.
+
+Status semantics:
+
+- `invalid_cid`: CID is missing, zero, negative, or non-decimal; HTTP 400 on
+  `/pubchem-volatile`.
+- `no_data`: PubChem returned 404 or a valid Experimental Properties payload
+  with no retained records.
+- `upstream_unavailable`: timeout, connection failure, throttling response, or
+  retryable upstream HTTP failure; HTTP 502 on `/pubchem-volatile`.
+- `invalid_response`: the upstream body is HTML, malformed JSON, or lacks the
+  expected record object; HTTP 502 on `/pubchem-volatile`.
+
+Only `ok` and `no_data` results are eligible for persistent caching. Cache keys
+use the canonical CID, so inputs such as `000702` and `702` address the same
+entry.
+
 ## CSV contracts
 
 - Compact export: one compound per row, identity fields first, then selected
