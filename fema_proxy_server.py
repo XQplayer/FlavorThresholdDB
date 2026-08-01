@@ -4,6 +4,7 @@ import html
 import json
 import os
 import re
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
@@ -379,6 +380,49 @@ def parse_pubchem_volatile_properties(payload: dict, cid: int | str) -> dict:
     }
 
 
+def _empty_pubchem_volatile(cid: int | str, status: str) -> dict:
+    cid_text = str(cid).strip()
+    return {
+        "found": False,
+        "status": status,
+        "cid": cid_text,
+        "properties": {key: [] for key in PUBCHEM_VOLATILE_PROPERTY_HEADINGS.values()},
+        "source": "PubChem PUG View",
+        "url": f"{PUBCHEM_BASE_URL}/compound/{cid_text}#section=Experimental-Properties",
+    }
+
+
+def query_pubchem_volatile_properties(cid: int | str, fetcher=fetch_text) -> dict:
+    cid_text = str(cid).strip()
+    if not cid_text.isdigit():
+        return _empty_pubchem_volatile(cid_text, "invalid_cid")
+
+    retrieved_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    url = (
+        f"{PUBCHEM_BASE_URL}/rest/pug_view/data/compound/{cid_text}/JSON"
+        "?heading=Experimental%20Properties"
+    )
+    try:
+        payload_text = fetcher(url)
+    except HTTPError as exc:
+        if exc.code == 404:
+            return {**_empty_pubchem_volatile(cid_text, "no_data"), "retrieved_at": retrieved_at}
+        if exc.code in {429, 503}:
+            return _empty_pubchem_volatile(cid_text, "upstream_unavailable")
+        raise
+
+    if not isinstance(payload_text, str) or re.match(r"^\s*(?:<!doctype\s+html|<html\b)", payload_text, re.I):
+        return _empty_pubchem_volatile(cid_text, "invalid_response")
+    try:
+        payload = json.loads(payload_text)
+        result = parse_pubchem_volatile_properties(payload, cid_text)
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return _empty_pubchem_volatile(cid_text, "invalid_response")
+
+    status = "ok" if result["found"] else "no_data"
+    return {**result, "status": status, "retrieved_at": retrieved_at}
+
+
 def query_pubchem_crystal_structures(cid: str) -> dict:
     url = f"{PUBCHEM_BASE_URL}/rest/pug_view/data/compound/{cid}/JSON?heading=Crystal%20Structures"
     payload = json.loads(fetch_text(url))
@@ -601,13 +645,29 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self.send_json(502, {"error": str(exc)})
             return
-        if parsed.path not in {"/fema", "/pubchem", "/flavordb", "/compound"}:
+        if parsed.path not in {"/fema", "/pubchem", "/pubchem-volatile", "/flavordb", "/compound"}:
             self.send_json(404, {"error": "Not found"})
             return
 
         params = parse_qs(parsed.query)
         query = (params.get("cas") or params.get("q") or [""])[0].strip()
         cid = (params.get("cid") or [""])[0].strip()
+
+        if parsed.path == "/pubchem-volatile":
+            cache_key = f"pubchem-volatile:{cid}"
+            result = self.cache.get(cache_key)
+            if result is None:
+                result = query_pubchem_volatile_properties(cid)
+                if result["status"] in {"ok", "no_data"}:
+                    self.cache[cache_key] = result
+                    save_cache(self.cache)
+            status_code = 200
+            if result["status"] == "invalid_cid":
+                status_code = 400
+            elif result["status"] in {"upstream_unavailable", "invalid_response"}:
+                status_code = 502
+            self.send_json(status_code, result)
+            return
 
         if parsed.path == "/flavordb":
             if not cid:
@@ -641,13 +701,26 @@ class Handler(BaseHTTPRequestHandler):
                     return
 
                 flavordb = {"found": False, "error": "PubChem CID unavailable"}
+                pubchem_volatile = _empty_pubchem_volatile("", "invalid_cid")
                 if pubchem.get("found") and pubchem.get("cid"):
                     flavordb_key = f"flavordb:{pubchem['cid']}"
                     if flavordb_key not in self.cache:
                         self.cache[flavordb_key] = query_flavordb(pubchem["cid"])
                         save_cache(self.cache)
                     flavordb = self.cache[flavordb_key]
-                self.send_json(200, {"query": query, "pubchem": pubchem, "flavordb": flavordb})
+                    volatile_key = f"pubchem-volatile:{pubchem['cid']}"
+                    pubchem_volatile = self.cache.get(volatile_key)
+                    if pubchem_volatile is None:
+                        pubchem_volatile = query_pubchem_volatile_properties(pubchem["cid"])
+                        if pubchem_volatile["status"] in {"ok", "no_data"}:
+                            self.cache[volatile_key] = pubchem_volatile
+                            save_cache(self.cache)
+                self.send_json(200, {
+                    "query": query,
+                    "pubchem": pubchem,
+                    "flavordb": flavordb,
+                    "pubchem_volatile": pubchem_volatile,
+                })
             except Exception as exc:
                 self.send_json(502, {"query": query, "pubchem": {"found": False}, "flavordb": {"found": False}, "error": str(exc)})
             return
