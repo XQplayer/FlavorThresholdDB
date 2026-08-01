@@ -178,6 +178,69 @@ PUBCHEM_VOLATILE_PROPERTY_HEADINGS = {
     "Physical Description": "physical_state",
 }
 
+PUBCHEM_PROPERTY_UNIT_ALIASES = {
+    "mm hg": "mmHg",
+    "mmhg": "mmHg",
+    "atm-cu m/mole": "atm·m³/mol",
+    "mg/l": "mg/L",
+    "°c": "°C",
+}
+
+
+def parse_pubchem_property_text(raw_value: str) -> dict:
+    """Conservatively extract explicit PubChem property values and conditions."""
+    result = {
+        "raw_value": raw_value,
+        "normalized_value": None,
+        "unit": "",
+        "temperature": "",
+        "pressure": "",
+        "medium": "",
+    }
+    text = str(raw_value)
+
+    state_match = re.search(r"\b(liquid|solid|gas)\b", text, re.I)
+    if state_match:
+        result["normalized_value"] = state_match.group(1).lower()
+        return result
+
+    temperature = re.search(r"(-?\d+(?:\.\d+)?)\s*°\s*C\b", text, re.I)
+    if temperature:
+        result["temperature"] = f"{temperature.group(1)} °C"
+
+    medium = re.search(r"\b(?:in|soluble in)\s+(water)\b", text, re.I)
+    if medium:
+        result["medium"] = medium.group(1).lower()
+
+    number_pattern = r"[+-]?\d+(?:\.\d+)?(?:\s*[x×]\s*10[+-]?\d+)?"
+    aliases = sorted(PUBCHEM_PROPERTY_UNIT_ALIASES, key=len, reverse=True)
+    unit_pattern = "|".join(re.escape(alias) for alias in aliases if alias != "°c")
+    value_match = re.search(
+        rf"(?P<number>{number_pattern})\s*(?P<unit>{unit_pattern})(?![A-Za-z])",
+        text,
+        re.I,
+    )
+    if not value_match:
+        return result
+
+    normalized_number = re.sub(r"\s*[x×]\s*10", "e", value_match.group("number"), flags=re.I)
+    try:
+        result["normalized_value"] = float(normalized_number)
+    except ValueError:
+        return result
+    result["unit"] = PUBCHEM_PROPERTY_UNIT_ALIASES[value_match.group("unit").lower()]
+
+    pressure_condition = re.search(
+        rf"\bat\s+({number_pattern})\s*(mm\s*hg|mmhg|atm)\b",
+        text,
+        re.I,
+    )
+    if pressure_condition:
+        pressure_unit = pressure_condition.group(2).lower().replace(" ", "")
+        pressure_unit = "mmHg" if pressure_unit == "mmhg" else "atm"
+        result["pressure"] = f"{pressure_condition.group(1)} {pressure_unit}"
+    return result
+
 
 def _pubchem_information_strings(information: dict) -> list[str]:
     value = information.get("Value", {})
@@ -201,9 +264,7 @@ def _parse_pubchem_volatile_record(information: dict, references: dict) -> list[
             "reference_number": reference_number,
             "source": reference.get("SourceName", ""),
         }
-        temperature = re.search(r"-?\d+(?:\.\d+)?\s*°\s*C", raw_value, re.I)
-        if temperature:
-            record["temperature"] = re.sub(r"\s*°\s*", " °", temperature.group(0))
+        record.update(parse_pubchem_property_text(raw_value))
         if reference.get("URL"):
             record["source_url"] = reference["URL"]
         records.append(record)
