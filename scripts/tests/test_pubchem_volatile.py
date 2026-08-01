@@ -281,10 +281,21 @@ class PubChemVolatilePropertyQueryTests(unittest.TestCase):
                 self.assertEqual(result["status"], expected)
 
     def test_classifies_invalid_json_and_html(self):
-        for body in ("not json", "<!doctype html><html></html>"):
+        for body in ("not json", "<!doctype html><html></html>", "[]", '{"Record": []}'):
             with self.subTest(body=body):
                 result = fema_proxy_server.query_pubchem_volatile_properties("8857", lambda _url, value=body: value)
                 self.assertEqual(result["status"], "invalid_response")
+
+    def test_does_not_hide_parser_programming_errors(self):
+        for error in (KeyError("bug"), TypeError("bug")):
+            with self.subTest(error=type(error).__name__):
+                with (
+                    patch.object(fema_proxy_server, "parse_pubchem_volatile_properties", side_effect=error),
+                    self.assertRaises(type(error)),
+                ):
+                    fema_proxy_server.query_pubchem_volatile_properties(
+                        "8857", lambda _url: '{"Record": {}}'
+                    )
 
 
 class PubChemVolatilePropertyHandlerTests(unittest.TestCase):

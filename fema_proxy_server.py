@@ -415,9 +415,12 @@ def query_pubchem_volatile_properties(cid: int | str, fetcher=fetch_text) -> dic
         return _empty_pubchem_volatile(cid_text, "invalid_response")
     try:
         payload = json.loads(payload_text)
-        result = parse_pubchem_volatile_properties(payload, cid_text)
-    except (json.JSONDecodeError, KeyError, TypeError):
+    except json.JSONDecodeError:
         return _empty_pubchem_volatile(cid_text, "invalid_response")
+    if not isinstance(payload, dict) or not isinstance(payload.get("Record", {}), dict):
+        return _empty_pubchem_volatile(cid_text, "invalid_response")
+
+    result = parse_pubchem_volatile_properties(payload, cid_text)
 
     status = "ok" if result["found"] else "no_data"
     return {**result, "status": status, "retrieved_at": retrieved_at}
