@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { getVolatilePropertySections } from '../pubchemVolatile'
 
 const STATE_COPY = {
@@ -84,8 +85,25 @@ function PropertyRecord({ record, isEnglish }) {
   )
 }
 
+function getKeyedRecords(records) {
+  const collisions = new Map()
+
+  return records.map(record => {
+    const base = [
+      record.reference_number,
+      record.raw_value,
+      record.source_url,
+      record.source,
+    ].map(value => JSON.stringify(value ?? '')).join('|')
+    const collision = collisions.get(base) || 0
+    collisions.set(base, collision + 1)
+    return { record, key: `${base}::${collision}` }
+  })
+}
+
 export default function PubChemVolatileProperties({ data, isEnglish }) {
-  const isLoading = data === undefined || data?.loading || data?.status === 'loading'
+  const generatedTitleId = useId()
+  const isLoading = data?.loading === true || data?.status === 'loading'
   const status = data?.status
   const sections = isLoading
     ? []
@@ -98,10 +116,15 @@ export default function PubChemVolatileProperties({ data, isEnglish }) {
   const resolvedStatus = isLoading
     ? 'loading'
     : (STATE_COPY[status] ? status : (sections.length > 0 ? 'ok' : 'no_data'))
-  const titleId = `pubchem-volatile-title-${data?.cid || 'record'}`
+  const titleId = `pubchem-volatile-title-${generatedTitleId}`
 
   return (
-    <section className="pubchem-volatile" aria-labelledby={titleId} aria-busy={isLoading}>
+    <section
+      className="pubchem-volatile"
+      aria-labelledby={titleId}
+      aria-busy={isLoading}
+      data-pubchem-cid={hasValue(data?.cid) ? String(data.cid) : undefined}
+    >
       <header className="pubchem-volatile-heading">
         <div>
           <h4 id={titleId}>{isEnglish ? 'Volatility and partition properties' : '挥发与分配性质'}</h4>
@@ -135,6 +158,7 @@ export default function PubChemVolatileProperties({ data, isEnglish }) {
         <div className="pubchem-volatile-grid">
           {sections.map(section => {
             const [primary, ...additional] = section.records
+            const keyedAdditional = getKeyedRecords(additional)
             return (
               <section key={section.key} className="pubchem-volatile-property">
                 <h5>{section.label}</h5>
@@ -147,9 +171,9 @@ export default function PubChemVolatileProperties({ data, isEnglish }) {
                         : `另有 ${additional.length} 条记录`}
                     </summary>
                     <div className="pubchem-volatile-additional">
-                      {additional.map((record, index) => (
+                      {keyedAdditional.map(({ record, key }) => (
                         <PropertyRecord
-                          key={`${record.reference_number ?? 'reference'}-${record.raw_value ?? 'value'}-${index}`}
+                          key={key}
                           record={record}
                           isEnglish={isEnglish}
                         />

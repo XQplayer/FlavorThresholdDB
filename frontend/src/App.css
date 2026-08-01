@@ -4129,7 +4129,7 @@ select:focus-visible,
 }
 
 .pubchem-volatile-conditions dt {
-  color: #63776f;
+  color: #53685f;
   font-weight: 650;
 }
 
@@ -4219,6 +4219,15 @@ select:focus-visible,
   border-radius: 4px;
   outline: 3px solid rgba(23, 108, 107, 0.25);
   outline-offset: 3px;
+}
+
+@media (pointer: coarse), (max-width: 760px) {
+  .pubchem-volatile-heading > a,
+  .pubchem-volatile-reference a {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+  }
 }
 
 @media (max-width: 1120px) {
