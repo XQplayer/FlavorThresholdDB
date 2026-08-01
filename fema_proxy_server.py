@@ -4,10 +4,13 @@ import html
 import json
 import os
 import re
+import socket
+import threading
+import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
 
@@ -37,6 +40,32 @@ def fetch_text(url: str) -> str:
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urlopen(req, timeout=25) as resp:
         return resp.read().decode("utf-8", errors="replace")
+
+
+_PUBCHEM_VOLATILE_RATE_LOCK = threading.Lock()
+_PUBCHEM_VOLATILE_LAST_REQUEST = None
+_PUBCHEM_VOLATILE_MIN_INTERVAL = 0.2
+_PUBCHEM_VOLATILE_FLIGHTS_LOCK = threading.Lock()
+_PUBCHEM_VOLATILE_FLIGHTS = {}
+
+
+def _reset_pubchem_volatile_throttle_for_tests() -> None:
+    global _PUBCHEM_VOLATILE_LAST_REQUEST
+    with _PUBCHEM_VOLATILE_RATE_LOCK:
+        _PUBCHEM_VOLATILE_LAST_REQUEST = None
+
+
+def _throttled_pubchem_volatile_fetch(url, fetcher=fetch_text, clock=time.monotonic, sleeper=time.sleep):
+    global _PUBCHEM_VOLATILE_LAST_REQUEST
+    with _PUBCHEM_VOLATILE_RATE_LOCK:
+        now = clock()
+        if _PUBCHEM_VOLATILE_LAST_REQUEST is not None:
+            delay = _PUBCHEM_VOLATILE_MIN_INTERVAL - (now - _PUBCHEM_VOLATILE_LAST_REQUEST)
+            if delay > 0:
+                sleeper(delay)
+                now = clock()
+        _PUBCHEM_VOLATILE_LAST_REQUEST = now
+    return fetcher(url)
 
 
 def fetch_bytes(url: str) -> tuple[bytes, str]:
@@ -392,10 +421,20 @@ def _empty_pubchem_volatile(cid: int | str, status: str) -> dict:
     }
 
 
-def query_pubchem_volatile_properties(cid: int | str, fetcher=fetch_text) -> dict:
+def _canonical_pubchem_cid(cid: int | str) -> str | None:
     cid_text = str(cid).strip()
-    if not cid_text.isdigit():
+    if not re.fullmatch(r"[0-9]+", cid_text):
+        return None
+    canonical = str(int(cid_text))
+    return canonical if canonical != "0" else None
+
+
+def query_pubchem_volatile_properties(cid: int | str, fetcher=None) -> dict:
+    cid_text = str(cid).strip()
+    canonical_cid = _canonical_pubchem_cid(cid_text)
+    if canonical_cid is None:
         return _empty_pubchem_volatile(cid_text, "invalid_cid")
+    cid_text = canonical_cid
 
     retrieved_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     url = (
@@ -403,13 +442,19 @@ def query_pubchem_volatile_properties(cid: int | str, fetcher=fetch_text) -> dic
         "?heading=Experimental%20Properties"
     )
     try:
-        payload_text = fetcher(url)
+        payload_text = (
+            _throttled_pubchem_volatile_fetch(url)
+            if fetcher is None
+            else fetcher(url)
+        )
     except HTTPError as exc:
         if exc.code == 404:
             return {**_empty_pubchem_volatile(cid_text, "no_data"), "retrieved_at": retrieved_at}
-        if exc.code in {429, 503}:
+        if exc.code in {408, 425, 429} or 500 <= exc.code <= 599:
             return _empty_pubchem_volatile(cid_text, "upstream_unavailable")
         raise
+    except (TimeoutError, socket.timeout, URLError):
+        return _empty_pubchem_volatile(cid_text, "upstream_unavailable")
 
     if not isinstance(payload_text, str) or re.match(r"^\s*(?:<!doctype\s+html|<html\b)", payload_text, re.I):
         return _empty_pubchem_volatile(cid_text, "invalid_response")
@@ -424,6 +469,46 @@ def query_pubchem_volatile_properties(cid: int | str, fetcher=fetch_text) -> dic
 
     status = "ok" if result["found"] else "no_data"
     return {**result, "status": status, "retrieved_at": retrieved_at}
+
+
+def _get_pubchem_volatile_cached(cache: dict, cid: int | str) -> tuple[dict, bool]:
+    canonical_cid = _canonical_pubchem_cid(cid)
+    if canonical_cid is None:
+        return query_pubchem_volatile_properties(cid), False
+    cache_key = f"pubchem-volatile:{canonical_cid}"
+
+    with _PUBCHEM_VOLATILE_FLIGHTS_LOCK:
+        cached_result = cache.get(cache_key)
+        if cached_result is not None:
+            return cached_result, True
+        flight = _PUBCHEM_VOLATILE_FLIGHTS.get(canonical_cid)
+        if flight is None:
+            flight = {"event": threading.Event(), "result": None, "error": None}
+            _PUBCHEM_VOLATILE_FLIGHTS[canonical_cid] = flight
+            leader = True
+        else:
+            leader = False
+
+    if not leader:
+        flight["event"].wait()
+        if flight["error"] is not None:
+            raise flight["error"]
+        return flight["result"], True
+
+    try:
+        result = query_pubchem_volatile_properties(canonical_cid)
+        flight["result"] = result
+        if result["status"] in {"ok", "no_data"}:
+            cache[cache_key] = result
+            save_cache(cache)
+        return result, False
+    except BaseException as exc:
+        flight["error"] = exc
+        raise
+    finally:
+        with _PUBCHEM_VOLATILE_FLIGHTS_LOCK:
+            _PUBCHEM_VOLATILE_FLIGHTS.pop(canonical_cid, None)
+            flight["event"].set()
 
 
 def query_pubchem_crystal_structures(cid: str) -> dict:
@@ -657,19 +742,17 @@ class Handler(BaseHTTPRequestHandler):
         cid = (params.get("cid") or [""])[0].strip()
 
         if parsed.path == "/pubchem-volatile":
-            cache_key = f"pubchem-volatile:{cid}"
-            result = self.cache.get(cache_key)
-            if result is None:
-                result = query_pubchem_volatile_properties(cid)
-                if result["status"] in {"ok", "no_data"}:
-                    self.cache[cache_key] = result
-                    save_cache(self.cache)
+            try:
+                result, cached = _get_pubchem_volatile_cached(self.cache, cid)
+            except (HTTPError, URLError, TimeoutError, socket.timeout):
+                result = _empty_pubchem_volatile(cid, "upstream_unavailable")
+                cached = False
             status_code = 200
             if result["status"] == "invalid_cid":
                 status_code = 400
             elif result["status"] in {"upstream_unavailable", "invalid_response"}:
                 status_code = 502
-            self.send_json(status_code, result)
+            self.send_json(status_code, {**result, "cached": cached})
             return
 
         if parsed.path == "/flavordb":
@@ -704,20 +787,26 @@ class Handler(BaseHTTPRequestHandler):
                     return
 
                 flavordb = {"found": False, "error": "PubChem CID unavailable"}
-                pubchem_volatile = _empty_pubchem_volatile("", "invalid_cid")
+                pubchem_volatile = {
+                    **_empty_pubchem_volatile("", "invalid_cid"),
+                    "cached": False,
+                }
                 if pubchem.get("found") and pubchem.get("cid"):
                     flavordb_key = f"flavordb:{pubchem['cid']}"
                     if flavordb_key not in self.cache:
                         self.cache[flavordb_key] = query_flavordb(pubchem["cid"])
                         save_cache(self.cache)
                     flavordb = self.cache[flavordb_key]
-                    volatile_key = f"pubchem-volatile:{pubchem['cid']}"
-                    pubchem_volatile = self.cache.get(volatile_key)
-                    if pubchem_volatile is None:
-                        pubchem_volatile = query_pubchem_volatile_properties(pubchem["cid"])
-                        if pubchem_volatile["status"] in {"ok", "no_data"}:
-                            self.cache[volatile_key] = pubchem_volatile
-                            save_cache(self.cache)
+                    try:
+                        volatile_result, volatile_cached = _get_pubchem_volatile_cached(
+                            self.cache, pubchem["cid"]
+                        )
+                    except (HTTPError, URLError, TimeoutError, socket.timeout):
+                        volatile_result = _empty_pubchem_volatile(
+                            pubchem["cid"], "upstream_unavailable"
+                        )
+                        volatile_cached = False
+                    pubchem_volatile = {**volatile_result, "cached": volatile_cached}
                 self.send_json(200, {
                     "query": query,
                     "pubchem": pubchem,

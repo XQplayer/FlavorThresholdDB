@@ -1,8 +1,10 @@
 import io
 import json
+import socket
 import threading
 import unittest
-from urllib.error import HTTPError
+from concurrent.futures import ThreadPoolExecutor
+from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 from unittest.mock import patch
 
@@ -266,19 +268,38 @@ class PubChemVolatilePropertyQueryTests(unittest.TestCase):
         self.assertIn("retrieved_at", result)
 
     def test_invalid_cid_does_not_fetch(self):
-        result = fema_proxy_server.query_pubchem_volatile_properties("8x57", lambda _url: self.fail("must not fetch"))
+        for cid in ("8x57", "0", "-1", "１２３"):
+            with self.subTest(cid=cid):
+                result = fema_proxy_server.query_pubchem_volatile_properties(
+                    cid, lambda _url: self.fail("must not fetch")
+                )
+                self.assertEqual(result["status"], "invalid_cid")
+                self.assertEqual(set(result["properties"]), PROPERTY_KEYS)
 
-        self.assertEqual(result["status"], "invalid_cid")
-        self.assertEqual(set(result["properties"]), PROPERTY_KEYS)
+    def test_canonicalizes_leading_zero_cid(self):
+        calls = []
+        result = fema_proxy_server.query_pubchem_volatile_properties(
+            "0008857", lambda url: calls.append(url) or '{"Record": {}}'
+        )
+        self.assertEqual(result["cid"], "8857")
+        self.assertIn("/compound/8857/", calls[0])
 
     def test_classifies_http_failures(self):
-        for code, expected in ((404, "no_data"), (429, "upstream_unavailable"), (503, "upstream_unavailable")):
+        for code, expected in ((404, "no_data"), (429, "upstream_unavailable"), (500, "upstream_unavailable"), (503, "upstream_unavailable")):
             def fail(url, status=code):
                 raise HTTPError(url, status, "failure", {}, io.BytesIO())
 
             with self.subTest(code=code):
                 result = fema_proxy_server.query_pubchem_volatile_properties("8857", fail)
                 self.assertEqual(result["status"], expected)
+
+    def test_classifies_transport_failures(self):
+        for error in (TimeoutError(), socket.timeout(), URLError("offline")):
+            with self.subTest(error=type(error).__name__):
+                def fail(_url, exc=error):
+                    raise exc
+                result = fema_proxy_server.query_pubchem_volatile_properties("8857", fail)
+                self.assertEqual(result["status"], "upstream_unavailable")
 
     def test_classifies_invalid_json_and_html(self):
         for body in ("not json", "<!doctype html><html></html>", "[]", '{"Record": []}'):
@@ -297,6 +318,23 @@ class PubChemVolatilePropertyQueryTests(unittest.TestCase):
                         "8857", lambda _url: '{"Record": {}}'
                     )
 
+    def test_throttle_enforces_five_requests_per_second_without_real_sleep(self):
+        now = [10.0]
+        sleeps = []
+        fema_proxy_server._reset_pubchem_volatile_throttle_for_tests()
+
+        def clock():
+            return now[0]
+
+        def sleeper(delay):
+            sleeps.append(delay)
+            now[0] += delay
+
+        fema_proxy_server._throttled_pubchem_volatile_fetch("one", lambda _url: "{}", clock, sleeper)
+        fema_proxy_server._throttled_pubchem_volatile_fetch("two", lambda _url: "{}", clock, sleeper)
+
+        self.assertEqual(sleeps, [0.2])
+
 
 class PubChemVolatilePropertyHandlerTests(unittest.TestCase):
     def setUp(self):
@@ -312,7 +350,14 @@ class PubChemVolatilePropertyHandlerTests(unittest.TestCase):
 
     def get_json(self, path):
         with urlopen(f"http://127.0.0.1:{self.server.server_port}{path}") as response:
-            return response.status, json.loads(response.read())
+            return response.status, json.loads(response.read()), response.headers
+
+    def get_error_json(self, path):
+        try:
+            self.get_json(path)
+        except HTTPError as error:
+            return error.code, json.loads(error.read()), error.headers
+        self.fail("expected HTTP error response")
 
     def test_pubchem_volatile_endpoint_returns_contract_and_caches_ok(self):
         response = {
@@ -324,12 +369,15 @@ class PubChemVolatilePropertyHandlerTests(unittest.TestCase):
             patch.object(fema_proxy_server, "query_pubchem_volatile_properties", return_value=response) as query,
             patch.object(fema_proxy_server, "save_cache"),
         ):
-            status, first = self.get_json("/pubchem-volatile?cid=8857")
-            _, second = self.get_json("/pubchem-volatile?cid=8857")
+            status, first, headers = self.get_json("/pubchem-volatile?cid=8857")
+            _, second, _ = self.get_json("/pubchem-volatile?cid=8857")
 
         self.assertEqual(status, 200)
         self.assertEqual(set(first["properties"]), PROPERTY_KEYS)
         self.assertEqual(first["status"], "ok")
+        self.assertFalse(first["cached"])
+        self.assertTrue(second["cached"])
+        self.assertEqual(headers["Access-Control-Allow-Origin"], "*")
         self.assertEqual(query.call_count, 1)
         self.assertEqual(second["status"], "ok")
 
@@ -349,12 +397,15 @@ class PubChemVolatilePropertyHandlerTests(unittest.TestCase):
             patch.object(fema_proxy_server, "query_pubchem_volatile_properties", return_value=volatile),
             patch.object(fema_proxy_server, "save_cache"),
         ):
-            status, result = self.get_json("/compound?q=test")
+            status, result, _ = self.get_json("/compound?q=test")
+            _, cached_result, _ = self.get_json("/compound?q=test")
 
         self.assertEqual(status, 200)
         self.assertEqual(result["pubchem"]["name"], "existing")
         self.assertEqual(result["flavordb"]["marker"], "flavordb")
         self.assertEqual(result["pubchem_volatile"]["status"], "no_data")
+        self.assertFalse(result["pubchem_volatile"]["cached"])
+        self.assertTrue(cached_result["pubchem_volatile"]["cached"])
 
     def test_endpoint_does_not_cache_transient_or_invalid_results(self):
         for result_status in ("upstream_unavailable", "invalid_response", "invalid_cid"):
@@ -374,6 +425,92 @@ class PubChemVolatilePropertyHandlerTests(unittest.TestCase):
                 self.assertEqual(query.call_count, 2)
                 save.assert_not_called()
                 self.assertNotIn("pubchem-volatile:8857", Handler.cache)
+
+    def test_no_data_is_cached_with_consistent_cached_flag(self):
+        response = {
+            **fema_proxy_server._empty_pubchem_volatile("8857", "no_data"),
+            "retrieved_at": "2026-08-02T00:00:00Z",
+        }
+        with (
+            patch.object(fema_proxy_server, "query_pubchem_volatile_properties", return_value=response) as query,
+            patch.object(fema_proxy_server, "save_cache"),
+        ):
+            _, first, _ = self.get_json("/pubchem-volatile?cid=0008857")
+            _, second, _ = self.get_json("/pubchem-volatile?cid=8857")
+        self.assertFalse(first["cached"])
+        self.assertTrue(second["cached"])
+        self.assertEqual(query.call_count, 1)
+
+    def test_concurrent_same_cid_uses_single_upstream_query(self):
+        release = threading.Event()
+        started = threading.Event()
+        response = {
+            **fema_proxy_server._empty_pubchem_volatile("8857", "no_data"),
+            "retrieved_at": "2026-08-02T00:00:00Z",
+        }
+
+        def slow_query(_cid):
+            started.set()
+            release.wait(timeout=2)
+            return response
+
+        with (
+            patch.object(fema_proxy_server, "query_pubchem_volatile_properties", side_effect=slow_query) as query,
+            patch.object(fema_proxy_server, "save_cache"),
+            ThreadPoolExecutor(max_workers=2) as pool,
+        ):
+            first = pool.submit(self.get_json, "/pubchem-volatile?cid=8857")
+            started.wait(timeout=1)
+            second = pool.submit(self.get_json, "/pubchem-volatile?cid=0008857")
+            release.set()
+            results = [first.result(timeout=2), second.result(timeout=2)]
+
+        self.assertEqual(query.call_count, 1)
+        self.assertEqual({item[1]["status"] for item in results}, {"no_data"})
+
+    def test_compound_keeps_existing_data_when_volatile_transport_fails(self):
+        Handler.cache = {
+            "pubchem:test": {"found": True, "cid": 8857, "name": "existing"},
+            "flavordb:8857": {"found": True, "marker": "flavordb"},
+            "flavordb2:molecule:8857": {"found": True, "marker": "flavordb"},
+            "flavordb2:compound-entities:8857": {"found": True, "entities": []},
+        }
+        unavailable = fema_proxy_server._empty_pubchem_volatile("8857", "upstream_unavailable")
+        with patch.object(fema_proxy_server, "query_pubchem_volatile_properties", return_value=unavailable):
+            status, result, _ = self.get_json("/compound?q=test")
+        self.assertEqual(status, 200)
+        self.assertEqual(result["pubchem"]["name"], "existing")
+        self.assertEqual(result["flavordb"]["marker"], "flavordb")
+        self.assertEqual(result["pubchem_volatile"]["status"], "upstream_unavailable")
+        self.assertFalse(result["pubchem_volatile"]["cached"])
+
+    def test_endpoint_returns_stable_json_when_query_raises_transport_error(self):
+        with patch.object(fema_proxy_server, "query_pubchem_volatile_properties", side_effect=TimeoutError()):
+            status, result, headers = self.get_error_json("/pubchem-volatile?cid=8857")
+        self.assertEqual(status, 502)
+        self.assertEqual(result["status"], "upstream_unavailable")
+        self.assertFalse(result["cached"])
+        self.assertEqual(set(result["properties"]), PROPERTY_KEYS)
+        self.assertEqual(headers["Access-Control-Allow-Origin"], "*")
+
+    def test_single_flight_cleans_up_after_exception(self):
+        response = {
+            **fema_proxy_server._empty_pubchem_volatile("8857", "no_data"),
+            "retrieved_at": "2026-08-02T00:00:00Z",
+        }
+        with (
+            patch.object(
+                fema_proxy_server,
+                "query_pubchem_volatile_properties",
+                side_effect=[KeyError("parser bug"), response],
+            ),
+            patch.object(fema_proxy_server, "save_cache"),
+        ):
+            with self.assertRaises(KeyError):
+                fema_proxy_server._get_pubchem_volatile_cached(Handler.cache, "8857")
+            result, cached = fema_proxy_server._get_pubchem_volatile_cached(Handler.cache, "8857")
+        self.assertEqual(result["status"], "no_data")
+        self.assertFalse(cached)
 
 
 if __name__ == "__main__":
