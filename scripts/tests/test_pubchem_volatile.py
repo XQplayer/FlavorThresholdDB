@@ -62,6 +62,67 @@ class PubChemVolatilePropertyParserTests(unittest.TestCase):
                 self.assertEqual(parsed["temperature"], temperature)
                 self.assertEqual(parsed["medium"], medium)
 
+    def test_uses_property_context_to_separate_primary_value_from_conditions(self):
+        parsed = parse_pubchem_property_text("78 °C at 760 mm Hg", "boiling_point")
+
+        self.assertEqual(parsed["normalized_value"], 78.0)
+        self.assertEqual(parsed["unit"], "°C")
+        self.assertEqual(parsed["temperature"], "")
+        self.assertEqual(parsed["pressure"], "760 mmHg")
+
+    def test_supports_complete_scientific_notation_without_partial_matches(self):
+        cases = [
+            ("1.2e-3 mg/L", 1.2e-3),
+            ("1.2E+3 mg/L", 1.2e3),
+            ("1.2E3 mg/L", 1.2e3),
+            ("1.2X10-3 mg/L", 1.2e-3),
+            ("1.2×10+3 mg/L", 1.2e3),
+        ]
+        for raw, expected in cases:
+            with self.subTest(raw=raw):
+                parsed = parse_pubchem_property_text(raw, "water_solubility")
+                self.assertEqual(parsed["normalized_value"], expected)
+                self.assertEqual(parsed["unit"], "mg/L")
+
+        for raw in ("1.2e mg/L", "1.2e- mg/L", "value e-3 mg/L"):
+            with self.subTest(raw=raw):
+                parsed = parse_pubchem_property_text(raw, "water_solubility")
+                self.assertIsNone(parsed["normalized_value"])
+                self.assertEqual(parsed["unit"], "")
+
+    def test_rejects_ambiguous_multiple_range_and_alternative_values(self):
+        cases = [
+            ("93.2 mm Hg at 25 °C and 100 mm Hg at 30 °C", "vapor_pressure"),
+            ("70-80 °C", "boiling_point"),
+            ("93.2 mm Hg or 100 mm Hg", "vapor_pressure"),
+        ]
+        for raw, property_key in cases:
+            with self.subTest(raw=raw):
+                parsed = parse_pubchem_property_text(raw, property_key)
+                self.assertIsNone(parsed["normalized_value"])
+                self.assertEqual(parsed["unit"], "")
+                self.assertEqual(parsed["temperature"], "")
+                self.assertEqual(parsed["pressure"], "")
+
+    def test_normalizes_typical_values_for_all_target_property_types(self):
+        cases = [
+            ("boiling_point", "77.1 °C", 77.1, "°C", "", ""),
+            ("vapor_pressure", "93.2 mm Hg at 25 °C", 93.2, "mmHg", "25 °C", ""),
+            ("henrys_law_constant", "1.34E-4 atm-cu m/mole at 25 °C", 1.34e-4, "atm·m³/mol", "25 °C", ""),
+            ("water_solubility", "In water, 8.0E+4 mg/L at 25 °C", 8.0e4, "mg/L", "25 °C", "water"),
+            ("experimental_logp", "Log Kow = 2.3", 2.3, "", "", ""),
+            ("density", "0.9003 g/cm3", 0.9003, "g/cm³", "", ""),
+            ("melting_point", "-20 °C", -20.0, "°C", "", ""),
+            ("physical_state", "Colorless liquid", "liquid", "", "", ""),
+        ]
+        for property_key, raw, value, unit, temperature, medium in cases:
+            with self.subTest(property_key=property_key):
+                parsed = parse_pubchem_property_text(raw, property_key)
+                self.assertEqual(parsed["normalized_value"], value)
+                self.assertEqual(parsed["unit"], unit)
+                self.assertEqual(parsed["temperature"], temperature)
+                self.assertEqual(parsed["medium"], medium)
+
     def test_recognizes_explicit_physical_states_without_replacing_raw_description(self):
         cases = [
             ("A colorless liquid with a fruity odor", "liquid"),
@@ -78,7 +139,7 @@ class PubChemVolatilePropertyParserTests(unittest.TestCase):
                 },
             }
             with self.subTest(raw=raw):
-                parsed = parse_pubchem_property_text(raw)
+                parsed = parse_pubchem_property_text(raw, "physical_state")
                 self.assertEqual(parsed["normalized_value"], state)
                 record = parse_pubchem_volatile_properties(payload, 8857)["properties"]["physical_state"][0]
                 self.assertEqual(record["raw_value"], raw)
@@ -91,8 +152,21 @@ class PubChemVolatilePropertyParserTests(unittest.TestCase):
         ]
         for raw in cases:
             with self.subTest(raw=raw):
-                parsed = parse_pubchem_property_text(raw)
+                parsed = parse_pubchem_property_text(raw, "physical_state")
                 self.assertIsNone(parsed["normalized_value"])
+
+    def test_physical_state_deduplicates_repetitions_and_scopes_negation(self):
+        cases = [
+            ("colorless liquid with no characteristic odor", "liquid"),
+            ("liquid; remains liquid at room temperature", "liquid"),
+            ("not a liquid", None),
+        ]
+        for raw, expected in cases:
+            with self.subTest(raw=raw):
+                parsed = parse_pubchem_property_text(raw, "physical_state")
+                self.assertEqual(parsed["normalized_value"], expected)
+
+        self.assertIsNone(parse_pubchem_property_text("Colorless liquid")["normalized_value"])
 
     def test_parses_nested_experimental_properties_and_references(self):
         payload = {

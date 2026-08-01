@@ -181,13 +181,25 @@ PUBCHEM_VOLATILE_PROPERTY_HEADINGS = {
 PUBCHEM_PROPERTY_UNIT_ALIASES = {
     "mm hg": "mmHg",
     "mmhg": "mmHg",
+    "atm": "atm",
     "atm-cu m/mole": "atm·m³/mol",
     "mg/l": "mg/L",
+    "g/cm3": "g/cm³",
+    "g/cm³": "g/cm³",
     "°c": "°C",
 }
 
+PUBCHEM_PROPERTY_PRIMARY_UNITS = {
+    "boiling_point": {"°C"},
+    "vapor_pressure": {"mmHg", "atm"},
+    "henrys_law_constant": {"atm·m³/mol"},
+    "water_solubility": {"mg/L"},
+    "density": {"g/cm³"},
+    "melting_point": {"°C"},
+}
 
-def parse_pubchem_property_text(raw_value: str) -> dict:
+
+def parse_pubchem_property_text(raw_value: str, property_key: str = "") -> dict:
     """Conservatively extract explicit PubChem property values and conditions."""
     result = {
         "raw_value": raw_value,
@@ -199,49 +211,98 @@ def parse_pubchem_property_text(raw_value: str) -> dict:
     }
     text = str(raw_value)
 
-    state_matches = re.findall(r"\b(liquid|solid|gas)\b", text, re.I)
-    has_state_negation = re.search(r"\b(?:not|no|without)\b|\bnon[- ]", text, re.I)
-    if len(state_matches) == 1 and not has_state_negation:
-        result["normalized_value"] = state_matches[0].lower()
+    if property_key == "physical_state":
+        states = {state.lower() for state in re.findall(r"\b(liquid|solid|gas)\b", text, re.I)}
+        negated_state = re.search(
+            r"\b(?:not|no|without)\s+(?:an?\s+)?(?:liquid|solid|gas)\b|\bnon[- ](?:liquid|solid|gas)\b",
+            text,
+            re.I,
+        )
+        if len(states) == 1 and not negated_state:
+            result["normalized_value"] = next(iter(states))
         return result
-    if state_matches:
-        return result
-
-    temperature = re.search(r"(-?\d+(?:\.\d+)?)\s*°\s*C\b", text, re.I)
-    if temperature:
-        result["temperature"] = f"{temperature.group(1)} °C"
 
     medium = re.search(r"\b(?:in|soluble in)\s+(water)\b", text, re.I)
     if medium:
         result["medium"] = medium.group(1).lower()
 
-    number_pattern = r"[+-]?\d+(?:\.\d+)?(?:\s*[x×]\s*10[+-]?\d+)?"
-    aliases = sorted(PUBCHEM_PROPERTY_UNIT_ALIASES, key=len, reverse=True)
-    unit_pattern = "|".join(re.escape(alias) for alias in aliases if alias != "°c")
-    value_match = re.search(
-        rf"(?P<number>{number_pattern})\s*(?P<unit>{unit_pattern})(?![A-Za-z])",
+    number_pattern = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:(?:[eE][+-]?\d+)|(?:\s*[x×]\s*10[+-]?\d+))?"
+    malformed_exponent = re.search(r"\d(?:\.\d+)?[eE](?:[+-](?!\d)|(?![+\-\d]))", text)
+    numeric_range = re.search(
+        r"(?<![x×X])\b\d+(?:\.\d+)?\s*[-–—]\s*\d+(?:\.\d+)?\b",
         text,
-        re.I,
     )
-    if not value_match:
+    if malformed_exponent or numeric_range:
+        result["medium"] = ""
         return result
 
-    normalized_number = re.sub(r"\s*[x×]\s*10", "e", value_match.group("number"), flags=re.I)
+    aliases = sorted(PUBCHEM_PROPERTY_UNIT_ALIASES, key=len, reverse=True)
+    unit_pattern = "|".join(re.escape(alias) for alias in aliases)
+    value_pattern = re.compile(
+        rf"(?<![\w.+-])(?P<number>{number_pattern})\s*(?P<unit>{unit_pattern})(?![A-Za-z0-9])",
+        re.I,
+    )
+    candidates = [
+        {
+            "number": match.group("number"),
+            "unit": PUBCHEM_PROPERTY_UNIT_ALIASES[match.group("unit").lower()],
+        }
+        for match in value_pattern.finditer(text)
+    ]
+
+    if property_key == "experimental_logp":
+        logp_matches = re.findall(
+            rf"\bLog\s+(?:Kow|P)\s*=\s*(?P<number>{number_pattern})(?![\w.+-])",
+            text,
+            re.I,
+        )
+        if len(logp_matches) != 1:
+            result["medium"] = ""
+            return result
+        result["normalized_value"] = float(
+            re.sub(r"\s*[x×]\s*10", "e", logp_matches[0], flags=re.I)
+        )
+        return result
+
+    expected_units = PUBCHEM_PROPERTY_PRIMARY_UNITS.get(property_key)
+    if expected_units is None:
+        non_temperature = [candidate for candidate in candidates if candidate["unit"] != "°C"]
+        primary_candidates = non_temperature or candidates
+    else:
+        primary_candidates = [candidate for candidate in candidates if candidate["unit"] in expected_units]
+
+    temperatures = [candidate for candidate in candidates if candidate["unit"] == "°C"]
+    pressures = [candidate for candidate in candidates if candidate["unit"] in {"mmHg", "atm"}]
+    if len(primary_candidates) != 1 or len(temperatures) > 1 or (
+        property_key not in {"vapor_pressure"} and len(pressures) > 1
+    ):
+        result["medium"] = ""
+        return result
+
+    primary = primary_candidates[0]
+    normalized_number = re.sub(r"\s*[x×]\s*10", "e", primary["number"], flags=re.I)
     try:
         result["normalized_value"] = float(normalized_number)
     except ValueError:
+        result["medium"] = ""
         return result
-    result["unit"] = PUBCHEM_PROPERTY_UNIT_ALIASES[value_match.group("unit").lower()]
+    result["unit"] = primary["unit"]
 
-    pressure_condition = re.search(
-        rf"\bat\s+({number_pattern})\s*(mm\s*hg|mmhg|atm)\b",
-        text,
-        re.I,
-    )
-    if pressure_condition:
-        pressure_unit = pressure_condition.group(2).lower().replace(" ", "")
-        pressure_unit = "mmHg" if pressure_unit == "mmhg" else "atm"
-        result["pressure"] = f"{pressure_condition.group(1)} {pressure_unit}"
+    if primary["unit"] != "°C" and len(temperatures) == 1:
+        result["temperature"] = f"{temperatures[0]['number']} °C"
+    pressure_conditions = [candidate for candidate in pressures if candidate is not primary]
+    if len(pressure_conditions) > 1:
+        return {
+            **result,
+            "normalized_value": None,
+            "unit": "",
+            "temperature": "",
+            "pressure": "",
+            "medium": "",
+        }
+    if pressure_conditions:
+        pressure = pressure_conditions[0]
+        result["pressure"] = f"{pressure['number']} {pressure['unit']}"
     return result
 
 
@@ -257,7 +318,7 @@ def _pubchem_information_strings(information: dict) -> list[str]:
     return strings
 
 
-def _parse_pubchem_volatile_record(information: dict, references: dict) -> list[dict]:
+def _parse_pubchem_volatile_record(information: dict, references: dict, property_key: str) -> list[dict]:
     reference_number = information.get("ReferenceNumber")
     reference = references.get(reference_number, {})
     records = []
@@ -267,7 +328,7 @@ def _parse_pubchem_volatile_record(information: dict, references: dict) -> list[
             "reference_number": reference_number,
             "source": reference.get("SourceName", ""),
         }
-        record.update(parse_pubchem_property_text(raw_value))
+        record.update(parse_pubchem_property_text(raw_value, property_key))
         if reference.get("URL"):
             record["source_url"] = reference["URL"]
         records.append(record)
@@ -300,7 +361,7 @@ def parse_pubchem_volatile_properties(payload: dict, cid: int | str) -> dict:
             if property_key:
                 parsed = []
                 for information in section.get("Information", []):
-                    parsed.extend(_parse_pubchem_volatile_record(information, references))
+                    parsed.extend(_parse_pubchem_volatile_record(information, references, property_key))
                 properties[property_key].extend(parsed)
             parse_property_sections(section.get("Section", []))
 
