@@ -7,6 +7,7 @@ import re
 import socket
 import threading
 import time
+import tempfile
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -21,6 +22,7 @@ BASE_URL = "https://www.femaflavor.org"
 PUBCHEM_BASE_URL = "https://pubchem.ncbi.nlm.nih.gov"
 FLAVORDB_BASE_URL = "https://cosylab.iiitd.edu.in/flavordb"
 CACHE_PATH = Path(__file__).resolve().with_name("fema_flavor_cache.json")
+_CACHE_PERSIST_LOCK = threading.RLock()
 
 
 def load_cache() -> dict[str, dict]:
@@ -33,7 +35,26 @@ def load_cache() -> dict[str, dict]:
 
 
 def save_cache(cache: dict[str, dict]) -> None:
-    CACHE_PATH.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary_path = None
+    with _CACHE_PERSIST_LOCK:
+        snapshot = dict(cache)
+        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=CACHE_PATH.parent,
+            prefix=f".{CACHE_PATH.name}.",
+            suffix=".tmp",
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+                json.dump(snapshot, handle, ensure_ascii=False, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, CACHE_PATH)
+            temporary_path = None
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
 
 
 def fetch_text(url: str) -> str:
@@ -483,7 +504,12 @@ def _get_pubchem_volatile_cached(cache: dict, cid: int | str) -> tuple[dict, boo
             return cached_result, True
         flight = _PUBCHEM_VOLATILE_FLIGHTS.get(canonical_cid)
         if flight is None:
-            flight = {"event": threading.Event(), "result": None, "error": None}
+            flight = {
+                "event": threading.Event(),
+                "result": None,
+                "error": None,
+                "persisted": False,
+            }
             _PUBCHEM_VOLATILE_FLIGHTS[canonical_cid] = flight
             leader = True
         else:
@@ -493,14 +519,24 @@ def _get_pubchem_volatile_cached(cache: dict, cid: int | str) -> tuple[dict, boo
         flight["event"].wait()
         if flight["error"] is not None:
             raise flight["error"]
-        return flight["result"], True
+        return flight["result"], flight["persisted"]
 
     try:
         result = query_pubchem_volatile_properties(canonical_cid)
         flight["result"] = result
         if result["status"] in {"ok", "no_data"}:
-            cache[cache_key] = result
-            save_cache(cache)
+            with _CACHE_PERSIST_LOCK:
+                previous = cache.get(cache_key)
+                cache[cache_key] = result
+                try:
+                    save_cache(cache)
+                except OSError:
+                    if previous is None:
+                        cache.pop(cache_key, None)
+                    else:
+                        cache[cache_key] = previous
+                else:
+                    flight["persisted"] = True
         return result, False
     except BaseException as exc:
         flight["error"] = exc

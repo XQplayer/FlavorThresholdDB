@@ -1,6 +1,7 @@
 import io
 import json
 import socket
+import tempfile
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -511,6 +512,79 @@ class PubChemVolatilePropertyHandlerTests(unittest.TestCase):
             result, cached = fema_proxy_server._get_pubchem_volatile_cached(Handler.cache, "8857")
         self.assertEqual(result["status"], "no_data")
         self.assertFalse(cached)
+
+    def test_concurrent_different_cids_preserve_both_cache_entries_on_disk(self):
+        cache = {}
+
+        def result_for(cid):
+            return {
+                **fema_proxy_server._empty_pubchem_volatile(cid, "no_data"),
+                "retrieved_at": "2026-08-02T00:00:00Z",
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            cache_path = fema_proxy_server.Path(directory) / "cache.json"
+            with (
+                patch.object(fema_proxy_server, "CACHE_PATH", cache_path),
+                patch.object(fema_proxy_server, "query_pubchem_volatile_properties", side_effect=result_for),
+                ThreadPoolExecutor(max_workers=2) as pool,
+            ):
+                futures = [
+                    pool.submit(fema_proxy_server._get_pubchem_volatile_cached, cache, cid)
+                    for cid in ("8857", "176")
+                ]
+                results = [future.result(timeout=2) for future in futures]
+
+            persisted = json.loads(cache_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(set(cache), {"pubchem-volatile:8857", "pubchem-volatile:176"})
+        self.assertEqual(set(persisted), set(cache))
+        self.assertTrue(all(cached is False for _, cached in results))
+
+    def test_save_failure_rolls_back_cache_and_cleans_flight(self):
+        cache = {}
+        response = {
+            **fema_proxy_server._empty_pubchem_volatile("8857", "no_data"),
+            "retrieved_at": "2026-08-02T00:00:00Z",
+        }
+        with (
+            patch.object(fema_proxy_server, "query_pubchem_volatile_properties", return_value=response) as query,
+            patch.object(fema_proxy_server, "save_cache", side_effect=[OSError("disk full"), None]),
+        ):
+            first, first_cached = fema_proxy_server._get_pubchem_volatile_cached(cache, "8857")
+            self.assertNotIn("pubchem-volatile:8857", cache)
+            second, second_cached = fema_proxy_server._get_pubchem_volatile_cached(cache, "8857")
+
+        self.assertEqual(first["status"], "no_data")
+        self.assertFalse(first_cached)
+        self.assertFalse(second_cached)
+        self.assertEqual(query.call_count, 2)
+        self.assertIn("pubchem-volatile:8857", cache)
+
+    def test_concurrent_transient_followers_are_not_reported_as_cached(self):
+        cache = {}
+        release = threading.Event()
+        started = threading.Event()
+        response = fema_proxy_server._empty_pubchem_volatile("8857", "upstream_unavailable")
+
+        def slow_query(_cid):
+            started.set()
+            release.wait(timeout=2)
+            return response
+
+        with (
+            patch.object(fema_proxy_server, "query_pubchem_volatile_properties", side_effect=slow_query) as query,
+            ThreadPoolExecutor(max_workers=2) as pool,
+        ):
+            first = pool.submit(fema_proxy_server._get_pubchem_volatile_cached, cache, "8857")
+            started.wait(timeout=1)
+            second = pool.submit(fema_proxy_server._get_pubchem_volatile_cached, cache, "0008857")
+            release.set()
+            results = [first.result(timeout=2), second.result(timeout=2)]
+
+        self.assertEqual(query.call_count, 1)
+        self.assertTrue(all(cached is False for _, cached in results))
+        self.assertNotIn("pubchem-volatile:8857", cache)
 
 
 if __name__ == "__main__":
