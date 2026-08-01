@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import './App.css';
 import SearchInsights from './components/SearchInsights';
 import PubChemStructureViewer from './components/PubChemStructureViewer';
+import PubChemVolatileProperties from './components/PubChemVolatileProperties';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
 import {
@@ -487,7 +488,19 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
           compoundProfilesRef.current[cas] = profile;
           setCompoundProfiles(prev => ({ ...prev, [cas]: profile }));
         } catch (error) {
-          const failedProfile = { loading: false, error: error.message, pubchem: { found: false }, flavordb: { found: false } };
+          const failedProfile = {
+            loading: false,
+            error: error.message,
+            pubchem: { found: false },
+            pubchem_volatile: {
+              found: false,
+              status: 'upstream_unavailable',
+              properties: {},
+              source: 'PubChem PUG View',
+              url: '',
+            },
+            flavordb: { found: false },
+          };
           compoundProfilesRef.current[cas] = failedProfile;
           setCompoundProfiles(prev => ({
             ...prev,
@@ -1839,6 +1852,12 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
                         )}
                       </section>
                     </div>
+                    {includePubChem && pubchem.found && (
+                      <PubChemVolatileProperties
+                        data={profile.pubchem_volatile}
+                        isEnglish={isEnglish}
+                      />
+                    )}
 
                     <footer className="integrated-source-links">
                       <div><strong>{isEnglish ? 'Sources and original records' : '来源与原始记录'}</strong><span>{isEnglish ? 'Open the source page to verify the record.' : '可跳转原网页核验数据。'}</span></div>

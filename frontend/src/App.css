@@ -4022,5 +4022,224 @@ select:focus-visible,
 
   .integrated-source-links a {
     width: 100%;
+
+.pubchem-volatile {
+  margin: 0 24px 24px;
+  padding: 20px 22px;
+  border: 1px solid rgba(23, 108, 107, 0.14);
+  border-radius: 16px;
+  background: #f7faf8;
+  color: var(--text-primary);
+}
+
+.pubchem-volatile-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.pubchem-volatile-heading h4 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.35;
+}
+
+.pubchem-volatile-heading p {
+  max-width: 620px;
+  margin: 4px 0 0;
+  color: #596c64;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pubchem-volatile-heading > a,
+.pubchem-volatile-source {
+  flex: 0 0 auto;
+  color: var(--source-pubchem-ink);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.pubchem-volatile-heading > a {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.pubchem-volatile-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid rgba(23, 108, 107, 0.12);
+  border-left: 1px solid rgba(23, 108, 107, 0.12);
+}
+
+.pubchem-volatile-property {
+  min-width: 0;
+  padding: 14px;
+  border-right: 1px solid rgba(23, 108, 107, 0.12);
+  border-bottom: 1px solid rgba(23, 108, 107, 0.12);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.pubchem-volatile-property h5 {
+  margin: 0 0 9px;
+  color: #3f5f55;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.pubchem-volatile-record {
+  min-width: 0;
+}
+
+.pubchem-volatile-raw {
+  margin: 0;
+  color: #1f312b;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.pubchem-volatile-conditions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 9px 0 0;
+}
+
+.pubchem-volatile-conditions div {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  max-width: 100%;
+  padding: 4px 7px;
+  border: 1px solid rgba(23, 108, 107, 0.11);
+  border-radius: 7px;
+  background: #edf4f1;
+  font-size: 10px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.pubchem-volatile-conditions dt {
+  color: #63776f;
+  font-weight: 650;
+}
+
+.pubchem-volatile-conditions dd {
+  margin: 0;
+  color: #29473d;
+  font-weight: 750;
+}
+
+.pubchem-volatile-reference {
+  margin: 9px 0 0;
+  color: #62746d;
+  font-size: 10.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.pubchem-volatile-reference a {
+  color: var(--source-pubchem-ink);
+  font-weight: 700;
+  text-underline-offset: 2px;
+}
+
+.pubchem-volatile-property details {
+  margin-top: 8px;
+  border-top: 1px solid rgba(23, 108, 107, 0.1);
+}
+
+.pubchem-volatile-property summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  color: #43675b;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 750;
+  list-style-position: inside;
+}
+
+.pubchem-volatile-additional {
+  display: grid;
+  gap: 10px;
+  padding: 0 0 10px;
+}
+
+.pubchem-volatile-additional .pubchem-volatile-record {
+  padding-top: 10px;
+  border-top: 1px solid rgba(23, 108, 107, 0.09);
+}
+
+.pubchem-volatile-loading,
+.pubchem-volatile-state {
+  min-height: 54px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid rgba(23, 108, 107, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #566b63;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pubchem-volatile-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pubchem-volatile-loading > span:first-child {
+  width: 70px;
+  height: 12px;
+  border-radius: 6px;
+  background: #dce9e4;
+}
+
+.pubchem-volatile-state.upstream_unavailable,
+.pubchem-volatile-state.invalid_response,
+.pubchem-volatile-state.invalid_cid {
+  border-color: rgba(160, 108, 34, 0.18);
+  background: #fbf8f1;
+  color: #73592f;
+}
+
+.pubchem-volatile a:focus-visible,
+.pubchem-volatile summary:focus-visible {
+  border-radius: 4px;
+  outline: 3px solid rgba(23, 108, 107, 0.25);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1120px) {
+  .pubchem-volatile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .pubchem-volatile {
+    margin: 0 14px 18px;
+    padding: 16px;
+  }
+
+  .pubchem-volatile-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .pubchem-volatile-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
   }
 }
