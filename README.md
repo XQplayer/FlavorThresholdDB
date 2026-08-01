@@ -51,6 +51,8 @@ https://flavorthresholddb-api.onrender.com
 
 The repository variable `FEMA_API_URL` points to that service. The same API supplies the frontend with FEMA, PubChem, and FlavorDB results through `/fema`, `/compound`, `/pubchem`, and `/flavordb`.
 
+`/pubchem-volatile?cid=<CID>` retrieves eight source-attributed PubChem PUG View Experimental Properties groups, with upstream failures isolated from other data sources. The integrated `/compound` response includes the same evidence under `pubchem_volatile`.
+
 When deploying a fork, create a new Render service with the included Blueprint and set the fork's GitHub Actions variable `FEMA_API_URL` to the generated HTTPS URL:
 
 [Deploy the API to Render](https://render.com/deploy?repo=https://github.com/XQplayer/FlavorThresholdDB)
