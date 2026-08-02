@@ -4642,3 +4642,50 @@ select:focus-visible,
 .biochemical-proteins a { display: flex; flex-direction: column; padding: .6rem; border-radius: 8px; background: #f4f7fa; }
 .biochemical-relationships > footer { margin-top: .75rem; padding-top: .65rem; border-top: 1px solid #dfe8e4; color: #68756f; font-size: .78rem; }
 @media (max-width: 720px) { .biochemical-graph { grid-template-columns: 1fr; } .biochemical-relationships { margin-inline: .75rem; } }
+
+.biological-context { margin: 1rem 1.5rem; padding: 1rem; border: 1px solid #d8e0ec; border-radius: 16px; background: linear-gradient(135deg, #f8faff, #fbfcf9); color: #27354a; }
+.biological-context > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.biological-context > header span { color: #63718a; font-size: .72rem; letter-spacing: .08em; }
+.biological-context h4 { margin: .2rem 0 .75rem; font-size: 1rem; }
+.biological-context-counts { color: #53627a; font-size: .78rem; white-space: nowrap; }
+.biological-context-sources, .biological-context-links { display: flex; flex-wrap: wrap; gap: .45rem; margin-bottom: .8rem; }
+.biological-context-sources span, .biological-context-links a { display: inline-flex; align-items: center; gap: .35rem; padding: .35rem .55rem; border: 1px solid #d8e0ec; border-radius: 999px; background: #fff; color: #53627a; font-size: .76rem; text-decoration: none; }
+.biological-context-sources span[data-status="ok"] { border-color: #b9d8c8; background: #eef8f2; color: #315f49; }
+.biological-context-sources span[data-status="partial_failure"], .biological-context-sources span[data-status="upstream_unavailable"] { border-color: #e5cf9d; background: #fff8e8; color: #735b25; }
+.biological-context-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; }
+.biological-context-grid article { min-width: 0; max-height: 16rem; overflow: auto; padding: .75rem; border: 1px solid #e1e6ee; border-radius: 12px; background: rgba(255,255,255,.86); }
+.biological-context-grid h5 { display: flex; justify-content: space-between; margin: 0 0 .55rem; font-size: .82rem; }
+.biological-context-grid h5 small { color: #738096; font-weight: 500; }
+.biological-context-grid article > a { display: flex; flex-direction: column; gap: .1rem; margin-top: .4rem; padding: .55rem; border-radius: 8px; background: #f4f7fb; color: #315d8e; text-decoration: none; overflow-wrap: anywhere; }
+.biological-context-grid article > a span, .biological-context-grid article > a small { color: #66758a; font-size: .72rem; }
+.biological-context-links { margin-top: .8rem; }
+.biological-context > footer { margin-top: .75rem; padding-top: .65rem; border-top: 1px solid #dfe5ed; color: #68758a; font-size: .78rem; }
+@media (max-width: 820px) { .biological-context-grid { grid-template-columns: 1fr; } .biological-context { margin-inline: .75rem; } .biological-context > header { flex-direction: column; } }
+
+.bioactivity-evidence { margin: 1rem 1.5rem; padding: 1rem; border: 1px solid #e1dcea; border-radius: 16px; background: linear-gradient(135deg, #fcfaff, #fafcfd); color: #27354a; }
+.bioactivity-evidence > header span { color: #766682; font-size: .72rem; letter-spacing: .08em; }
+.bioactivity-evidence h4 { margin: .2rem 0 .75rem; font-size: 1rem; }
+.bioactivity-tabs { display: flex; flex-wrap: wrap; gap: .45rem; }
+.bioactivity-tabs button { display: inline-flex; align-items: center; gap: .45rem; padding: .45rem .65rem; border: 1px solid #ddd7e6; border-radius: 999px; background: #fff; color: #5d5268; cursor: pointer; }
+.bioactivity-tabs button[aria-selected="true"] { border-color: #8b75a1; background: #f1ebf7; color: #49365c; }
+.bioactivity-tabs button span { min-width: 1.4rem; padding: .08rem .28rem; border-radius: 999px; background: rgba(73,54,92,.09); font-size: .7rem; text-align: center; }
+.bioactivity-records { display: grid; gap: .45rem; max-height: 18rem; margin-top: .75rem; overflow: auto; }
+.bioactivity-records > a { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: .25rem .75rem; padding: .65rem .75rem; border: 1px solid #e7e2ec; border-radius: 9px; background: #fff; color: #365f89; text-decoration: none; overflow-wrap: anywhere; }
+.bioactivity-records > a span, .bioactivity-records > a small { color: #6c7380; font-size: .74rem; }
+.bioactivity-records > a small { grid-column: 1 / -1; }
+.bioactivity-source-note { min-height: 1.2rem; margin-top: .6rem; color: #746b7c; font-size: .76rem; }
+.bioactivity-evidence > footer { margin-top: .75rem; padding-top: .65rem; border-top: 1px solid #e4e0e8; color: #746c7b; font-size: .78rem; }
+@media (max-width: 760px) { .bioactivity-evidence { margin-inline: .75rem; } .bioactivity-records > a { grid-template-columns: 1fr; } .bioactivity-records > a small { grid-column: auto; } }
+
+.structure-evidence { margin: 1rem 1.5rem; padding: 1rem; border: 1px solid #d9e4e7; border-radius: 16px; background: linear-gradient(135deg, #f8fcfc, #fbfbfd); color: #27354a; }
+.structure-evidence > header { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.structure-evidence > header span { color: #5e7377; font-size: .72rem; letter-spacing: .08em; }
+.structure-evidence > header b { color: #50666b; font-size: .76rem; }
+.structure-evidence h4 { margin: .2rem 0 .75rem; font-size: 1rem; }
+.structure-evidence-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: .7rem; }
+.structure-evidence-grid article { max-height: 17rem; overflow: auto; padding: .75rem; border: 1px solid #e0e8ea; border-radius: 12px; background: #fff; }
+.structure-evidence-grid h5 { margin: 0 0 .55rem; font-size: .82rem; }
+.structure-evidence-grid a { display: flex; flex-direction: column; gap: .1rem; margin-top: .4rem; padding: .55rem; border-radius: 8px; background: #f2f7f8; color: #315d8e; text-decoration: none; overflow-wrap: anywhere; }
+.structure-evidence-grid a span, .structure-evidence-grid a small { color: #66777b; font-size: .72rem; }
+.structure-evidence > footer { margin-top: .75rem; padding-top: .65rem; border-top: 1px solid #dfe7e9; color: #68787c; font-size: .78rem; }
+@media (max-width: 820px) { .structure-evidence { margin-inline: .75rem; } .structure-evidence-grid { grid-template-columns: 1fr; } .structure-evidence > header { flex-direction: column; } }

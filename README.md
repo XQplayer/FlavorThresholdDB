@@ -4,9 +4,9 @@
 
 FlavorThresholdDB is a bilingual research database for traceable odor-threshold and flavor-descriptor retrieval. It supports exact and fuzzy searches by CAS number, Chinese name, or English name, plus batch matching and filter-aware CSV export.
 
-## Version 1.4.0 candidate
+## Version 1.5.0 candidate
 
-The current `codex/pubchem-volatile-properties` branch is the v1.4.0 release candidate. It adds FlavorDB2 food-source relationships, eight source-attributed PubChem PUG View experimental-property groups, MassBank/GNPS open spectra, NIST original-page availability, and an identity-safe ChEBI–Rhea–UniProt evidence layer.
+The current `codex/pubchem-volatile-properties` branch is the v1.5.0 release candidate. In addition to the v1.4.0 FlavorDB2, PubChem property, open-spectrum, NIST, and ChEBI–Rhea–UniProt layers, it adds evidence-bound genes and taxonomy, MetaboLights studies, bioactivity and target records, and experimental-versus-predicted protein structures.
 
 Open-spectrum records retain source identity and license status. Peak downloads and comparison exports are enabled only for reviewed redistributable licenses. The large GNPS metadata index is distributed as a verified GitHub Release asset rather than committed to Git.
 
@@ -43,6 +43,12 @@ This release expands FlavorThresholdDB from a threshold lookup interface into a 
 - FEMA Flavor Ingredient Library
 - PubChem PUG REST
 - FlavorDB2
+- MassBank Europe and GNPS/GNPS2
+- NIST Chemistry WebBook links
+- ChEBI, Rhea, UniProt, NCBI Gene, and NCBI Taxonomy
+- MetaboLights, BRENDA links, and HMDB link-only search
+- PubChem BioAssay, ChEMBL, BindingDB, and GtoPdb
+- RCSB PDB, AlphaFold DB, and GPCRdb
 
 The interface preserves the original source, measurement medium, threshold type, value, and unit where available. Linked source pages are provided for verification.
 
@@ -58,7 +64,7 @@ The public external-data API is already deployed at:
 https://flavorthresholddb-api.onrender.com
 ```
 
-The repository variable `FEMA_API_URL` points to that service. The same API supplies the frontend with FEMA, PubChem, and FlavorDB2 results through `/fema`, `/compound`, `/pubchem`, `/flavordb`, and `/flavordb2/*`.
+The repository variable `FEMA_API_URL` points to that service. The same API supplies the frontend with identity, properties, flavor, spectra, biochemical, biological-context, bioactivity, and structure evidence.
 
 `/pubchem-volatile?cid=<CID>` retrieves eight source-attributed PubChem PUG View Experimental Properties groups, with upstream failures isolated from other data sources. The integrated `/compound` response includes the same evidence under `pubchem_volatile`.
 

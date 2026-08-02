@@ -19,6 +19,18 @@ All notable changes to FlavorThresholdDB are recorded here. Versions follow
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-02
+
+### Added
+
+- Added evidence-bound NCBI Gene and NCBI Taxonomy records derived only from verified ChEBI–Rhea–UniProt protein relationships.
+- Added public MetaboLights study discovery with stable study accessions and original-record links.
+- Added BRENDA EC-number links and an HMDB link-only integration that explicitly preserves redistribution restrictions.
+- Added a responsive biological-context card with per-source failure isolation, bounded lists, and desktop/mobile E2E coverage.
+- Added exact-identity PubChem BioAssay and ChEMBL activity records, plus identity-gated GtoPdb and exact-structure BindingDB searches.
+- Added a source-tabbed, bounded bioactivity evidence card with assay identifiers, target links, measurement context, and causal-interpretation warnings.
+- Added UniProt-linked RCSB PDB experimental structures, AlphaFold DB predicted models, and exact-accession GPCRdb records with explicit evidence-type separation.
+
 ## [1.4.0] - 2026-08-02
 
 - Added project history and maintainership documentation.
@@ -60,7 +72,8 @@ All notable changes to FlavorThresholdDB are recorded here. Versions follow
 - Unified the public home, navigation, and search workbench design.
 - Added bilingual UI, responsive behavior, metadata, and route fallback.
 
-[Unreleased]: https://github.com/XQplayer/FlavorThresholdDB/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/XQplayer/FlavorThresholdDB/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/XQplayer/FlavorThresholdDB/releases/tag/v1.5.0
 [1.4.0]: https://github.com/XQplayer/FlavorThresholdDB/releases/tag/v1.4.0
 [1.3.1]: https://github.com/XQplayer/FlavorThresholdDB/releases/tag/v1.3.1
 [1.3.0]: https://github.com/XQplayer/FlavorThresholdDB/releases/tag/v1.3.0

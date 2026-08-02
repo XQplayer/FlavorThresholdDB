@@ -16,6 +16,12 @@ UI and exports.
 | FlavorDB2 | Flavor descriptors, natural sources, food entities, and food–compound relationships | Preserve source attribution, entity and molecule links, and the license information returned by the integration. Treat “contains” as a reported database relationship, not quantitative concentration evidence. |
 | MassBank Europe | Open EI and tandem reference spectra, peak tables, and experimental metadata | Preserve accession, source URL, record license, retrieval time, identity evidence, and experimental conditions. |
 | GNPS / GNPS2 | Public library metadata, SpectrumID/USI lookup, and tandem peak tables | Preserve library and spectrum identifiers, source URL, instrument/adduct/collision metadata, and record-level license status. Imported third-party libraries remain license-review gated. |
+| NCBI Gene and Taxonomy | Gene summaries and organism classification | Query only identifiers supported by reviewed UniProt evidence; retain GeneID, TaxID, accession lineage, and source links. |
+| MetaboLights | Public metabolomics-study discovery | Preserve MTBLS accession and original study link. A text hit is study context, not evidence of compound identity or concentration. |
+| BRENDA and HMDB | Enzyme and metabolite context | BRENDA is linked by evidence-backed EC number. HMDB remains link-only because redistribution rights require separate review. |
+| PubChem BioAssay and ChEMBL | Assay-level activity and target measurements | Preserve AID/activity ID, assay, target, outcome or measurement, units, and original record. Do not infer physiological or sensory causality. |
+| BindingDB and GtoPdb | Binding and pharmacology interactions | BindingDB uses structure similarity 1.0 only; GtoPdb resolves an exact ligand before requesting interactions. Preserve license and matching mode. |
+| RCSB PDB, AlphaFold DB, and GPCRdb | Protein structure and receptor context | Start from verified UniProt accessions. Label PDB records experimental and AlphaFold models predicted; never present a prediction as an experimental complex. |
 
 ## Open spectra integration boundary
 

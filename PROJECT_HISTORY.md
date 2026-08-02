@@ -238,10 +238,10 @@ pnpm run build
 
 ## 11. 当前稳定版本
 
-- 当前正式版本：`v1.3.1`；当前候选版本：`v1.4.0`；
+- 当前正式版本：`v1.4.0`；当前候选版本：`v1.5.0`；
 - 当前主分支：`main`；
 - 当前版本标签提交：`5af7619`；
-- 当前主分支提交：`00131bd`；
+- 当前主分支提交：`f0fadfb`；
 - 本地主仓库：`E:\codex\Projects\FlavorThresholdDB`；
 - 本地发布候选：`E:\codex\Projects\FlavorThresholdDB\_local\release-candidates`；
 - 本地源码备份：`E:\codex\Projects\FlavorThresholdDB\_local\backups`。
@@ -296,3 +296,26 @@ pnpm run build
 - 新增 ChEBI → Rhea → UniProt 关系链：只对结构/CAS 已核验实体自动展开，名称候选会停止扩展；
 - 生化关系卡片保留 ChEBI、Rhea、UniProt 原始记录链接，并明确不得将数据库关联解释为食材存在、微生物来源或风味形成因果；
 - 本阶段仍需在正式发布前完成完整 Python/前端/E2E 回归，并在外部发布 GNPS 索引资产后写入稳定的轻量清单 URL。
+
+## 15. 基因、物种与代谢组研究上下文（2026-08-02）
+
+- 新增 NCBI Gene 与 NCBI Taxonomy 公共接口；仅沿已核验的 ChEBI → Rhea → UniProt 蛋白证据继续查询基因和物种，不按化合物名称臆测关联；
+- 新增 MetaboLights 公共研究检索，保留 MTBLS 稳定编号、原始研究链接、命中总数与最多 10 条预览；
+- BRENDA 根据已核验蛋白中的 EC 编号提供原站记录链接；HMDB 因再分发许可边界采用仅链接模式，不抓取或缓存其受限数据；
+- 新增 `/biological-context/resolve` 聚合接口和前端“基因、物种与代谢组研究”卡片，分别显示各来源状态并隔离上游失败；
+- 乙酸乙酯真实网络验证返回 3 个 NCBI Gene 记录、14 个物种分类、78 项 MetaboLights 命中（展示前 10 项）、2 个 BRENDA EC 链接；相关后端契约测试、60 项前端测试、ESLint、生产构建和桌面/移动端 E2E 均通过。
+
+## 16. 生物活性与靶点证据（2026-08-02）
+
+- 新增 PubChem BioAssay、ChEMBL、GtoPdb 与 BindingDB 聚合接口；各来源独立返回状态和原始记录链接；
+- PubChem BioAssay 按 CID 查询并保留 AID、活性结果、靶点、实验名称和 PubMed 标识；ChEMBL 必须先通过完整 InChIKey 精确匹配 molecule，再查询 activity；
+- GtoPdb 禁止直接使用会忽略 InChIKey 条件的全局 interactions 接口，必须先解析精确 ligand ID；BindingDB 仅允许结构相似度 1.0 的查询；
+- 前端新增分来源切换、长列表滚动和精确匹配说明，明确体外数据库活性不能直接解释为生理效应、香气感知或因果；
+- 乙酸乙酯实测返回 PubChem BioAssay 606 条（页面保留前 100 条）和 ChEMBL 41 条；GtoPdb、BindingDB 精确检索均为无记录，不以相似化合物填充。
+
+## 17. 蛋白结构证据（2026-08-02）
+
+- 新增 RCSB PDB、AlphaFold DB 与 GPCRdb 结构证据接口，输入严格来自 ChEBI → Rhea → UniProt 链中的 accession；
+- RCSB PDB 记录标为实验结构并链接结构页与 mmCIF 下载；AlphaFold DB 标为预测模型并保留版本及 global pLDDT；GPCRdb 必须精确匹配 UniProt accession；
+- 前端将实验结构、预测模型和 GPCR 受体分栏显示，明确 AlphaFold 模型不是实验性配体—蛋白复合物证据；
+- 乙酸乙酯实测得到 2 个 RCSB PDB 实验结构、14 个 AlphaFold 预测模型和 0 个精确 GPCRdb 记录；三来源并发查询并按来源 TTL 缓存。

@@ -32,8 +32,33 @@ const biochemicalFixture = {
   retrieved_at: '2026-08-02T00:00:00Z',
 };
 
+const biologicalContextFixture = {
+  genes: [{ gene_id: '559295', symbol: 'ATF2', description: 'alcohol acetyltransferase', taxon_id: 4932, organism: 'Saccharomyces cerevisiae', source_url: 'https://www.ncbi.nlm.nih.gov/gene/559295', evidence: { uniprot_accession: 'P12345' } }],
+  taxa: [{ taxon_id: 4932, scientific_name: 'Saccharomyces cerevisiae', rank: 'species', source_url: 'https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=4932' }],
+  studies: [{ accession: 'MTBLS1', source_url: 'https://www.ebi.ac.uk/metabolights/MTBLS1' }],
+  study_hit_count: 78,
+  sources: { 'NCBI Gene': { status: 'ok' }, 'NCBI Taxonomy': { status: 'ok' }, MetaboLights: { status: 'ok' } },
+  links: { BRENDA: [{ ec_number: '1.1.1.1', source_url: 'https://www.brenda-enzymes.org/enzyme.php?ecno=1.1.1.1' }], HMDB: { integration_mode: 'link_only', source_url: 'https://www.hmdb.ca/unearth/q?query=141-78-6&searcher=metabolites' } },
+};
+
+const bioactivityFixture = {
+  pubchem_assays: [{ aid: '421', outcome: 'Inactive', assay_name: 'Cell viability assay', source_url: 'https://pubchem.ncbi.nlm.nih.gov/bioassay/421' }],
+  chembl_activities: [{ activity_id: 7, target_name: 'Example target', type: 'IC50', value: '10', units: 'uM', source_url: 'https://www.ebi.ac.uk/chembl/explore/activity/7' }],
+  gtopdb_interactions: [], bindingdb_interactions: [],
+  sources: { 'PubChem BioAssay': { status: 'ok', total: 606 }, ChEMBL: { status: 'ok', total: 41 }, GtoPdb: { status: 'no_data' }, BindingDB: { status: 'no_data', match_mode: 'exact_structure' } },
+};
+
+const structureFixture = {
+  experimental_structures: [{ pdb_id: '1ABC', accession: 'P12345', evidence_type: 'experimental_structure', source_url: 'https://www.rcsb.org/structure/1ABC' }],
+  predicted_models: [{ model_id: 'AF-P12345-F1', accession: 'P12345', evidence_type: 'predicted_structure', global_plddt: 91.2, version: 6, source_url: 'https://alphafold.ebi.ac.uk/entry/AF-P12345-F1' }],
+  gpcr_proteins: [], sources: { 'RCSB PDB': { status: 'ok' }, 'AlphaFold DB': { status: 'ok' }, GPCRdb: { status: 'no_data' } },
+};
+
 async function installBiochemicalFixture(page) {
   await page.route('**/biochemistry/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(biochemicalFixture) }));
+  await page.route('**/biological-context/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(biologicalContextFixture) }));
+  await page.route('**/bioactivity/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bioactivityFixture) }));
+  await page.route('**/structures/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(structureFixture) }));
 }
 
 async function portIsFree(port) {
@@ -232,6 +257,24 @@ async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
   const reaction = biochemicalPanel.locator('details').first();
   await reaction.locator('summary').click();
   await reaction.getByText('P12345', { exact: false }).waitFor();
+  const biologicalPanel = page.locator('.biological-context');
+  await biologicalPanel.getByRole('heading', { name: '基因、物种与代谢组研究' }).waitFor();
+  await biologicalPanel.getByText('ATF2', { exact: true }).waitFor();
+  await biologicalPanel.getByText('MTBLS1', { exact: true }).waitFor();
+  assert.equal(await biologicalPanel.locator('[data-status="ok"]').count(), 3, `${name}: biological source states`);
+  assert.equal(await biologicalPanel.getByText('HMDB · 仅链接检索', { exact: true }).count(), 1, `${name}: HMDB license gate`);
+  const activityPanel = page.locator('.bioactivity-evidence');
+  await activityPanel.getByRole('heading', { name: '生物活性与靶点证据' }).waitFor();
+  await activityPanel.getByText('Cell viability assay', { exact: true }).waitFor();
+  await activityPanel.getByRole('tab', { name: /ChEMBL/ }).click();
+  await activityPanel.getByText('Example target', { exact: true }).waitFor();
+  await activityPanel.getByRole('tab', { name: /BindingDB/ }).click();
+  await activityPanel.getByText('BindingDB 仅采用结构相似度 1.0 的精确检索。', { exact: true }).waitFor();
+  const structurePanel = page.locator('.structure-evidence');
+  await structurePanel.getByRole('heading', { name: '实验与预测蛋白结构' }).waitFor();
+  await structurePanel.getByText('PDB 1ABC', { exact: true }).waitFor();
+  await structurePanel.getByText('AF-P12345-F1', { exact: true }).waitFor();
+  await structurePanel.getByText('PDB 为实验结构档案；AlphaFold 为预测模型，不作为实验性配体—蛋白复合物证据。', { exact: true }).waitFor();
   const panel = page.locator('.pubchem-volatile');
   if (populatedKeys.length) await panel.locator('.pubchem-volatile-property').first().waitFor({ timeout: 30_000 });
   assert.equal(await panel.locator('.pubchem-volatile-property').count(), populatedKeys.length, `${name}: visible section count`);
