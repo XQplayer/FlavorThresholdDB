@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
 from biochemistry_service import resolve_biochemistry
+from biochemistry_cache import BiochemistryCache
 from nist_webbook import PARSER_VERSION as NIST_PARSER_VERSION, query_nist_webbook
 from spectra_gnps import fetch_gnps_spectrum, fetch_gnps_usi, search_gnps_records
 from spectra_massbank import fetch_massbank_record, query_massbank_records
@@ -39,6 +40,9 @@ CACHE_PATH = Path(
 _CACHE_PERSIST_LOCK = threading.RLock()
 OPEN_SPECTRA_CACHE = OpenSpectraCache(
     Path(os.environ.get("OPEN_SPECTRA_CACHE_PATH", PROJECT_ROOT / "_local" / "cache" / "open_spectra_cache.json")).resolve()
+)
+BIOCHEMISTRY_CACHE = BiochemistryCache(
+    Path(os.environ.get("BIOCHEMISTRY_CACHE_PATH", PROJECT_ROOT / "_local" / "cache" / "biochemistry_cache.json")).resolve()
 )
 PUBLIC_SPECTRUM_MANIFEST_PATH = Path(os.environ.get("PUBLIC_SPECTRUM_MANIFEST_PATH", PROJECT_ROOT / "data" / "manifests" / "public_spectrum_index.json")).resolve()
 PUBLIC_SPECTRUM_RUNTIME_DIR = Path(os.environ.get("PUBLIC_SPECTRUM_RUNTIME_DIR", PROJECT_ROOT / "_local" / "indexes" / "public")).resolve()
@@ -1084,7 +1088,7 @@ class Handler(BaseHTTPRequestHandler):
             if not inchikey and not cas and not names:
                 self.send_json(400, {"status": "invalid_query", "error": "inchikey, cas, or name is required"})
                 return
-            result = resolve_biochemistry({"inchikey": inchikey, "cas": cas, "names": names})
+            result = resolve_biochemistry({"inchikey": inchikey, "cas": cas, "names": names}, cache=BIOCHEMISTRY_CACHE)
             status = 502 if all(source.get("status") in {"upstream_unavailable", "invalid_response"} for source in result["sources"].values()) else 200
             self.send_json(status, result)
             return

@@ -3,6 +3,7 @@ import unittest
 from biochemistry_chebi import resolve_chebi
 from biochemistry_rhea import parse_rhea_tsv
 from biochemistry_uniprot import parse_uniprot_results
+from biochemistry_uniprot import query_uniprot
 from biochemistry_service import resolve_biochemistry
 
 
@@ -29,6 +30,37 @@ class BiochemistryAdapterTests(unittest.TestCase):
         result = resolve_biochemistry({"names": ["example"]}, chebi_resolver=chebi, rhea_query=lambda _id: self.fail("Rhea should not run"), uniprot_query=lambda _id: self.fail("UniProt should not run"))
         self.assertEqual(result["sources"]["Rhea"]["status"], "blocked_unverified_identity")
         self.assertEqual(result["reactions"], [])
+
+    def test_uniprot_follows_pagination_and_deduplicates_accessions(self):
+        pages = {
+            "first": ({"results": [{"primaryAccession": "P1"}]}, "second"),
+            "second": ({"results": [{"primaryAccession": "P1"}, {"primaryAccession": "P2"}]}, None),
+        }
+        calls = []
+        def fetch_page(url):
+            calls.append(url)
+            return pages["first" if len(calls) == 1 else "second"]
+        result = query_uniprot("RHEA:10020", fetch_page=fetch_page)
+        self.assertEqual([protein["accession"] for protein in result["proteins"]], ["P1", "P2"])
+        self.assertEqual(len(calls), 2)
+
+    def test_service_reuses_each_source_cache_without_calling_upstreams(self):
+        class Cache:
+            values = {
+                ("ChEBI", "XEKOWRVHYACXOJ-UHFFFAOYSA-N|141-78-6|ethyl acetate"): {"status": "ok", "entity": {"chebi_id": "CHEBI:27750", "identity_match": {"verified": True}}},
+                ("Rhea", "CHEBI:27750"): {"status": "ok", "reactions": [{"rhea_id": "RHEA:1"}]},
+                ("UniProt", "RHEA:1"): {"status": "ok", "proteins": [{"accession": "P1", "rhea_id": "RHEA:1"}]},
+            }
+            def get(self, source, key): return self.values.get((source, key))
+            def set(self, *_args, **_kwargs): self.fail("cache write should not occur")
+        result = resolve_biochemistry(
+            {"inchikey": "XEKOWRVHYACXOJ-UHFFFAOYSA-N", "cas": "141-78-6", "names": ["ethyl acetate"]},
+            chebi_resolver=lambda _target: self.fail("ChEBI should be cached"),
+            rhea_query=lambda _id: self.fail("Rhea should be cached"),
+            uniprot_query=lambda _id: self.fail("UniProt should be cached"),
+            cache=Cache(),
+        )
+        self.assertEqual(result["proteins"][0]["accession"], "P1")
 
 
 if __name__ == "__main__":

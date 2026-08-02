@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -36,16 +37,34 @@ def parse_uniprot_results(payload: dict, rhea_id: str) -> list[dict]:
     return proteins
 
 
-def query_uniprot(rhea_id: str, fetch_json=None) -> dict:
+def _fetch_page(url: str) -> tuple[dict, str | None]:
+    with urlopen(Request(url, headers={"Accept": "application/json", "User-Agent": "FlavorThresholdDB/1.3"}), timeout=25) as response:
+        payload = json.load(response)
+        link = response.headers.get("Link", "")
+    match = re.search(r'<([^>]+)>;\s*rel="next"', link)
+    return payload, match.group(1) if match else None
+
+
+def query_uniprot(rhea_id: str, fetch_json=None, fetch_page=None) -> dict:
     query = f'(cc_catalytic_activity:"{rhea_id.lower()}") AND reviewed:true AND fragment:false'
     url = f"{UNIPROT_URL}?{urlencode({'query': query, 'format': 'json', 'size': 100})}"
     try:
         if fetch_json:
-            payload = fetch_json(url)
+            pages = [(fetch_json(url), None)]
         else:
-            with urlopen(Request(url, headers={"Accept": "application/json", "User-Agent": "FlavorThresholdDB/1.3"}), timeout=25) as response:
-                payload = json.load(response)
+            pages = []
+            next_url = url
+            loader = fetch_page or _fetch_page
+            while next_url:
+                payload, next_url = loader(next_url)
+                pages.append((payload, next_url))
     except Exception as exc:
         return {"status": "upstream_unavailable", "proteins": [], "error": str(exc), "source_url": url}
-    proteins = parse_uniprot_results(payload, rhea_id)
+    proteins = []
+    seen = set()
+    for payload, _next in pages:
+        for protein in parse_uniprot_results(payload, rhea_id):
+            if protein["accession"] and protein["accession"] not in seen:
+                seen.add(protein["accession"])
+                proteins.append(protein)
     return {"status": "ok" if proteins else "no_data", "proteins": proteins, "source_url": url}

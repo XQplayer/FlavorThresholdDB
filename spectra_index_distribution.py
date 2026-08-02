@@ -59,13 +59,13 @@ def find_forbidden_tracked_index_files(paths) -> list[str]:
     return [str(path) for path in paths if forbidden.search(str(path).replace("\\", "/"))]
 
 
-def inspect_public_index(path: Path) -> dict:
+def inspect_public_index(path: Path, *, full: bool = True) -> dict:
     path = Path(path)
     if not path.exists():
         raise ValueError("public spectrum index is missing")
     connection = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
     try:
-        if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+        if full and connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError("public spectrum index failed integrity check")
         metadata = dict(connection.execute("SELECT key, value FROM metadata"))
         if int(metadata.get("schema_version", 0)) != PUBLIC_INDEX_SCHEMA_VERSION:
@@ -94,7 +94,10 @@ def install_public_index(manifest: dict, runtime_dir: Path, *, fetch_to_path=Non
     index_path = runtime_dir / "public_spectrum_index.sqlite"
     old_info = None
     try:
-        old_info = inspect_public_index(index_path)
+        # A candidate receives a full integrity check before atomic install.
+        # Startup reuse only verifies schema/version/counts so a 1 GB index does
+        # not block every proxy restart for minutes.
+        old_info = inspect_public_index(index_path, full=False)
     except (ValueError, OSError, sqlite3.Error):
         pass
     if old_info and old_info["index_version"] == manifest["index_version"] and old_info["spectrum_count"] == manifest["spectrum_count"] and old_info["library_count"] == manifest["library_count"]:
