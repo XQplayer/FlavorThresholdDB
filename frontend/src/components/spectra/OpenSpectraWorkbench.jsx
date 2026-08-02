@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { assignComparisonSlot, isSpectrumDownloadAllowed, spectrumDetailPath } from '../../spectra/spectrumContract';
+import { assignComparisonSlot, filterSpectrumRecords, isSpectrumDownloadAllowed, spectrumDetailPath, spectrumFilterOptions } from '../../spectra/spectrumContract';
 import SpectrumComparison from './SpectrumComparison';
 import SpectrumPeakTable from './SpectrumPeakTable';
 import { buildSinglePeakRows } from '../../spectra/spectrumPresentation';
@@ -26,7 +26,7 @@ export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, co
   const [search, setSearch] = useState({ loading: true, records: [], summary: {}, sources: {} });
   const [selected, setSelected] = useState(null);
   const [details, setDetails] = useState({});
-  const [filter, setFilter] = useState('all');
+  const [filters, setFilters] = useState({ source: 'all', type: 'all', ionMode: 'all', adduct: 'all', instrument: 'all' });
   const [slots, setSlots] = useState({ a: null, b: null });
   const [comparison, setComparison] = useState(null);
   const [tolerance, setTolerance] = useState(0.1);
@@ -49,11 +49,9 @@ export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, co
     return () => controller.abort();
   }, [apiUrl, cas, compoundName, inchikey, smiles]);
 
-  const visibleRecords = useMemo(() => (search.records || []).filter(record => {
-    if (filter === 'all') return true;
-    if (filter === 'ei' || filter === 'ms2') return String(record.spectrum_type).toLowerCase() === filter;
-    return String(record.source).toLowerCase() === filter;
-  }), [filter, search.records]);
+  const visibleRecords = useMemo(() => filterSpectrumRecords(search.records || [], filters), [filters, search.records]);
+  const filterOptions = useMemo(() => spectrumFilterOptions(search.records || []), [search.records]);
+  const updateFilter = (key, value) => setFilters(current => ({ ...current, [key]: value }));
 
   async function loadDetail(record) {
     const key = `${record.source}:${record.spectrum_id}`;
@@ -97,9 +95,12 @@ export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, co
         <span>EI {search.summary?.ei || 0}</span><span>MS/MS {search.summary?.ms2 || 0}</span>
       </div>
       <div className="spectra-filter-row" role="group" aria-label={isEnglish ? 'Spectrum filters' : '谱图筛选'}>
-        {[['all', isEnglish ? 'All' : '全部'], ['ei', 'EI'], ['ms2', 'MS/MS'], ['massbank', 'MassBank'], ['gnps', 'GNPS']].map(([key, label]) => (
-          <button type="button" key={key} className={filter === key ? 'active' : ''} aria-pressed={filter === key} onClick={() => setFilter(key)}>{label}</button>
-        ))}
+        <select aria-label={isEnglish ? 'Source' : '谱库来源'} value={filters.source} onChange={event => updateFilter('source', event.target.value)}><option value="all">{isEnglish ? 'All sources' : '全部来源'}</option><option value="massbank">MassBank</option><option value="gnps">GNPS</option></select>
+        <select aria-label={isEnglish ? 'Spectrum type' : '谱图类型'} value={filters.type} onChange={event => updateFilter('type', event.target.value)}><option value="all">{isEnglish ? 'All types' : '全部类型'}</option><option value="ei">EI</option><option value="ms2">MS/MS</option></select>
+        <select aria-label={isEnglish ? 'Ion mode' : '离子模式'} value={filters.ionMode} onChange={event => updateFilter('ionMode', event.target.value)}><option value="all">{isEnglish ? 'All ion modes' : '全部离子模式'}</option>{filterOptions.ionModes.map(value => <option key={value} value={value}>{value}</option>)}</select>
+        <select aria-label={isEnglish ? 'Adduct' : '加合离子'} value={filters.adduct} onChange={event => updateFilter('adduct', event.target.value)}><option value="all">{isEnglish ? 'All adducts' : '全部加合离子'}</option>{filterOptions.adducts.map(value => <option key={value} value={value}>{value}</option>)}</select>
+        <select aria-label={isEnglish ? 'Instrument' : '仪器类型'} value={filters.instrument} onChange={event => updateFilter('instrument', event.target.value)}><option value="all">{isEnglish ? 'All instruments' : '全部仪器'}</option>{filterOptions.instruments.map(value => <option key={value} value={value}>{value}</option>)}</select>
+        <button type="button" onClick={() => setFilters({ source: 'all', type: 'all', ionMode: 'all', adduct: 'all', instrument: 'all' })}>{isEnglish ? 'Reset' : '重置'}</button>
       </div>
       {search.error && <p className="spectra-message error">{search.error}</p>}
       {!search.loading && !search.error && visibleRecords.length === 0 && <p className="spectra-message">{isEnglish ? 'No exact public spectrum found.' : '当前公共谱库暂无精确匹配谱图。'}</p>}

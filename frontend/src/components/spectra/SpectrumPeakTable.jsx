@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { sortPeakRows } from '../../spectra/spectrumPresentation';
+import { filterPeakRows, peakRowsToTsv, sortPeakRows } from '../../spectra/spectrumPresentation';
 
 function formatNumber(value, digits = 4) {
   return value == null ? '—' : Number(value).toLocaleString(undefined, { maximumFractionDigits: digits });
@@ -7,13 +7,19 @@ function formatNumber(value, digits = 4) {
 
 export default function SpectrumPeakTable({ rows = [], isEnglish, comparison = false }) {
   const [sort, setSort] = useState({ field: 'mz', direction: 'asc' });
-  const sortedRows = useMemo(() => sortPeakRows(rows, sort.field, sort.direction), [rows, sort]);
+  const [query, setQuery] = useState('');
+  const [copyState, setCopyState] = useState('');
+  const sortedRows = useMemo(() => sortPeakRows(filterPeakRows(rows, query), sort.field, sort.direction), [query, rows, sort]);
   const changeSort = field => setSort(current => ({ field, direction: current.field === field && current.direction === 'asc' ? 'desc' : 'asc' }));
+  const copyRows = async () => {
+    try { await navigator.clipboard.writeText(peakRowsToTsv(sortedRows)); setCopyState(isEnglish ? 'Copied' : '已复制'); }
+    catch { setCopyState(isEnglish ? 'Copy failed' : '复制失败'); }
+  };
 
   return <div className="peak-table-block">
     <div className="peak-table-toolbar">
       <strong>{isEnglish ? 'Peak table' : '峰表'}</strong>
-      <div><button type="button" onClick={() => changeSort('mz')}>m/z</button><button type="button" onClick={() => changeSort('intensity')}>{isEnglish ? 'Intensity' : '强度'}</button></div>
+      <div className="peak-table-tools"><label><span className="sr-only">{isEnglish ? 'Search peaks' : '检索峰'}</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder={isEnglish ? 'm/z or 40-50' : 'm/z 或 40-50'} /></label><button type="button" onClick={() => changeSort('mz')}>m/z</button><button type="button" onClick={() => changeSort('intensity')}>{isEnglish ? 'Intensity' : '强度'}</button><button type="button" disabled={!sortedRows.length} onClick={copyRows}>{isEnglish ? 'Copy' : '复制'}</button>{copyState && <small role="status">{copyState}</small>}</div>
     </div>
     <div className="peak-table-scroll" tabIndex="0" role="region" aria-label={isEnglish ? 'Scrollable spectrum peak table' : '可滚动谱图峰表'}>
       <table>

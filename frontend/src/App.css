@@ -4035,6 +4035,7 @@ select:focus-visible,
 .spectra-source-summary > * { padding: 6px 11px; border: 1px solid #d7e5e1; border-radius: 999px; background: #fff; color: #3f5c58; font-size: 12px; }
 .spectra-filter-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 20px; border-block: 1px solid #dfebe8; background: #f2f7f5; }
 .spectra-filter-row button { border: 1px solid #c8dad5; border-radius: 999px; padding: 6px 12px; background: #fff; color: #49635f; font-weight: 700; cursor: pointer; }
+.spectra-filter-row select { min-width: 132px; max-width: 220px; min-height: 34px; border: 1px solid #c8dad5; border-radius: 9px; padding: 5px 28px 5px 9px; background: #fff; color: #3f5b56; }
 .spectra-filter-row button.active { border-color: #17776e; background: #17776e; color: #fff; }
 .spectra-message { margin: 0; padding: 22px 20px; color: #687b78; }.spectra-message.error { color: #9b3838; }
 .spectra-workspace-grid { display: grid; grid-template-columns: minmax(250px, .8fr) minmax(420px, 1.6fr); min-height: 360px; }
@@ -4058,6 +4059,7 @@ select:focus-visible,
 .comparison-warning { margin: 10px 0; padding: 9px 11px; border-left: 3px solid #c58a37; background: #fbf7ef; color: #765c32; font-size: 12px; }
 .peak-table-block { min-width: 0; margin-top: 14px; border: 1px solid #dce8e5; border-radius: 10px; background: #fff; overflow: hidden; }
 .peak-table-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; background: #f2f7f5; color: #365651; font-size: 12px; }.peak-table-toolbar div { display: flex; gap: 5px; }.peak-table-toolbar button { min-height: 32px; border: 1px solid #c9d9d5; border-radius: 6px; background: #fff; color: #42645f; cursor: pointer; }
+.peak-table-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; }.peak-table-tools input { width: 118px; min-height: 32px; border: 1px solid #c9d9d5; border-radius: 6px; padding: 5px 7px; background: #fff; color: #365651; }.peak-table-tools small { align-self: center; color: #467069; }
 .peak-table-scroll { max-height: 260px; overflow: auto; outline: none; }.peak-table-scroll:focus-visible { box-shadow: inset 0 0 0 3px rgba(23,119,110,.24); }.peak-table-scroll table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }.peak-table-scroll th { position: sticky; top: 0; z-index: 1; padding: 8px; background: #e8f1ee; color: #395853; text-align: right; }.peak-table-scroll th:first-child, .peak-table-scroll td:first-child { text-align: left; }.peak-table-scroll td { padding: 7px 8px; border-top: 1px solid #edf2f1; color: #4f625f; text-align: right; }.peak-table-scroll tr.matched td { background: #eef3fb; color: #183f77; font-weight: 700; }
 @media (max-width: 840px) { .spectra-workspace-grid { grid-template-columns: 1fr; }.spectrum-record-list { max-height: 300px; border-right: 0; border-bottom: 1px solid #dfebe8; }.spectrum-meta-grid { grid-template-columns: 1fr; }.open-spectra-workbench { margin-inline: 10px; } }
 

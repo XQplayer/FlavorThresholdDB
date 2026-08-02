@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { comparisonExportFilename } from '../../spectra/spectrumContract';
+import { comparisonExportFilename, isComparisonExportAllowed } from '../../spectra/spectrumContract';
 import MirrorSpectrumPlot from './MirrorSpectrumPlot';
 import SpectrumPeakTable from './SpectrumPeakTable';
-import { buildComparisonPeakRows, buildPngFilename } from '../../spectra/spectrumPresentation';
+import { buildComparisonCsv, buildComparisonPeakRows, buildPngFilename } from '../../spectra/spectrumPresentation';
 import { exportSvgElementAsPng } from '../../spectra/svgPngExport';
 
 function downloadText(body, mime, filename) {
@@ -14,21 +14,11 @@ function downloadText(body, mime, filename) {
   URL.revokeObjectURL(url);
 }
 
-function comparisonCsv(comparison, spectrumA, spectrumB) {
-  const rows = [
-    ['spectrum_a', spectrumA.spectrum_id], ['spectrum_b', spectrumB.spectrum_id],
-    ['tolerance_value', comparison.tolerance?.value], ['tolerance_mode', comparison.tolerance?.mode],
-    ['similarity', comparison.similarity], [],
-    ['mz_a', 'mz_b', 'intensity_a', 'intensity_b', 'delta_da', 'delta_ppm'],
-    ...(comparison.matches || []).map(match => [match.mz_a, match.mz_b, match.intensity_a, match.intensity_b, match.delta_da, match.delta_ppm]),
-  ];
-  return rows.map(row => row.map(value => JSON.stringify(value ?? '')).join(',')).join('\n');
-}
-
 export default function SpectrumComparison({ slots, comparison, tolerance, toleranceMode, onToleranceChange, onToleranceModeChange, onClear, isEnglish }) {
   const [pngState, setPngState] = useState({ busy: false, error: '' });
   const warningLabels = comparison?.compatibility?.warnings || [];
   const blocked = comparison?.compatibility && !comparison.compatibility.comparable;
+  const exportAllowed = isComparisonExportAllowed(slots.a, slots.b);
 
   function exportComparison(format) {
     if (!slots.a || !slots.b || !comparison) return;
@@ -39,7 +29,7 @@ export default function SpectrumComparison({ slots, comparison, tolerance, toler
     }
     const body = format === 'json'
       ? JSON.stringify({ comparison, spectra: { a: slots.a, b: slots.b } }, null, 2)
-      : comparisonCsv(comparison, slots.a, slots.b);
+      : buildComparisonCsv(comparison, slots.a, slots.b);
     downloadText(body, format === 'json' ? 'application/json' : 'text/csv', comparisonExportFilename(slots.a, slots.b, format));
   }
 
@@ -58,8 +48,9 @@ export default function SpectrumComparison({ slots, comparison, tolerance, toler
     <div className="comparison-toolbar">
       <label>{isEnglish ? 'Tolerance' : '匹配容差'}<input type="number" min="0" step={toleranceMode === 'ppm' ? '1' : '0.01'} value={tolerance} onChange={event => onToleranceChange(event.target.value)} /></label>
       <select aria-label={isEnglish ? 'Tolerance mode' : '容差单位'} value={toleranceMode} onChange={event => onToleranceModeChange(event.target.value)}><option value="da">Da</option><option value="ppm">ppm</option></select>
-      {comparison && <div className="comparison-export-actions"><button type="button" onClick={() => exportComparison('json')}>JSON</button><button type="button" onClick={() => exportComparison('csv')}>CSV</button><button type="button" onClick={() => exportComparison('svg')}>SVG</button><button type="button" disabled={pngState.busy} onClick={exportPng}>PNG</button></div>}
+      {comparison && <div className="comparison-export-actions"><button type="button" disabled={!exportAllowed} onClick={() => exportComparison('json')}>JSON</button><button type="button" disabled={!exportAllowed} onClick={() => exportComparison('csv')}>CSV</button><button type="button" disabled={!exportAllowed} onClick={() => exportComparison('svg')}>SVG</button><button type="button" disabled={!exportAllowed || pngState.busy} onClick={exportPng}>PNG</button></div>}
     </div>
+    {comparison && !exportAllowed && <p className="comparison-warning">{isEnglish ? 'Export is disabled until both spectrum licenses are reviewed as redistributable.' : '两条谱图均完成可再分发许可核验后，才开放比较结果导出。'}</p>}
     {pngState.error && <p className="comparison-warning">{isEnglish ? 'PNG export failed' : 'PNG 导出失败'}: {pngState.error}</p>}
     <div className="comparison-slot-label">A · {slots.a?.source || '—'} · {slots.a?.spectrum_id || (isEnglish ? 'Select spectrum' : '请选择谱图')}</div>
     {slots.a && slots.b && <MirrorSpectrumPlot spectrumA={slots.a} spectrumB={slots.b} comparison={comparison} />}

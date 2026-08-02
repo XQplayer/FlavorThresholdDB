@@ -50,3 +50,41 @@ export function normalizePngScale(value) {
   if (!Number.isFinite(scale)) return 2;
   return Math.min(4, Math.max(1, scale));
 }
+
+export function buildComparisonCsv(comparison = {}, spectrumA = {}, spectrumB = {}) {
+  const rows = [
+    ['field', 'spectrum_a', 'spectrum_b'],
+    ['source', spectrumA.source, spectrumB.source],
+    ['spectrum_id', spectrumA.spectrum_id, spectrumB.spectrum_id],
+    ['source_url', spectrumA.source_url, spectrumB.source_url],
+    ['license', spectrumA.license, spectrumB.license],
+    ['tolerance_value', comparison.tolerance?.value, ''],
+    ['tolerance_mode', comparison.tolerance?.mode, ''],
+    ['comparable', comparison.compatibility?.comparable, ''],
+    ['compatibility_warnings', (comparison.compatibility?.warnings || []).join(';'), ''],
+    ['similarity', comparison.similarity, ''],
+    ['coverage_a', comparison.coverage_a, ''],
+    ['coverage_b', comparison.coverage_b, ''],
+    [],
+    ['mz_a', 'mz_b', 'intensity_a', 'intensity_b', 'delta_da', 'delta_ppm'],
+    ...(comparison.matches || []).map(match => [match.mz_a, match.mz_b, match.intensity_a, match.intensity_b, match.delta_da, match.delta_ppm]),
+  ];
+  return rows.map(row => row.map(value => JSON.stringify(value ?? '')).join(',')).join('\n');
+}
+
+export function filterPeakRows(rows = [], query = '') {
+  const text = String(query || '').trim();
+  if (!text) return rows;
+  const range = text.match(/^\s*(\d+(?:\.\d+)?)\s*[-–~]\s*(\d+(?:\.\d+)?)\s*$/);
+  if (range) {
+    const low = Math.min(Number(range[1]), Number(range[2]));
+    const high = Math.max(Number(range[1]), Number(range[2]));
+    return rows.filter(row => Number(row.mz) >= low && Number(row.mz) <= high);
+  }
+  return rows.filter(row => String(row.mz).includes(text) || String(row.partner_mz ?? '').includes(text));
+}
+
+export function peakRowsToTsv(rows = []) {
+  const fields = ['side', 'mz', 'intensity', 'matched', 'partner_mz', 'delta_da', 'delta_ppm'];
+  return [fields.join('\t'), ...rows.map(row => fields.map(field => row[field] ?? '').join('\t'))].join('\n');
+}

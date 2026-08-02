@@ -6,12 +6,32 @@ import {
   comparisonMatchSets,
   comparisonExportFilename,
   isSpectrumDownloadAllowed,
+  isComparisonExportAllowed,
   spectrumDetailPath,
+  filterSpectrumRecords,
+  spectrumFilterOptions,
 } from './spectrumContract.js';
 
 test('download is enabled only for reviewed open licenses', () => {
   assert.equal(isSpectrumDownloadAllowed({ license: 'CC BY-NC-SA' }), true);
   assert.equal(isSpectrumDownloadAllowed({ license: 'needs_review', license_status: 'needs_review' }), false);
+});
+
+test('comparison export requires both spectra to have reviewed open licenses', () => {
+  assert.equal(isComparisonExportAllowed({ license: 'CC BY' }, { license: 'CC0' }), true);
+  assert.equal(isComparisonExportAllowed({ license: 'CC BY' }, { license_status: 'needs_review' }), false);
+  assert.equal(isComparisonExportAllowed({ license: 'CC BY' }, null), false);
+});
+
+test('spectrum filters combine source, type, ion mode, adduct, and instrument', () => {
+  const records = [
+    { source: 'MassBank', spectrum_type: 'EI', ion_mode: 'positive', adduct: '', instrument: 'GC-MS' },
+    { source: 'GNPS', spectrum_type: 'MS2', ion_mode: 'positive', adduct: '[M+H]+', instrument: 'Orbitrap' },
+    { source: 'GNPS', spectrum_type: 'MS2', ion_mode: 'negative', adduct: '[M-H]-', instrument: 'QTOF' },
+  ];
+  assert.equal(filterSpectrumRecords(records, { source: 'gnps', type: 'ms2', ionMode: 'positive', adduct: '[M+H]+', instrument: 'Orbitrap' }).length, 1);
+  assert.deepEqual(spectrumFilterOptions(records).ionModes, ['negative', 'positive']);
+  assert.deepEqual(spectrumFilterOptions(records).adducts, ['[M-H]-', '[M+H]+']);
 });
 
 test('comparison slot selection fills A then B and replaces B', () => {

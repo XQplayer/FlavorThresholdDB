@@ -199,6 +199,12 @@ async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
   const spectrumRecords = spectraPanel.locator('.spectrum-record-list article');
   await spectrumRecords.first().waitFor({ timeout: 60_000 });
   assert.ok(await spectrumRecords.count() >= 2, `${name}: ethyl acetate has comparable public spectra`);
+  await spectraPanel.getByLabel('谱库来源').selectOption('massbank');
+  assert.ok(await spectrumRecords.count() >= 2, `${name}: source filter retains MassBank spectra`);
+  for (const text of await spectrumRecords.locator('.spectrum-record-main strong').allTextContents()) assert.match(text, /^MassBank ·/);
+  await spectraPanel.getByLabel('谱图类型').selectOption('ei');
+  assert.ok(await spectrumRecords.count() >= 2, `${name}: type filter retains EI spectra`);
+  await spectraPanel.getByRole('button', { name: '重置' }).click();
   await spectrumRecords.nth(0).getByRole('button', { name: '加入比较' }).click();
   await spectrumRecords.nth(1).getByRole('button', { name: '加入比较' }).click();
   await spectraPanel.locator('.mirror-spectrum-plot').waitFor({ timeout: 30_000 });
@@ -206,6 +212,11 @@ async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
   await spectraPanel.getByRole('button', { name: 'CSV' }).waitFor();
   const peakTable = spectraPanel.locator('.spectrum-comparison-panel .peak-table-scroll');
   await peakTable.waitFor();
+  const peakSearch = spectraPanel.locator('.spectrum-comparison-panel').getByLabel('检索峰');
+  await peakSearch.fill('40-80');
+  assert.ok(await peakTable.locator('tbody tr').count() >= 1, `${name}: peak range search keeps matching rows`);
+  await peakSearch.fill('');
+  await spectraPanel.locator('.spectrum-comparison-panel').getByRole('button', { name: '复制' }).waitFor();
   await peakTable.focus();
   assert.equal(await peakTable.evaluate(element => document.activeElement === element), true, `${name}: peak table keyboard focus`);
   assert.equal(await peakTable.evaluate(element => element.scrollHeight >= element.clientHeight), true, `${name}: peak table bounded scroll region`);
