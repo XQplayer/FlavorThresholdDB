@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 
 from spectra_gnps import fetch_gnps_spectrum, fetch_gnps_usi, search_gnps_records
 from spectra_massbank import fetch_massbank_record, query_massbank_records
+from spectra_cache import OpenSpectraCache
 from spectra_service import compare_spectra, serialize_spectrum
 
 
@@ -33,6 +34,9 @@ CACHE_PATH = Path(
     )
 ).resolve()
 _CACHE_PERSIST_LOCK = threading.RLock()
+OPEN_SPECTRA_CACHE = OpenSpectraCache(
+    Path(os.environ.get("OPEN_SPECTRA_CACHE_PATH", PROJECT_ROOT / "_local" / "cache" / "open_spectra_cache.json")).resolve()
+)
 
 
 def aggregate_open_spectra(
@@ -40,8 +44,15 @@ def aggregate_open_spectra(
     *,
     massbank_query=None,
     gnps_query=None,
+    cache=None,
 ) -> dict:
     """Search independent public sources while preserving partial results."""
+    active_cache = cache if cache is not None else (OPEN_SPECTRA_CACHE if massbank_query is None and gnps_query is None else None)
+    cache_key = json.dumps(target, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if active_cache is not None:
+        cached = active_cache.get_search(cache_key)
+        if cached is not None:
+            return cached
     queries = {
         "MassBank": massbank_query or query_massbank_records,
         "GNPS": gnps_query or search_gnps_records,
@@ -67,7 +78,7 @@ def aggregate_open_spectra(
             **({"error": result["error"]} if result.get("error") else {}),
         }
         records.extend(source_records)
-    return {
+    response = {
         "compound_identity": target,
         "summary": {
             "total": len(records),
@@ -83,15 +94,27 @@ def aggregate_open_spectra(
         "records": records,
         "retrieved_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
+    if active_cache is not None:
+        active_cache.put_search(cache_key, response)
+    return response
 
 
-def fetch_open_spectrum(source: str, spectrum_id: str, *, massbank_fetch=None, gnps_fetch=None) -> dict:
+def fetch_open_spectrum(source: str, spectrum_id: str, *, massbank_fetch=None, gnps_fetch=None, cache=None) -> dict:
     normalized_source = str(source or "").strip().casefold()
+    active_cache = cache if cache is not None else (OPEN_SPECTRA_CACHE if massbank_fetch is None and gnps_fetch is None else None)
+    if active_cache is not None:
+        cached = active_cache.get_detail(normalized_source, spectrum_id)
+        if cached is not None:
+            return cached
     if normalized_source == "massbank":
-        return (massbank_fetch or fetch_massbank_record)(spectrum_id)
-    if normalized_source == "gnps":
-        return (gnps_fetch or fetch_gnps_spectrum)(spectrum_id)
-    raise ValueError("unsupported spectrum source")
+        record = (massbank_fetch or fetch_massbank_record)(spectrum_id)
+    elif normalized_source == "gnps":
+        record = (gnps_fetch or fetch_gnps_spectrum)(spectrum_id)
+    else:
+        raise ValueError("unsupported spectrum source")
+    if active_cache is not None:
+        active_cache.put_detail(normalized_source, spectrum_id, record)
+    return record
 
 
 def load_cache() -> dict[str, dict]:
@@ -1351,11 +1374,12 @@ class Handler(BaseHTTPRequestHandler):
             b_source = str(payload.get("b_source") or "").strip()
             b_id = str(payload.get("b_id") or "").strip()
             tolerance = float(payload.get("tolerance", 0.1))
+            tolerance_mode = str(payload.get("tolerance_mode") or "da").strip().lower()
             if not all((a_source, a_id, b_source, b_id)):
                 raise ValueError("both spectrum sources and identifiers are required")
             spectrum_a = fetch_open_spectrum(a_source, a_id)
             spectrum_b = fetch_open_spectrum(b_source, b_id)
-            self.send_json(200, compare_spectra(spectrum_a, spectrum_b, tolerance))
+            self.send_json(200, compare_spectra(spectrum_a, spectrum_b, tolerance, tolerance_mode))
         except (ValueError, json.JSONDecodeError) as exc:
             self.send_json(400, {"error": str(exc)})
         except Exception as exc:

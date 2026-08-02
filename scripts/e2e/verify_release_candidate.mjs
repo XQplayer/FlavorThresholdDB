@@ -119,7 +119,11 @@ function installObservers(page, proxyOrigin) {
   const observed = { consoleErrors: [], pageErrors: [], failedRequests: [], failedApiResponses: [] };
   page.on('console', message => { if (message.type() === 'error') observed.consoleErrors.push(message.text()); });
   page.on('pageerror', error => observed.pageErrors.push(error.message));
-  page.on('requestfailed', request => observed.failedRequests.push(`${request.method()} ${request.url()} :: ${request.failure()?.errorText}`));
+  page.on('requestfailed', request => {
+    const errorText = request.failure()?.errorText || '';
+    if (errorText === 'net::ERR_ABORTED') return;
+    observed.failedRequests.push(`${request.method()} ${request.url()} :: ${errorText}`);
+  });
   page.on('response', response => {
     if (response.url().startsWith(proxyOrigin) && !response.ok()) observed.failedApiResponses.push(`${response.status()} ${response.url()}`);
   });
@@ -174,6 +178,16 @@ async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
   const payload = payloadOutcome.value;
   assert.deepEqual(Object.keys(payload.pubchem_volatile.properties).sort(), [...propertyKeys].sort(), `${name}: volatile contract keys`);
   const populatedKeys = propertyKeys.filter(key => payload.pubchem_volatile.properties[key].length > 0);
+  const spectraPanel = page.locator('.open-spectra-workbench');
+  await spectraPanel.getByRole('heading', { name: '开放光谱' }).waitFor({ timeout: 60_000 });
+  const spectrumRecords = spectraPanel.locator('.spectrum-record-list article');
+  await spectrumRecords.first().waitFor({ timeout: 60_000 });
+  assert.ok(await spectrumRecords.count() >= 2, `${name}: ethyl acetate has comparable public spectra`);
+  await spectrumRecords.nth(0).getByRole('button', { name: '加入比较' }).click();
+  await spectrumRecords.nth(1).getByRole('button', { name: '加入比较' }).click();
+  await spectraPanel.locator('.mirror-spectrum-plot').waitFor({ timeout: 30_000 });
+  await spectraPanel.getByText(/共有峰/).waitFor({ timeout: 30_000 });
+  await spectraPanel.getByRole('button', { name: 'CSV' }).waitFor();
   const panel = page.locator('.pubchem-volatile');
   if (populatedKeys.length) await panel.locator('.pubchem-volatile-property').first().waitFor({ timeout: 30_000 });
   assert.equal(await panel.locator('.pubchem-volatile-property').count(), populatedKeys.length, `${name}: visible section count`);

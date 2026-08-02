@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { assignComparisonSlot, isSpectrumDownloadAllowed, spectrumDetailPath } from '../../spectra/spectrumContract';
+import SpectrumComparison from './SpectrumComparison';
 
 function SpectrumPlot({ record, mirror = false, matched = new Set() }) {
   const peaks = record?.peaks || [];
@@ -26,6 +27,8 @@ export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, co
   const [filter, setFilter] = useState('all');
   const [slots, setSlots] = useState({ a: null, b: null });
   const [comparison, setComparison] = useState(null);
+  const [tolerance, setTolerance] = useState(0.1);
+  const [toleranceMode, setToleranceMode] = useState('da');
 
   useEffect(() => {
     if (!inchikey && !cas && !compoundName) return;
@@ -76,9 +79,9 @@ export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, co
     if (!slots.a || !slots.b) return;
     fetch(`${apiUrl}/spectra/compare`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ a_source: slots.a.source, a_id: slots.a.spectrum_id, b_source: slots.b.source, b_id: slots.b.spectrum_id, tolerance: 0.1 }),
+      body: JSON.stringify({ a_source: slots.a.source, a_id: slots.a.spectrum_id, b_source: slots.b.source, b_id: slots.b.spectrum_id, tolerance: Number(tolerance), tolerance_mode: toleranceMode }),
     }).then(response => response.json()).then(setComparison).catch(error => setComparison({ error: error.message }));
-  }, [apiUrl, slots]);
+  }, [apiUrl, slots, tolerance, toleranceMode]);
 
   if (!inchikey && !cas) return null;
   return (
@@ -118,14 +121,7 @@ export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, co
           </> : <p>{isEnglish ? 'Select a spectrum to inspect its peaks.' : '选择谱图查看峰表与实验条件。'}</p>}
         </div>
       </div>}
-      {(slots.a || slots.b) && <section className="spectrum-comparison-panel">
-        <header><h5>{isEnglish ? 'Mirror comparison' : '镜像谱比较'}</h5><button type="button" onClick={() => { setSlots({ a: null, b: null }); setComparison(null); }}>{isEnglish ? 'Clear' : '清空'}</button></header>
-        <div className="comparison-slot-label">A · {slots.a?.source || '—'} · {slots.a?.spectrum_id || (isEnglish ? 'Select spectrum' : '请选择谱图')}</div>
-        {slots.a && <SpectrumPlot record={slots.a} />}
-        {slots.b && <SpectrumPlot record={slots.b} mirror />}
-        <div className="comparison-slot-label">B · {slots.b?.source || '—'} · {slots.b?.spectrum_id || (isEnglish ? 'Select spectrum' : '请选择谱图')}</div>
-        {comparison && !comparison.error && <div className="comparison-metrics"><strong>{isEnglish ? 'Cosine' : '余弦相似度'} {comparison.similarity ?? '—'}</strong><span>{isEnglish ? 'Matched peaks' : '共有峰'} {comparison.matched_peak_count}</span><span>A {Math.round((comparison.coverage_a || 0) * 100)}%</span><span>B {Math.round((comparison.coverage_b || 0) * 100)}%</span></div>}
-      </section>}
+      {(slots.a || slots.b) && <SpectrumComparison slots={slots} comparison={comparison} tolerance={tolerance} toleranceMode={toleranceMode} onToleranceChange={value => setTolerance(Math.max(0, Number(value) || 0))} onToleranceModeChange={setToleranceMode} onClear={() => { setSlots({ a: null, b: null }); setComparison(null); }} isEnglish={isEnglish} />}
     </section>
   );
 }

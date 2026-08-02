@@ -6,15 +6,41 @@ from unittest.mock import patch
 from urllib.request import urlopen
 from urllib.error import HTTPError
 from urllib.request import Request
+from pathlib import Path
+import tempfile
 
 from fema_proxy_server import (
     Handler,
     aggregate_open_spectra,
     fetch_open_spectrum,
 )
+from spectra_cache import OpenSpectraCache
 
 
 class OpenSpectraAggregationTests(unittest.TestCase):
+    def test_search_and_permitted_detail_use_open_spectra_cache(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cache = OpenSpectraCache(Path(directory) / "spectra.json")
+            search_calls = []
+            detail_calls = []
+
+            def massbank_query(_target):
+                search_calls.append(1)
+                return {"source": "MassBank", "status": "ok", "records": []}
+
+            target = {"inchikey": "XEKOWRVHYACXOJ-UHFFFAOYSA-N"}
+            aggregate_open_spectra(target, massbank_query=massbank_query, gnps_query=lambda _target: {"source": "GNPS", "status": "ok", "records": []}, cache=cache)
+            aggregate_open_spectra(target, massbank_query=massbank_query, gnps_query=lambda _target: {"source": "GNPS", "status": "ok", "records": []}, cache=cache)
+            self.assertEqual(len(search_calls), 1)
+
+            def fetcher(identifier):
+                detail_calls.append(identifier)
+                return {"source": "MassBank", "spectrum_id": identifier, "license": "CC BY", "peaks": [[43, 100]]}
+
+            fetch_open_spectrum("MassBank", "MB-1", massbank_fetch=fetcher, cache=cache)
+            fetch_open_spectrum("MassBank", "MB-1", massbank_fetch=fetcher, cache=cache)
+            self.assertEqual(detail_calls, ["MB-1"])
+
     def test_one_failed_source_does_not_erase_the_other(self):
         def massbank(_target):
             raise OSError("MassBank offline")

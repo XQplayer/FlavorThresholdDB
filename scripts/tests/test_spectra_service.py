@@ -7,6 +7,7 @@ from spectra_service import (
     match_peaks,
     normalize_spectrum_record,
     rank_identity_match,
+    serialize_comparison,
     serialize_spectrum,
 )
 
@@ -124,6 +125,16 @@ class SpectrumComparisonTests(unittest.TestCase):
         self.assertEqual(result["coverage_a"], 1.0)
         self.assertEqual(result["coverage_b"], 1.0)
 
+    def test_ppm_tolerance_scales_with_peak_mass(self):
+        result = compare_spectra(
+            {"spectrum_type": "EI", "ms_level": 1, "peaks": [[500.0, 100], [100.0, 50]]},
+            {"spectrum_type": "EI", "ms_level": 1, "peaks": [[500.004, 100], [100.004, 50]]},
+            tolerance=10,
+            tolerance_mode="ppm",
+        )
+        self.assertEqual(result["matched_peak_count"], 1)
+        self.assertEqual(result["tolerance"], {"value": 10, "mode": "ppm"})
+
     def test_incompatible_spectra_return_no_similarity(self):
         result = compare_spectra(
             {"spectrum_type": "EI", "ms_level": 1, "peaks": [[43, 100]]},
@@ -172,6 +183,17 @@ class SpectrumExportTests(unittest.TestCase):
     def test_restricted_record_cannot_be_serialized(self):
         with self.assertRaises(PermissionError):
             serialize_spectrum({**self.record, "source": "GNPS", "license": "needs_review"}, "json")
+
+    def test_comparison_export_contains_settings_provenance_and_matched_peaks(self):
+        comparison = compare_spectra(self.record, {**self.record, "spectrum_id": "MB-2"}, tolerance=0.2)
+        csv_body, csv_type, csv_ext = serialize_comparison(comparison, self.record, {**self.record, "spectrum_id": "MB-2"}, "csv")
+        json_body, _, json_ext = serialize_comparison(comparison, self.record, {**self.record, "spectrum_id": "MB-2"}, "json")
+        self.assertIn("tolerance_mode", csv_body)
+        self.assertIn("MB-1", csv_body)
+        self.assertIn("mz_a,mz_b", csv_body)
+        self.assertIn('"matched_peak_count": 2', json_body)
+        self.assertEqual(csv_type, "text/csv; charset=utf-8")
+        self.assertEqual((csv_ext, json_ext), ("csv", "json"))
 
 
 if __name__ == "__main__":

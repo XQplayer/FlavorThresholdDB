@@ -49,3 +49,19 @@ test('release documents describe the current candidate boundaries', async () => 
   assert.match(history, /codex\/pubchem-volatile-properties/);
   assert.match(history, /未发布|发布候选/);
 });
+
+test('open spectra comparison exposes tolerance, matched peaks, warnings, and exports', async () => {
+  const [workbench, comparison, mirror] = await Promise.all([
+    readFile(new URL('./components/spectra/OpenSpectraWorkbench.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('./components/spectra/SpectrumComparison.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('./components/spectra/MirrorSpectrumPlot.jsx', import.meta.url), 'utf8'),
+  ]);
+
+  assert.match(workbench, /tolerance_mode/);
+  assert.match(comparison, /type="number"/);
+  assert.match(comparison, /compatibility\?\.warnings/);
+  assert.match(comparison, /JSON|CSV/);
+  assert.match(mirror, /comparisonMatchSets/);
+  assert.match(mirror, /matched/);
+  assert.match(mirror, /mirror-spectrum-plot/);
+});

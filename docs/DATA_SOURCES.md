@@ -14,6 +14,31 @@ UI and exports.
 | PubChem PUG REST | Chemical identity and structure records | Preserve CID, PubChem link, and access date. |
 | PubChem PUG View, Experimental Properties | Third-party experimental-property aggregation and annotation | Preserve every reported record, its raw text, PubChem reference number, source name, source URL when supplied, and retrieval time. PubChem is the aggregator here, not necessarily the laboratory that performed the experiment. |
 | FlavorDB2 | Flavor descriptors, natural sources, food entities, and food–compound relationships | Preserve source attribution, entity and molecule links, and the license information returned by the integration. Treat “contains” as a reported database relationship, not quantitative concentration evidence. |
+| MassBank Europe | Open EI and tandem reference spectra, peak tables, and experimental metadata | Preserve accession, source URL, record license, retrieval time, identity evidence, and experimental conditions. |
+| GNPS / GNPS2 | Public library metadata, SpectrumID/USI lookup, and tandem peak tables | Preserve library and spectrum identifiers, source URL, instrument/adduct/collision metadata, and record-level license status. Imported third-party libraries remain license-review gated. |
+
+## Open spectra integration boundary
+
+`GET /spectra/search` aggregates exact compound candidates from MassBank and the
+local GNPS2 slim-metadata index. One unavailable source is reported separately
+and does not erase records returned by the other. Peak tables are loaded lazily
+through `GET /spectra/{source}/{id}`; USI lookup remains available through
+`GET /spectra/usi?usi=...`.
+
+Open-license records may be downloaded as JSON, CSV, MSP, or MGF. Records whose
+license is unknown, restrictive, or still under review expose metadata and the
+original link but not a proxy peak-table download. Search results use a
+schema-versioned 24-hour cache. Peak records with an explicitly permitted
+license use a 30-day persistent cache; unclear-license peak records are held in
+memory only. Generated GNPS indexes and caches remain under `_local/` and must
+not be committed.
+
+`POST /spectra/compare` supports explicit Da or ppm tolerance, one-to-one peak
+assignment, cosine similarity, bilateral coverage, matched-peak details, and
+compatibility warnings. EI is scored only against EI; tandem spectra may be
+scored with visible warnings for differing ion mode, adduct, precursor, or
+collision energy. Comparison exports retain both source identifiers and the
+displayed tolerance settings.
 
 ## PubChem integration boundary
 

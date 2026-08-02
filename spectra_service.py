@@ -169,15 +169,19 @@ def assess_compatibility(spectrum_a: dict, spectrum_b: dict) -> dict:
     }
 
 
-def match_peaks(peaks_a: list, peaks_b: list, tolerance: float = 0.1) -> list[dict]:
-    """Greedily select the closest one-to-one peak pairs within a Da tolerance."""
+def match_peaks(peaks_a: list, peaks_b: list, tolerance: float = 0.1, tolerance_mode: str = "da") -> list[dict]:
+    """Greedily select the closest one-to-one peak pairs within a Da or ppm tolerance."""
     if tolerance < 0:
         raise ValueError("tolerance must be non-negative")
+    mode = _clean_text(tolerance_mode).casefold()
+    if mode not in {"da", "ppm"}:
+        raise ValueError("tolerance mode must be da or ppm")
     candidates = []
     for a_index, peak_a in enumerate(peaks_a):
         for b_index, peak_b in enumerate(peaks_b):
             delta = abs(float(peak_a[0]) - float(peak_b[0]))
-            if delta <= tolerance + 1e-12:
+            allowed_delta = tolerance if mode == "da" else tolerance * ((float(peak_a[0]) + float(peak_b[0])) / 2) / 1_000_000
+            if delta <= allowed_delta + 1e-12:
                 candidates.append((delta, -min(float(peak_a[1]), float(peak_b[1])), a_index, b_index))
     used_a = set()
     used_b = set()
@@ -196,18 +200,20 @@ def match_peaks(peaks_a: list, peaks_b: list, tolerance: float = 0.1) -> list[di
                 "intensity_a": float(peaks_a[a_index][1]),
                 "intensity_b": float(peaks_b[b_index][1]),
                 "delta_da": round(delta, 8),
+                "delta_ppm": round(delta / ((float(peaks_a[a_index][0]) + float(peaks_b[b_index][0])) / 2) * 1_000_000, 6),
             }
         )
     return sorted(matches, key=lambda item: (item["mz_a"], item["mz_b"]))
 
 
-def compare_spectra(spectrum_a: dict, spectrum_b: dict, tolerance: float = 0.1) -> dict:
+def compare_spectra(spectrum_a: dict, spectrum_b: dict, tolerance: float = 0.1, tolerance_mode: str = "da") -> dict:
     """Return transparent cosine and peak-coverage metrics for compatible spectra."""
     compatibility = assess_compatibility(spectrum_a, spectrum_b)
     if not compatibility["comparable"]:
         return {
             "compatibility": compatibility,
-            "tolerance_da": tolerance,
+            "tolerance_da": tolerance if tolerance_mode == "da" else None,
+            "tolerance": {"value": tolerance, "mode": tolerance_mode},
             "similarity": None,
             "matched_peak_count": 0,
             "coverage_a": 0.0,
@@ -216,14 +222,15 @@ def compare_spectra(spectrum_a: dict, spectrum_b: dict, tolerance: float = 0.1) 
         }
     peaks_a = normalize_peaks(spectrum_a.get("peaks"))
     peaks_b = normalize_peaks(spectrum_b.get("peaks"))
-    matches = match_peaks(peaks_a, peaks_b, tolerance)
+    matches = match_peaks(peaks_a, peaks_b, tolerance, tolerance_mode)
     norm_a = sqrt(sum(float(peak[1]) ** 2 for peak in peaks_a))
     norm_b = sqrt(sum(float(peak[1]) ** 2 for peak in peaks_b))
     dot_product = sum(match["intensity_a"] * match["intensity_b"] for match in matches)
     similarity = dot_product / (norm_a * norm_b) if norm_a and norm_b else 0.0
     return {
         "compatibility": compatibility,
-        "tolerance_da": tolerance,
+        "tolerance_da": tolerance if tolerance_mode == "da" else None,
+        "tolerance": {"value": tolerance, "mode": tolerance_mode},
         "similarity": round(similarity, 6),
         "matched_peak_count": len(matches),
         "coverage_a": round(len(matches) / len(peaks_a), 6) if peaks_a else 0.0,
@@ -302,3 +309,41 @@ def serialize_spectrum(record: dict, output_format: str) -> tuple[str, str, str]
         lines.append("END IONS")
         return "\n".join(lines) + "\n", "chemical/x-mgf; charset=utf-8", "mgf"
     raise ValueError("unsupported spectrum export format")
+
+
+def serialize_comparison(comparison: dict, spectrum_a: dict, spectrum_b: dict, output_format: str) -> tuple[str, str, str]:
+    """Serialize transparent comparison metrics and matched peaks."""
+    output = _clean_text(output_format).casefold()
+    provenance = {
+        "spectrum_a": {
+            "source": spectrum_a.get("source", ""),
+            "spectrum_id": spectrum_a.get("spectrum_id", ""),
+            "source_url": spectrum_a.get("source_url", ""),
+            "license": spectrum_a.get("license", "unknown"),
+            "retrieved_at": spectrum_a.get("retrieved_at", ""),
+        },
+        "spectrum_b": {
+            "source": spectrum_b.get("source", ""),
+            "spectrum_id": spectrum_b.get("spectrum_id", ""),
+            "source_url": spectrum_b.get("source_url", ""),
+            "license": spectrum_b.get("license", "unknown"),
+            "retrieved_at": spectrum_b.get("retrieved_at", ""),
+        },
+    }
+    if output == "json":
+        return json.dumps({"comparison": comparison, "provenance": provenance}, ensure_ascii=False, indent=2), "application/json; charset=utf-8", "json"
+    if output == "csv":
+        stream = io.StringIO(newline="")
+        writer = csv.writer(stream)
+        tolerance = comparison.get("tolerance") or {"value": comparison.get("tolerance_da"), "mode": "da"}
+        writer.writerow(["spectrum_a", spectrum_a.get("spectrum_id", "")])
+        writer.writerow(["spectrum_b", spectrum_b.get("spectrum_id", "")])
+        writer.writerow(["tolerance_value", tolerance.get("value", "")])
+        writer.writerow(["tolerance_mode", tolerance.get("mode", "")])
+        writer.writerow(["similarity", comparison.get("similarity", "")])
+        writer.writerow([])
+        writer.writerow(["mz_a", "mz_b", "intensity_a", "intensity_b", "delta_da", "delta_ppm"])
+        for match in comparison.get("matches") or []:
+            writer.writerow([match.get(field, "") for field in ("mz_a", "mz_b", "intensity_a", "intensity_b", "delta_da", "delta_ppm")])
+        return stream.getvalue(), "text/csv; charset=utf-8", "csv"
+    raise ValueError("unsupported comparison export format")

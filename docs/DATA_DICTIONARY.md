@@ -96,3 +96,20 @@ entry.
 - Detailed export: one threshold observation per row with all selected source,
   medium, type, value, unit, and traceability fields.
 - CAS values must use an Excel-safe text representation.
+
+## Open spectrum contract
+
+Unified spectrum records expose `spectrum_id`, `source`, `source_url`,
+`license`, `license_status`, `retrieved_at`, `compound_identity`,
+`spectrum_type`, `ms_level`, `ion_mode`, `ionization`, `adduct`,
+`precursor_mz`, `collision_energy`, `instrument`, and normalized `peaks`.
+Each peak is `[mz, relative_intensity]`; invalid and non-positive peaks are
+discarded, duplicate m/z values are merged, and the base peak is normalized to
+100.
+
+Identity evidence ranks full InChIKey, connectivity InChIKey, CAS, canonical
+SMILES, then exact normalized name. Name-only matches are not marked verified.
+Comparison responses include `compatibility`, `tolerance`, `similarity`,
+`matched_peak_count`, `coverage_a`, `coverage_b`, and `matches`. Each match
+retains both peak indices, both m/z and intensity values, `delta_da`, and
+`delta_ppm` so the highlighted mirror peaks can be audited.
