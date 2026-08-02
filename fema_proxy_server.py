@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 from spectra_gnps import fetch_gnps_spectrum, fetch_gnps_usi, search_gnps_records
 from spectra_massbank import fetch_massbank_record, query_massbank_records
 from spectra_cache import OpenSpectraCache
+from spectra_index_distribution import install_public_index
 from spectra_service import compare_spectra, serialize_spectrum
 
 
@@ -37,6 +38,37 @@ _CACHE_PERSIST_LOCK = threading.RLock()
 OPEN_SPECTRA_CACHE = OpenSpectraCache(
     Path(os.environ.get("OPEN_SPECTRA_CACHE_PATH", PROJECT_ROOT / "_local" / "cache" / "open_spectra_cache.json")).resolve()
 )
+PUBLIC_SPECTRUM_MANIFEST_PATH = Path(os.environ.get("PUBLIC_SPECTRUM_MANIFEST_PATH", PROJECT_ROOT / "data" / "manifests" / "public_spectrum_index.json")).resolve()
+PUBLIC_SPECTRUM_RUNTIME_DIR = Path(os.environ.get("PUBLIC_SPECTRUM_RUNTIME_DIR", PROJECT_ROOT / "_local" / "indexes" / "public")).resolve()
+_PUBLIC_INDEX_STATUS_LOCK = threading.RLock()
+_PUBLIC_INDEX_STATUS = {"status": "missing", "degraded": True, "index_path": str(PUBLIC_SPECTRUM_RUNTIME_DIR / "public_spectrum_index.sqlite")}
+
+
+def initialize_public_spectrum_index() -> dict:
+    global _PUBLIC_INDEX_STATUS
+    if not PUBLIC_SPECTRUM_MANIFEST_PATH.exists():
+        return get_public_spectrum_index_status()
+    try:
+        manifest = json.loads(PUBLIC_SPECTRUM_MANIFEST_PATH.read_text(encoding="utf-8"))
+        result = install_public_index(manifest, PUBLIC_SPECTRUM_RUNTIME_DIR)
+        result["degraded"] = result.get("status") != "ready"
+    except Exception as exc:
+        result = {"status": "invalid", "degraded": True, "index_path": str(PUBLIC_SPECTRUM_RUNTIME_DIR / "public_spectrum_index.sqlite"), "error": str(exc)}
+    with _PUBLIC_INDEX_STATUS_LOCK:
+        _PUBLIC_INDEX_STATUS = result
+    return dict(result)
+
+
+def get_public_spectrum_index_status() -> dict:
+    with _PUBLIC_INDEX_STATUS_LOCK:
+        return dict(_PUBLIC_INDEX_STATUS)
+
+
+def search_gnps_with_available_index(target: dict) -> dict:
+    status = get_public_spectrum_index_status()
+    if status.get("status") == "ready" and status.get("index_path"):
+        return search_gnps_records(target, status["index_path"])
+    return search_gnps_records(target)
 
 
 def aggregate_open_spectra(
@@ -55,7 +87,7 @@ def aggregate_open_spectra(
             return cached
     queries = {
         "MassBank": massbank_query or query_massbank_records,
-        "GNPS": gnps_query or search_gnps_records,
+        "GNPS": gnps_query or search_gnps_with_available_index,
     }
     sources = {}
     records = []
@@ -1015,6 +1047,9 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             self.send_json(200, {"ok": True, "service": "flavor_data_proxy"})
             return
+        if parsed.path == "/spectra/index-status":
+            self.send_json(200, get_public_spectrum_index_status())
+            return
         if parsed.path == "/spectra/search":
             params = parse_qs(parsed.query)
             inchikey = (params.get("inchikey") or [""])[0].strip().upper()
@@ -1390,6 +1425,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    initialize_public_spectrum_index()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"FEMA proxy running at http://{HOST}:{PORT}")
     server.serve_forever()

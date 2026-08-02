@@ -106,6 +106,12 @@ class OpenSpectraRouteTests(unittest.TestCase):
         self.assertEqual(target["cas"], "141-78-6")
         self.assertEqual(target["names"], ["ethyl acetate"])
 
+    def test_index_status_route_exposes_degraded_state(self):
+        with patch("fema_proxy_server.get_public_spectrum_index_status", return_value={"status": "missing", "degraded": True}):
+            with urlopen(self.base + "/spectra/index-status", timeout=5) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(body, {"status": "missing", "degraded": True})
+
     def test_detail_route_dispatches_source_and_identifier(self):
         payload = {"source": "GNPS", "spectrum_id": "GNPS2LIB00000000001", "peaks": []}
         with patch("fema_proxy_server.fetch_open_spectrum", return_value=payload) as mocked:
