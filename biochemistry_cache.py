@@ -18,6 +18,10 @@ TTLS = {
     "NCBI Gene": timedelta(days=7),
     "NCBI Taxonomy": timedelta(days=30),
     "MetaboLights": timedelta(days=1),
+    "PubChem BioAssay": timedelta(days=1),
+    "ChEMBL": timedelta(days=7),
+    "GtoPdb": timedelta(days=7),
+    "BindingDB": timedelta(days=7),
 }
 PERSISTABLE = {"ok", "no_data", "candidate"}
 

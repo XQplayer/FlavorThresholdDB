@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 from biochemistry_service import resolve_biochemistry
 from biochemistry_cache import BiochemistryCache
 from biological_context import build_biological_context
+from bioactivity_service import resolve_bioactivity
 from nist_webbook import PARSER_VERSION as NIST_PARSER_VERSION, query_nist_webbook
 from spectra_gnps import fetch_gnps_spectrum, fetch_gnps_usi, search_gnps_records
 from spectra_massbank import fetch_massbank_record, query_massbank_records
@@ -1114,6 +1115,17 @@ class Handler(BaseHTTPRequestHandler):
                 "reaction_count": len(biochemistry.get("reactions", [])),
                 "protein_count": len(biochemistry.get("proteins", [])),
             }
+            self.send_json(200, result)
+            return
+        if parsed.path == "/bioactivity/resolve":
+            params = parse_qs(parsed.query)
+            cid = (params.get("cid") or [""])[0].strip()
+            inchikey = (params.get("inchikey") or [""])[0].strip().upper()
+            smiles = (params.get("smiles") or [""])[0].strip()
+            if not cid and not inchikey and not smiles:
+                self.send_json(400, {"status": "invalid_query", "error": "cid, inchikey, or smiles is required"})
+                return
+            result = resolve_bioactivity({"cid": cid, "inchikey": inchikey, "smiles": smiles}, cache=BIOCHEMISTRY_CACHE)
             self.send_json(200, result)
             return
         if parsed.path == "/spectra/index-status":

@@ -41,9 +41,17 @@ const biologicalContextFixture = {
   links: { BRENDA: [{ ec_number: '1.1.1.1', source_url: 'https://www.brenda-enzymes.org/enzyme.php?ecno=1.1.1.1' }], HMDB: { integration_mode: 'link_only', source_url: 'https://www.hmdb.ca/unearth/q?query=141-78-6&searcher=metabolites' } },
 };
 
+const bioactivityFixture = {
+  pubchem_assays: [{ aid: '421', outcome: 'Inactive', assay_name: 'Cell viability assay', source_url: 'https://pubchem.ncbi.nlm.nih.gov/bioassay/421' }],
+  chembl_activities: [{ activity_id: 7, target_name: 'Example target', type: 'IC50', value: '10', units: 'uM', source_url: 'https://www.ebi.ac.uk/chembl/explore/activity/7' }],
+  gtopdb_interactions: [], bindingdb_interactions: [],
+  sources: { 'PubChem BioAssay': { status: 'ok', total: 606 }, ChEMBL: { status: 'ok', total: 41 }, GtoPdb: { status: 'no_data' }, BindingDB: { status: 'no_data', match_mode: 'exact_structure' } },
+};
+
 async function installBiochemicalFixture(page) {
   await page.route('**/biochemistry/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(biochemicalFixture) }));
   await page.route('**/biological-context/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(biologicalContextFixture) }));
+  await page.route('**/bioactivity/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bioactivityFixture) }));
 }
 
 async function portIsFree(port) {
@@ -248,6 +256,13 @@ async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
   await biologicalPanel.getByText('MTBLS1', { exact: true }).waitFor();
   assert.equal(await biologicalPanel.locator('[data-status="ok"]').count(), 3, `${name}: biological source states`);
   assert.equal(await biologicalPanel.getByText('HMDB · 仅链接检索', { exact: true }).count(), 1, `${name}: HMDB license gate`);
+  const activityPanel = page.locator('.bioactivity-evidence');
+  await activityPanel.getByRole('heading', { name: '生物活性与靶点证据' }).waitFor();
+  await activityPanel.getByText('Cell viability assay', { exact: true }).waitFor();
+  await activityPanel.getByRole('tab', { name: /ChEMBL/ }).click();
+  await activityPanel.getByText('Example target', { exact: true }).waitFor();
+  await activityPanel.getByRole('tab', { name: /BindingDB/ }).click();
+  await activityPanel.getByText('BindingDB 仅采用结构相似度 1.0 的精确检索。', { exact: true }).waitFor();
   const panel = page.locator('.pubchem-volatile');
   if (populatedKeys.length) await panel.locator('.pubchem-volatile-property').first().waitFor({ timeout: 30_000 });
   assert.equal(await panel.locator('.pubchem-volatile-property').count(), populatedKeys.length, `${name}: visible section count`);

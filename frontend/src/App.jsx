@@ -9,6 +9,7 @@ import OpenSpectraWorkbench from './components/spectra/OpenSpectraWorkbench';
 import NistWebbookPresence from './components/NistWebbookPresence';
 import BiochemicalRelationships from './components/BiochemicalRelationships';
 import BiologicalContext from './components/BiologicalContext';
+import BioactivityEvidence from './components/BioactivityEvidence';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
 import {
@@ -1852,6 +1853,14 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                       cas={item.cas}
                       inchikey={pubchem.inchi_key}
                       compoundName={commonName || item.english_name}
+                      isEnglish={isEnglish}
+                    />
+
+                    <BioactivityEvidence
+                      apiUrl={FEMA_API_URL}
+                      cid={pubchem.cid}
+                      inchikey={pubchem.inchi_key}
+                      smiles={pubchem.smiles}
                       isEnglish={isEnglish}
                     />
 

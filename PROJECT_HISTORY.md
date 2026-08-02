@@ -304,3 +304,11 @@ pnpm run build
 - BRENDA 根据已核验蛋白中的 EC 编号提供原站记录链接；HMDB 因再分发许可边界采用仅链接模式，不抓取或缓存其受限数据；
 - 新增 `/biological-context/resolve` 聚合接口和前端“基因、物种与代谢组研究”卡片，分别显示各来源状态并隔离上游失败；
 - 乙酸乙酯真实网络验证返回 3 个 NCBI Gene 记录、14 个物种分类、78 项 MetaboLights 命中（展示前 10 项）、2 个 BRENDA EC 链接；相关后端契约测试、60 项前端测试、ESLint、生产构建和桌面/移动端 E2E 均通过。
+
+## 16. 生物活性与靶点证据（2026-08-02）
+
+- 新增 PubChem BioAssay、ChEMBL、GtoPdb 与 BindingDB 聚合接口；各来源独立返回状态和原始记录链接；
+- PubChem BioAssay 按 CID 查询并保留 AID、活性结果、靶点、实验名称和 PubMed 标识；ChEMBL 必须先通过完整 InChIKey 精确匹配 molecule，再查询 activity；
+- GtoPdb 禁止直接使用会忽略 InChIKey 条件的全局 interactions 接口，必须先解析精确 ligand ID；BindingDB 仅允许结构相似度 1.0 的查询；
+- 前端新增分来源切换、长列表滚动和精确匹配说明，明确体外数据库活性不能直接解释为生理效应、香气感知或因果；
+- 乙酸乙酯实测返回 PubChem BioAssay 606 条（页面保留前 100 条）和 ChEMBL 41 条；GtoPdb、BindingDB 精确检索均为无记录，不以相似化合物填充。
