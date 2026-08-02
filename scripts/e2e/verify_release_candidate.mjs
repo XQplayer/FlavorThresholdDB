@@ -188,6 +188,16 @@ async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
   await spectraPanel.locator('.mirror-spectrum-plot').waitFor({ timeout: 30_000 });
   await spectraPanel.getByText(/共有峰/).waitFor({ timeout: 30_000 });
   await spectraPanel.getByRole('button', { name: 'CSV' }).waitFor();
+  const peakTable = spectraPanel.locator('.spectrum-comparison-panel .peak-table-scroll');
+  await peakTable.waitFor();
+  await peakTable.focus();
+  assert.equal(await peakTable.evaluate(element => document.activeElement === element), true, `${name}: peak table keyboard focus`);
+  assert.equal(await peakTable.evaluate(element => element.scrollHeight >= element.clientHeight), true, `${name}: peak table bounded scroll region`);
+  const pngDownloadPromise = page.waitForEvent('download');
+  await spectraPanel.getByRole('button', { name: 'PNG' }).click();
+  const pngDownload = await pngDownloadPromise;
+  assert.match(pngDownload.suggestedFilename(), /^spectra-mirror_.*\.png$/);
+  assert.equal(await pngDownload.failure(), null, `${name}: PNG download`);
   const panel = page.locator('.pubchem-volatile');
   if (populatedKeys.length) await panel.locator('.pubchem-volatile-property').first().waitFor({ timeout: 30_000 });
   assert.equal(await panel.locator('.pubchem-volatile-property').count(), populatedKeys.length, `${name}: visible section count`);
