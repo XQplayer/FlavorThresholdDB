@@ -21,9 +21,15 @@ All notable changes to FlavorThresholdDB are recorded here. Versions follow
 
 - Added project history and maintainership documentation.
 - Established local-only release-candidate and backup directories.
+- Upgraded the live flavor-data integration from FlavorDB to FlavorDB2.
+- Added natural food-source relationships, food-entity search, taxonomy details, and food-to-compound records.
 - Added one-request PubChem PUG View retrieval for eight experimental-property groups: boiling point, vapor pressure, Henry's law constant, water solubility, experimental LogP/LogKow, density, melting point, and physical state.
 - Added responsive, keyboard-accessible multi-source property evidence in the compound UI, preserving raw records, source citations, and links instead of averaging experimental values.
 - Isolated PubChem experimental-property failures so local records, FEMA, FlavorDB2, and basic PubChem identity and structure data remain available.
+- Versioned PubChem experimental-property cache entries by schema and parser, with a 30-day expiry for automatic scientific-rule refresh.
+- Suspended Excel upload and removed the vulnerable SheetJS production dependency; text batch input and CSV export remain available.
+- Standardized hidden single-instance local startup on frontend port 5174 and proxy port 8787, with project ownership and health checks.
+- Promoted desktop/mobile/failure-isolation Playwright coverage to a repository-owned E2E command and isolated generated artifacts under `_local/`.
 
 ## [1.3.0] - 2026-07-31
 

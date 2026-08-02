@@ -13,7 +13,7 @@ UI and exports.
 | FEMA Flavor Ingredient Library | Common name and flavor profile | Preserve FEMA number, source label, link, and access date. |
 | PubChem PUG REST | Chemical identity and structure records | Preserve CID, PubChem link, and access date. |
 | PubChem PUG View, Experimental Properties | Third-party experimental-property aggregation and annotation | Preserve every reported record, its raw text, PubChem reference number, source name, source URL when supplied, and retrieval time. PubChem is the aggregator here, not necessarily the laboratory that performed the experiment. |
-| FlavorDB | Flavor descriptors and related compound data | Preserve source attribution, record link, and the license information returned by the integration. |
+| FlavorDB2 | Flavor descriptors, natural sources, food entities, and food–compound relationships | Preserve source attribution, entity and molecule links, and the license information returned by the integration. Treat “contains” as a reported database relationship, not quantitative concentration evidence. |
 
 ## PubChem integration boundary
 
@@ -40,6 +40,12 @@ concurrent requests for the same canonical CID into a single flight, and writes
 eligible cache entries atomically. Only `ok` and `no_data` results are cached;
 upstream failures and invalid responses remain isolated so they do not poison
 the cache or suppress local, FEMA, FlavorDB2, or basic PubChem results.
+
+Each cached PUG View result carries a cache schema version, a parser version,
+and its UTC retrieval time. Entries with missing or incompatible metadata are
+refetched, and compatible entries expire after 30 days. This prevents an older
+scientific parsing rule from surviving after classifications such as explicit
+aqueous solubility have been corrected.
 
 ## Publication rules
 

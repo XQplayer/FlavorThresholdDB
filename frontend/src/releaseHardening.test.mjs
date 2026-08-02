@@ -28,3 +28,24 @@ test('large chemistry renderers remain lazy loaded', async () => {
   assert.match(classifier, /import\(['"]@rdkit\/rdkit['"]\)/);
   assert.doesNotMatch(classifier, /^import .* from ['"]@rdkit\/rdkit['"]/m);
 });
+
+test('release documents describe the current candidate boundaries', async () => {
+  const readProjectFile = relativePath => readFile(new URL(`../../${relativePath}`, import.meta.url), 'utf8');
+  const [readme, changelog, sources, checklist, history] = await Promise.all([
+    readProjectFile('README.md'),
+    readProjectFile('CHANGELOG.md'),
+    readProjectFile('docs/DATA_SOURCES.md'),
+    readProjectFile('docs/RELEASE_CHECKLIST.md'),
+    readProjectFile('PROJECT_HISTORY.md'),
+  ]);
+
+  assert.match(readme, /127\.0\.0\.1:5174/);
+  assert.match(readme, /Excel.*(?:暂停|suspend)|(?:暂停|suspend).*Excel/i);
+  assert.match(changelog, /cache.*version|version.*cache|缓存.*版本|版本.*缓存/i);
+  assert.match(sources, /FlavorDB2/);
+  assert.match(sources, /PubChem PUG View/);
+  assert.match(checklist, /pnpm audit --prod/);
+  assert.match(checklist, /单实例/);
+  assert.match(history, /codex\/pubchem-volatile-properties/);
+  assert.match(history, /未发布|发布候选/);
+});

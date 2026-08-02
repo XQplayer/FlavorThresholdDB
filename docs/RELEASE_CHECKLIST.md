@@ -11,15 +11,19 @@
 
 - [ ] `pnpm run lint` passes in `frontend/`.
 - [ ] `pnpm run build` passes in `frontend/`.
+- [ ] `pnpm audit --prod` reports no high or critical production vulnerabilities.
+- [ ] `pnpm run test:e2e` passes desktop, mobile, and external-service failure isolation.
+- [ ] Local startup leaves exactly one project-owned frontend process on 5174 and one proxy process on 8787（单实例）.
+- [ ] PubChem PUG View cache entries use the current schema/parser version and a direct refresh matches the cached scientific classification.
 - [ ] Home and search pages load without console errors.
 - [ ] Chinese and English interfaces work.
 - [ ] Exact, fuzzy, and batch searches work.
 - [ ] Filters independently control chemical, medium, source, and threshold results.
 - [ ] Compact and detailed CSV exports match the selected filters.
-- [ ] CAS values remain text when opened in Excel.
+- [ ] CAS values remain Excel-safe text in exported CSV files.
 - [ ] Desktop, tablet, and mobile layouts have no horizontal overflow.
 - [ ] Keyboard focus and reduced-motion behavior are usable.
-- [ ] FEMA, PubChem, FlavorDB, and book records were spot-checked.
+- [ ] FEMA, PubChem, FlavorDB2, and book records were spot-checked.
 
 ## Candidate and publication
 

@@ -9,7 +9,7 @@ FlavorThresholdDB 是一个面向风味化学研究的中英文双语检索平�
 - 支持通过 CAS 号、中文名和英文名检索单一化合物；
 - 支持批量清单匹配；
 - 保留检测介质、阈值类型、数值、单位、文献来源和页码等可追溯信息；
-- 汇集 FEMA、PubChem 和 FlavorDB 等外部数据库信息；
+- 汇集 FEMA、PubChem、FlavorDB 与 FlavorDB2 等外部数据库信息；
 - 为风味化合物注释、OAV 分析和科研写作提供结构化数据支持；
 - 提供适合 Excel 后续分析的精简版与详细版 CSV 导出。
 
@@ -240,10 +240,21 @@ pnpm run build
 
 - 当前版本：`v1.3.1`；
 - 当前主分支：`main`；
-- 当前版本提交：`4cbe586`；
+- 当前版本标签提交：`5af7619`；
+- 当前主分支提交：`00131bd`；
 - 本地主仓库：`E:\codex\Projects\FlavorThresholdDB`；
 - 本地发布候选：`E:\codex\Projects\FlavorThresholdDB\_local\release-candidates`；
 - 本地源码备份：`E:\codex\Projects\FlavorThresholdDB\_local\backups`。
+
+### 未发布候选（2026-08-02）
+
+- 当前开发分支：`codex/pubchem-volatile-properties`，尚未合并 `main`，不属于公网稳定版本；
+- 新增 FlavorDB2 天然来源、食材实体、食材—化合物关系和反向食材详情；
+- 新增 PubChem PUG View 八组挥发与分配实验性质，保留逐条原文、来源和链接；
+- PubChem 实验性质缓存使用模式版本、解析器版本和 30 天 TTL，旧解析缓存自动失效；
+- Excel 文件上传已暂停，SheetJS 已移除；批量文本检索和 CSV 导出继续保留；
+- 本地服务统一为前端 `127.0.0.1:5174` 与代理 `127.0.0.1:8787`，采用隐藏窗口、项目进程核验、单实例复用和健康检查；
+- E2E 验证产物写入 `_local/verification`，不进入发布源码。
 
 ## 12. 后续维护原则
 
@@ -272,4 +283,4 @@ pnpm run build
 - 阈值记录新增前鼻/后鼻路径、来源页介质补全、主体名称补全和完全重复去重；第 27 页三氯茴香醚阈值已按原页修正为 `3×10⁻⁵ μg/kg`；
 - 氯化钠跨 OCR 分块造成的白葡萄汁、红葡萄酒与换算值遗漏已按第 607 页原图补录，并以 `source_verified_page_supplement` 单独追溯；
 - 新增构建阻断型质量门槛，覆盖页数/记录/实体/阈值下限、异常上限、固定查询、错误单位模式及全部金标准；
-- Python 管线测试 59/59、前端测试 14/14、ESLint 与生产构建均通过。
+- Python 书籍索引管线测试 60/60；当前候选的完整测试数量以发布前最终验证结果为准。
