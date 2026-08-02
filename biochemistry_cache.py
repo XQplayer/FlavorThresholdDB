@@ -11,7 +11,14 @@ from pathlib import Path
 
 
 SCHEMA_VERSION = 1
-TTLS = {"ChEBI": timedelta(days=30), "Rhea": timedelta(days=7), "UniProt": timedelta(days=7)}
+TTLS = {
+    "ChEBI": timedelta(days=30),
+    "Rhea": timedelta(days=7),
+    "UniProt": timedelta(days=7),
+    "NCBI Gene": timedelta(days=7),
+    "NCBI Taxonomy": timedelta(days=30),
+    "MetaboLights": timedelta(days=1),
+}
 PERSISTABLE = {"ok", "no_data", "candidate"}
 
 

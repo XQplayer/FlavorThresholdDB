@@ -19,6 +19,13 @@ All notable changes to FlavorThresholdDB are recorded here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- Added evidence-bound NCBI Gene and NCBI Taxonomy records derived only from verified ChEBI–Rhea–UniProt protein relationships.
+- Added public MetaboLights study discovery with stable study accessions and original-record links.
+- Added BRENDA EC-number links and an HMDB link-only integration that explicitly preserves redistribution restrictions.
+- Added a responsive biological-context card with per-source failure isolation, bounded lists, and desktop/mobile E2E coverage.
+
 ## [1.4.0] - 2026-08-02
 
 - Added project history and maintainership documentation.

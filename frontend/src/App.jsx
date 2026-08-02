@@ -8,6 +8,7 @@ import PubChemVolatileProperties from './components/PubChemVolatileProperties';
 import OpenSpectraWorkbench from './components/spectra/OpenSpectraWorkbench';
 import NistWebbookPresence from './components/NistWebbookPresence';
 import BiochemicalRelationships from './components/BiochemicalRelationships';
+import BiologicalContext from './components/BiologicalContext';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
 import {
@@ -1839,6 +1840,14 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                     <NistWebbookPresence apiUrl={FEMA_API_URL} cas={item.cas} isEnglish={isEnglish} />
 
                     <BiochemicalRelationships
+                      apiUrl={FEMA_API_URL}
+                      cas={item.cas}
+                      inchikey={pubchem.inchi_key}
+                      compoundName={commonName || item.english_name}
+                      isEnglish={isEnglish}
+                    />
+
+                    <BiologicalContext
                       apiUrl={FEMA_API_URL}
                       cas={item.cas}
                       inchikey={pubchem.inchi_key}

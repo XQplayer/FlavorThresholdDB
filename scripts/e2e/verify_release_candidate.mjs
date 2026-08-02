@@ -32,8 +32,18 @@ const biochemicalFixture = {
   retrieved_at: '2026-08-02T00:00:00Z',
 };
 
+const biologicalContextFixture = {
+  genes: [{ gene_id: '559295', symbol: 'ATF2', description: 'alcohol acetyltransferase', taxon_id: 4932, organism: 'Saccharomyces cerevisiae', source_url: 'https://www.ncbi.nlm.nih.gov/gene/559295', evidence: { uniprot_accession: 'P12345' } }],
+  taxa: [{ taxon_id: 4932, scientific_name: 'Saccharomyces cerevisiae', rank: 'species', source_url: 'https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=4932' }],
+  studies: [{ accession: 'MTBLS1', source_url: 'https://www.ebi.ac.uk/metabolights/MTBLS1' }],
+  study_hit_count: 78,
+  sources: { 'NCBI Gene': { status: 'ok' }, 'NCBI Taxonomy': { status: 'ok' }, MetaboLights: { status: 'ok' } },
+  links: { BRENDA: [{ ec_number: '1.1.1.1', source_url: 'https://www.brenda-enzymes.org/enzyme.php?ecno=1.1.1.1' }], HMDB: { integration_mode: 'link_only', source_url: 'https://www.hmdb.ca/unearth/q?query=141-78-6&searcher=metabolites' } },
+};
+
 async function installBiochemicalFixture(page) {
   await page.route('**/biochemistry/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(biochemicalFixture) }));
+  await page.route('**/biological-context/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(biologicalContextFixture) }));
 }
 
 async function portIsFree(port) {
@@ -232,6 +242,12 @@ async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
   const reaction = biochemicalPanel.locator('details').first();
   await reaction.locator('summary').click();
   await reaction.getByText('P12345', { exact: false }).waitFor();
+  const biologicalPanel = page.locator('.biological-context');
+  await biologicalPanel.getByRole('heading', { name: '基因、物种与代谢组研究' }).waitFor();
+  await biologicalPanel.getByText('ATF2', { exact: true }).waitFor();
+  await biologicalPanel.getByText('MTBLS1', { exact: true }).waitFor();
+  assert.equal(await biologicalPanel.locator('[data-status="ok"]').count(), 3, `${name}: biological source states`);
+  assert.equal(await biologicalPanel.getByText('HMDB · 仅链接检索', { exact: true }).count(), 1, `${name}: HMDB license gate`);
   const panel = page.locator('.pubchem-volatile');
   if (populatedKeys.length) await panel.locator('.pubchem-volatile-property').first().waitFor({ timeout: 30_000 });
   assert.equal(await panel.locator('.pubchem-volatile-property').count(), populatedKeys.length, `${name}: visible section count`);
