@@ -65,3 +65,20 @@ test('open spectra comparison exposes tolerance, matched peaks, warnings, and ex
   assert.match(mirror, /matched/);
   assert.match(mirror, /mirror-spectrum-plot/);
 });
+
+test('open spectra expose accessible bounded peak tables in detail and comparison views', async () => {
+  const [table, workbench, comparison, styles] = await Promise.all([
+    readFile(new URL('./components/spectra/SpectrumPeakTable.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('./components/spectra/OpenSpectraWorkbench.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('./components/spectra/SpectrumComparison.jsx', import.meta.url), 'utf8'),
+    readFile(new URL('./App.css', import.meta.url), 'utf8'),
+  ]);
+  assert.match(table, /<table/);
+  assert.match(table, /tabIndex="0"/);
+  assert.match(table, /peak-table-scroll/);
+  assert.match(table, /partner_mz/);
+  assert.match(workbench, /SpectrumPeakTable/);
+  assert.match(comparison, /SpectrumPeakTable/);
+  assert.match(styles, /\.peak-table-scroll[\s\S]*overflow:\s*auto/);
+  assert.match(styles, /position:\s*sticky/);
+});

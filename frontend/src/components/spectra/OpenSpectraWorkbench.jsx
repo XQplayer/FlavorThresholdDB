@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { assignComparisonSlot, isSpectrumDownloadAllowed, spectrumDetailPath } from '../../spectra/spectrumContract';
 import SpectrumComparison from './SpectrumComparison';
+import SpectrumPeakTable from './SpectrumPeakTable';
+import { buildSinglePeakRows } from '../../spectra/spectrumPresentation';
 
 function SpectrumPlot({ record, mirror = false, matched = new Set() }) {
   const peaks = record?.peaks || [];
@@ -116,6 +118,7 @@ export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, co
           {selected ? <>
             <div className="spectrum-detail-title"><strong>{selected.source} · {selected.spectrum_id}</strong><span>{selected.peaks?.length || 0} peaks</span></div>
             {selected.loading ? <p>{isEnglish ? 'Loading peaks…' : '正在加载峰表…'}</p> : <SpectrumPlot record={selected} />}
+            {!selected.loading && <SpectrumPeakTable rows={buildSinglePeakRows(selected)} isEnglish={isEnglish} />}
             <dl className="spectrum-meta-grid"><div><dt>{isEnglish ? 'Mode' : '模式'}</dt><dd>{selected.spectrum_type} · {selected.ion_mode}</dd></div><div><dt>{isEnglish ? 'Instrument' : '仪器'}</dt><dd>{selected.instrument || '-'}</dd></div><div><dt>{isEnglish ? 'Adduct' : '加合离子'}</dt><dd>{selected.adduct || '-'}</dd></div><div><dt>{isEnglish ? 'License' : '许可'}</dt><dd>{selected.license || '-'}</dd></div></dl>
             <div className="spectrum-actions"><a href={selected.source_url} target="_blank" rel="noreferrer">{isEnglish ? 'Original record' : '原始记录'}</a>{isSpectrumDownloadAllowed(selected) ? ['json', 'csv', 'msp', 'mgf'].map(format => <a key={format} href={`${apiUrl}${spectrumDetailPath(selected.source, selected.spectrum_id)}/download?format=${format}`}>{format.toUpperCase()}</a>) : <span>{isEnglish ? 'Download disabled pending license review' : '许可待核对，暂不提供代理下载'}</span>}</div>
           </> : <p>{isEnglish ? 'Select a spectrum to inspect its peaks.' : '选择谱图查看峰表与实验条件。'}</p>}

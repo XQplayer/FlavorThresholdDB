@@ -1,5 +1,7 @@
 import { comparisonExportFilename } from '../../spectra/spectrumContract';
 import MirrorSpectrumPlot from './MirrorSpectrumPlot';
+import SpectrumPeakTable from './SpectrumPeakTable';
+import { buildComparisonPeakRows } from '../../spectra/spectrumPresentation';
 
 function downloadText(body, mime, filename) {
   const url = URL.createObjectURL(new Blob([body], { type: mime }));
@@ -51,5 +53,6 @@ export default function SpectrumComparison({ slots, comparison, tolerance, toler
     {blocked && <p className="comparison-warning">{isEnglish ? 'These experiment types are not directly comparable.' : '实验类型不兼容，仅展示镜像谱，不计算相似度。'}</p>}
     {warningLabels.length > 0 && <p className="comparison-warning">{isEnglish ? 'Experimental differences' : '实验条件差异'}: {warningLabels.join(', ')}</p>}
     {comparison && !comparison.error && <div className="comparison-metrics"><strong>{isEnglish ? 'Cosine' : '余弦相似度'} {comparison.similarity ?? '—'}</strong><span>{isEnglish ? 'Matched peaks' : '共有峰'} {comparison.matched_peak_count}</span><span>A {Math.round((comparison.coverage_a || 0) * 100)}%</span><span>B {Math.round((comparison.coverage_b || 0) * 100)}%</span></div>}
+    {slots.a && slots.b && <SpectrumPeakTable rows={buildComparisonPeakRows(slots.a, slots.b, comparison)} isEnglish={isEnglish} comparison />}
   </section>;
 }
