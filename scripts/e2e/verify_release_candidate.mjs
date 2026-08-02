@@ -21,6 +21,21 @@ const propertyKeys = ['boiling_point', 'vapor_pressure', 'henrys_law_constant', 
 const propertyLabels = { boiling_point: '沸点', vapor_pressure: '蒸气压', henrys_law_constant: '亨利定律常数', water_solubility: '水溶解度', experimental_logp: '实验 LogP', density: '密度', melting_point: '熔点', physical_state: '物理状态' };
 const children = [];
 
+const biochemicalFixture = {
+  chebi: { chebi_id: 'CHEBI:27750', name: 'ethyl acetate', formula: 'C4H8O2', source_url: 'https://www.ebi.ac.uk/chebi/searchId.do?chebiId=CHEBI:27750', identity_match: { type: 'inchikey_exact', verified: true } },
+  reactions: [
+    { rhea_id: 'RHEA:10020', equation: 'a very long biochemical participant name + CHEBI:27750 = another very long biochemical participant name + CHEBI:12345', source_url: 'https://www.rhea-db.org/rhea/10020' },
+    { rhea_id: 'RHEA:20020', equation: 'CHEBI:27750 = CHEBI:54321', source_url: 'https://www.rhea-db.org/rhea/20020' },
+  ],
+  proteins: [{ accession: 'P12345', protein_name: 'A deliberately long reviewed enzyme name used to verify bounded responsive rendering without horizontal page overflow', organism: { scientific_name: 'Homo sapiens', taxon_id: 9606 }, ec_numbers: ['1.1.1.1'], rhea_id: 'RHEA:10020', source_url: 'https://www.uniprot.org/uniprotkb/P12345/entry' }],
+  sources: { ChEBI: { status: 'ok', cached: true }, Rhea: { status: 'ok', cached: false }, UniProt: { status: 'partial_failure', requests: [{ rhea_id: 'RHEA:10020', status: 'ok' }, { rhea_id: 'RHEA:20020', status: 'upstream_unavailable' }] } },
+  retrieved_at: '2026-08-02T00:00:00Z',
+};
+
+async function installBiochemicalFixture(page) {
+  await page.route('**/biochemistry/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(biochemicalFixture) }));
+}
+
 async function portIsFree(port) {
   return new Promise(resolve => {
     const server = net.createServer();
@@ -151,6 +166,7 @@ async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
   try {
     const page = await context.newPage();
     const observed = installObservers(page, proxyOrigin);
+  await installBiochemicalFixture(page);
   let resolvePayload;
   let rejectPayload;
   let payloadSettled = false;
@@ -198,6 +214,13 @@ async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
   const pngDownload = await pngDownloadPromise;
   assert.match(pngDownload.suggestedFilename(), /^spectra-mirror_.*\.png$/);
   assert.equal(await pngDownload.failure(), null, `${name}: PNG download`);
+  const biochemicalPanel = page.locator('.biochemical-relationships');
+  await biochemicalPanel.getByRole('heading', { name: '生化关系证据' }).waitFor();
+  await biochemicalPanel.getByText('部分 UniProt 请求失败；其他反应中已核验的结果仍保留显示。', { exact: true }).waitFor();
+  assert.equal(await biochemicalPanel.locator('.biochemical-source-status [data-status="partial_failure"]').count(), 1, `${name}: partial source status`);
+  const reaction = biochemicalPanel.locator('details').first();
+  await reaction.locator('summary').click();
+  await reaction.getByText('P12345', { exact: false }).waitFor();
   const panel = page.locator('.pubchem-volatile');
   if (populatedKeys.length) await panel.locator('.pubchem-volatile-property').first().waitFor({ timeout: 30_000 });
   assert.equal(await panel.locator('.pubchem-volatile-property').count(), populatedKeys.length, `${name}: visible section count`);
@@ -240,6 +263,7 @@ async function runFailureIsolation(browser, baseUrl, proxyOrigin) {
   try {
     const page = await context.newPage();
     const observed = installObservers(page, proxyOrigin);
+  await installBiochemicalFixture(page);
   await page.route('**/compound?cas=141-78-6', async route => {
     const response = await route.fetch();
     const payload = await response.json();

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { normalizeBiochemicalGraph } from './biochemicalRelationships.js';
+import { normalizeBiochemicalGraph, summarizeBiochemicalSources } from './biochemicalRelationships.js';
 
 test('normalizes and deduplicates identifier-backed biochemical relationships', () => {
   const graph = normalizeBiochemicalGraph({
@@ -19,4 +19,16 @@ test('does not present name-only candidates as verified relationships', () => {
   const graph = normalizeBiochemicalGraph({ chebi: { chebi_id: 'CHEBI:1', identity_match: { verified: false } }, reactions: [{ rhea_id: 'RHEA:1' }] });
   assert.equal(graph.verified, false);
   assert.deepEqual(graph.reactions, []);
+});
+
+test('summarizes each source independently and preserves partial UniProt failures', () => {
+  const sources = summarizeBiochemicalSources({
+    ChEBI: { status: 'ok', cached: true },
+    Rhea: { status: 'ok', cached: false },
+    UniProt: { status: 'partial_failure', requests: [{ status: 'ok' }, { status: 'upstream_unavailable' }] },
+  });
+  assert.deepEqual(sources.map(source => [source.name, source.status]), [
+    ['ChEBI', 'ok'], ['Rhea', 'ok'], ['UniProt', 'partial_failure'],
+  ]);
+  assert.equal(sources[2].failedRequests, 1);
 });

@@ -4622,6 +4622,12 @@ select:focus-visible,
 .biochemical-relationships > header span { color: #57736a; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
 .biochemical-relationships h4 { margin: .2rem 0 .75rem; font-size: 1rem; }
 .biochemical-relationships a { color: #315d8e; overflow-wrap: anywhere; }
+.biochemical-source-status { display: flex; flex-wrap: wrap; gap: .45rem; margin-bottom: .8rem; }
+.biochemical-source-status > span { display: inline-flex; align-items: center; gap: .35rem; padding: .35rem .55rem; border: 1px solid #d8e3df; border-radius: 999px; background: #fff; color: #5b6964; font-size: .76rem; }
+.biochemical-source-status > span[data-status="ok"] { border-color: #b9d8c8; background: #eef8f2; color: #315f49; }
+.biochemical-source-status > span[data-status="partial_failure"], .biochemical-source-status > span[data-status="upstream_unavailable"] { border-color: #e5cf9d; background: #fff8e8; color: #735b25; }
+.biochemical-source-status small { padding-left: .3rem; border-left: 1px solid currentColor; opacity: .72; }
+.biochemical-partial-warning { margin: 0 0 .8rem; padding: .65rem .75rem; border-radius: 9px; background: #fff8e8; color: #6c5728; font-size: .82rem; }
 .biochemical-graph { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(0, 2fr); gap: 1rem; }
 .biochemical-entity { display: flex; flex-direction: column; gap: .3rem; padding: .8rem; border-radius: 12px; background: #edf6f1; }
 .biochemical-entity small { color: #60716b; overflow-wrap: anywhere; }
