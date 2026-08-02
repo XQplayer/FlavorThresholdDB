@@ -19,6 +19,8 @@ All notable changes to FlavorThresholdDB are recorded here. Versions follow
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-08-02
+
 ### Added
 
 - Added evidence-bound NCBI Gene and NCBI Taxonomy records derived only from verified ChEBI–Rhea–UniProt protein relationships.
@@ -70,7 +72,8 @@ All notable changes to FlavorThresholdDB are recorded here. Versions follow
 - Unified the public home, navigation, and search workbench design.
 - Added bilingual UI, responsive behavior, metadata, and route fallback.
 
-[Unreleased]: https://github.com/XQplayer/FlavorThresholdDB/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/XQplayer/FlavorThresholdDB/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/XQplayer/FlavorThresholdDB/releases/tag/v1.5.0
 [1.4.0]: https://github.com/XQplayer/FlavorThresholdDB/releases/tag/v1.4.0
 [1.3.1]: https://github.com/XQplayer/FlavorThresholdDB/releases/tag/v1.3.1
 [1.3.0]: https://github.com/XQplayer/FlavorThresholdDB/releases/tag/v1.3.0

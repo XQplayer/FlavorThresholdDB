@@ -238,10 +238,10 @@ pnpm run build
 
 ## 11. 当前稳定版本
 
-- 当前正式版本：`v1.3.1`；当前候选版本：`v1.4.0`；
+- 当前正式版本：`v1.4.0`；当前候选版本：`v1.5.0`；
 - 当前主分支：`main`；
 - 当前版本标签提交：`5af7619`；
-- 当前主分支提交：`00131bd`；
+- 当前主分支提交：`f0fadfb`；
 - 本地主仓库：`E:\codex\Projects\FlavorThresholdDB`；
 - 本地发布候选：`E:\codex\Projects\FlavorThresholdDB\_local\release-candidates`；
 - 本地源码备份：`E:\codex\Projects\FlavorThresholdDB\_local\backups`。
