@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test:book-search": "node --test src/bookSearch.test.mjs",
     "test:static-routes": "node --test src/staticRoutes.test.mjs",
+    "test:e2e": "node ../scripts/e2e/verify_release_candidate.mjs",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"

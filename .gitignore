@@ -47,5 +47,7 @@ supabase/.temp/
 # These files must never be committed or deployed.
 _local/
 .media-build/
+/.playwright-cli/
+/.superpowers/
 
 # 由于前端有自己的 .gitignore，所以 node_modules 会被默认过滤
