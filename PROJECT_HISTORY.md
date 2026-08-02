@@ -238,17 +238,16 @@ pnpm run build
 
 ## 11. 当前稳定版本
 
-- 当前正式版本：`v1.4.0`；当前候选版本：`v1.5.0`；
+- 当前正式版本：`v1.5.0`；
 - 当前主分支：`main`；
-- 当前版本标签提交：`5af7619`；
-- 当前主分支提交：`f0fadfb`；
+- 当前版本由 `v1.5.0` 标签追踪；
 - 本地主仓库：`E:\codex\Projects\FlavorThresholdDB`；
 - 本地发布候选：`E:\codex\Projects\FlavorThresholdDB\_local\release-candidates`；
 - 本地源码备份：`E:\codex\Projects\FlavorThresholdDB\_local\backups`。
 
-### 未发布候选（2026-08-02）
+### v1.5.0 公网发布（2026-08-03）
 
-- 当前开发分支：`codex/pubchem-volatile-properties`，尚未合并 `main`，不属于公网稳定版本；
+- 功能分支已合并 `main`，GitHub Pages 与 Render API 已完成公网部署；
 - 新增 FlavorDB2 天然来源、食材实体、食材—化合物关系和反向食材详情；
 - 新增 PubChem PUG View 八组挥发与分配实验性质，保留逐条原文、来源和链接；
 - PubChem 实验性质缓存使用模式版本、解析器版本和 30 天 TTL，旧解析缓存自动失效；
@@ -257,7 +256,7 @@ pnpm run build
 - E2E 验证产物写入 `_local/verification`，不进入发布源码。
 - 新增 MassBank 与 GNPS/GNPS2 开放光谱层：按 InChIKey/CAS 检索、单谱峰表、许可门控下载、Da/ppm 镜像比较、匹配峰高亮和 JSON/CSV/SVG 比较导出；
 - GNPS2 精简元数据索引保存在 `_local/indexes/gnps_spectra.sqlite`，不进入 Git；检索缓存 24 小时，明确开放许可峰表缓存 30 天，待核许可峰表仅保存在内存；
-- 当前候选验证：代理与运行控制 Python 测试 51/51、书籍索引 60/60、前端测试 37/37、ESLint、生产构建、生产依赖审计及桌面/移动端 E2E 全部通过。
+- 最终验证：Python 130/130、前端 62/62、ESLint、生产构建、桌面/移动端 E2E 及 Render 公网接口自动验收全部通过。
 
 ## 12. 后续维护原则
 

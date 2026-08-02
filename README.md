@@ -4,9 +4,9 @@
 
 FlavorThresholdDB is a bilingual research database for traceable odor-threshold and flavor-descriptor retrieval. It supports exact and fuzzy searches by CAS number, Chinese name, or English name, plus batch matching and filter-aware CSV export.
 
-## Version 1.5.0 candidate
+## Version 1.5.0
 
-The current `codex/pubchem-volatile-properties` branch is the v1.5.0 release candidate. In addition to the v1.4.0 FlavorDB2, PubChem property, open-spectrum, NIST, and ChEBI–Rhea–UniProt layers, it adds evidence-bound genes and taxonomy, MetaboLights studies, bioactivity and target records, and experimental-versus-predicted protein structures.
+Version 1.5.0 is the current public release. In addition to the v1.4.0 FlavorDB2, PubChem property, open-spectrum, NIST, and ChEBI–Rhea–UniProt layers, it adds evidence-bound genes and taxonomy, MetaboLights studies, bioactivity and target records, and experimental-versus-predicted protein structures.
 
 Open-spectrum records retain source identity and license status. Peak downloads and comparison exports are enabled only for reviewed redistributable licenses. The large GNPS metadata index is distributed as a verified GitHub Release asset rather than committed to Git.
 
