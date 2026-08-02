@@ -5,6 +5,7 @@ import SearchInsights from './components/SearchInsights';
 import PubChemStructureViewer from './components/PubChemStructureViewer';
 import FlavorDB2Sources from './components/FlavorDB2Sources';
 import PubChemVolatileProperties from './components/PubChemVolatileProperties';
+import OpenSpectraWorkbench from './components/spectra/OpenSpectraWorkbench';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
 import {
@@ -1818,6 +1819,17 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                       <FlavorDB2Sources
                         apiUrl={FEMA_API_URL}
                         entities={profile.flavordb2_entities.entities || []}
+                        isEnglish={isEnglish}
+                      />
+                    )}
+
+                    {pubchem.found && (
+                      <OpenSpectraWorkbench
+                        apiUrl={FEMA_API_URL}
+                        cas={item.cas}
+                        inchikey={pubchem.inchi_key}
+                        smiles={pubchem.smiles}
+                        compoundName={commonName || item.english_name}
                         isEnglish={isEnglish}
                       />
                     )}

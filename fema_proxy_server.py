@@ -17,6 +17,7 @@ from urllib.request import Request, urlopen
 
 from spectra_gnps import fetch_gnps_spectrum, fetch_gnps_usi, search_gnps_records
 from spectra_massbank import fetch_massbank_record, query_massbank_records
+from spectra_service import compare_spectra, serialize_spectrum
 
 
 HOST = os.environ.get("HOST", "0.0.0.0")
@@ -960,7 +961,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -1018,6 +1019,22 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(502, {"error": str(exc), "usi": usi})
             return
         spectrum_path = parsed.path.strip("/").split("/")
+        if len(spectrum_path) == 4 and spectrum_path[0] == "spectra" and spectrum_path[3] == "download":
+            source = unquote(spectrum_path[1])
+            spectrum_id = unquote(spectrum_path[2])
+            output_format = (parse_qs(parsed.query).get("format") or ["json"])[0].strip().lower()
+            try:
+                record = fetch_open_spectrum(source, spectrum_id)
+                body, content_type, extension = serialize_spectrum(record, output_format)
+                safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", spectrum_id)
+                self.send_binary(200, body.encode("utf-8"), content_type, f"{safe_id}.{extension}")
+            except PermissionError as exc:
+                self.send_json(403, {"error": str(exc), "license": "download_not_permitted"})
+            except ValueError as exc:
+                self.send_json(400, {"error": str(exc)})
+            except Exception as exc:
+                self.send_json(502, {"error": str(exc), "source": source, "spectrum_id": spectrum_id})
+            return
         if len(spectrum_path) == 3 and spectrum_path[0] == "spectra":
             source = unquote(spectrum_path[1])
             spectrum_id = unquote(spectrum_path[2])
@@ -1314,6 +1331,35 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, {**result, "cached": False})
         except Exception as exc:
             self.send_json(502, {"found": False, "query": query, "error": str(exc)})
+
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path != "/spectra/compare":
+            self.send_json(404, {"error": "Not found"})
+            return
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            content_length = 0
+        if content_length <= 0 or content_length > 1_000_000:
+            self.send_json(400, {"error": "invalid request body"})
+            return
+        try:
+            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+            a_source = str(payload.get("a_source") or "").strip()
+            a_id = str(payload.get("a_id") or "").strip()
+            b_source = str(payload.get("b_source") or "").strip()
+            b_id = str(payload.get("b_id") or "").strip()
+            tolerance = float(payload.get("tolerance", 0.1))
+            if not all((a_source, a_id, b_source, b_id)):
+                raise ValueError("both spectrum sources and identifiers are required")
+            spectrum_a = fetch_open_spectrum(a_source, a_id)
+            spectrum_b = fetch_open_spectrum(b_source, b_id)
+            self.send_json(200, compare_spectra(spectrum_a, spectrum_b, tolerance))
+        except (ValueError, json.JSONDecodeError) as exc:
+            self.send_json(400, {"error": str(exc)})
+        except Exception as exc:
+            self.send_json(502, {"error": str(exc)})
 
     def log_message(self, format: str, *args) -> None:
         return

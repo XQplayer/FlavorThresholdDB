@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+import csv
+import io
+import json
 from math import isfinite
 from math import sqrt
 import re
@@ -227,3 +230,75 @@ def compare_spectra(spectrum_a: dict, spectrum_b: dict, tolerance: float = 0.1) 
         "coverage_b": round(len(matches) / len(peaks_b), 6) if peaks_b else 0.0,
         "matches": matches,
     }
+
+
+def license_policy(record: dict) -> dict:
+    license_text = _clean_text(record.get("license"))
+    status = _clean_text(record.get("license_status")).casefold()
+    normalized = license_text.casefold()
+    allowed = status not in {"needs_review", "restricted", "link_only"} and (
+        normalized.startswith("cc ")
+        or normalized.startswith("cc0")
+        or normalized in {"public domain", "pddl"}
+    )
+    return {
+        "download_allowed": allowed,
+        "attribution_required": allowed and not (normalized.startswith("cc0") or normalized == "public domain"),
+        "license": license_text or "unknown",
+        "status": status or ("permitted" if allowed else "needs_review"),
+    }
+
+
+def serialize_spectrum(record: dict, output_format: str) -> tuple[str, str, str]:
+    policy = license_policy(record)
+    if not policy["download_allowed"]:
+        raise PermissionError("spectrum license does not permit proxy download")
+    output = _clean_text(output_format).casefold()
+    peaks = record.get("peaks") or []
+    name = _clean_text((record.get("compound_identity") or {}).get("name")) or record.get("spectrum_id", "Spectrum")
+    if output == "json":
+        payload = {**record, "license_policy": policy}
+        return json.dumps(payload, ensure_ascii=False, indent=2), "application/json; charset=utf-8", "json"
+    if output == "csv":
+        stream = io.StringIO(newline="")
+        writer = csv.writer(stream)
+        writer.writerow(["source", record.get("source", "")])
+        writer.writerow(["spectrum_id", record.get("spectrum_id", "")])
+        writer.writerow(["source_url", record.get("source_url", "")])
+        writer.writerow(["license", policy["license"]])
+        writer.writerow(["retrieved_at", record.get("retrieved_at", "")])
+        writer.writerow([])
+        writer.writerow(["mz", "relative_intensity"])
+        writer.writerows(peaks)
+        return stream.getvalue(), "text/csv; charset=utf-8", "csv"
+    if output == "msp":
+        lines = [
+            f"Name: {name}",
+            f"DB#: {record.get('spectrum_id', '')}",
+            f"Source: {record.get('source', '')}",
+            f"Source URL: {record.get('source_url', '')}",
+            f"License: {policy['license']}",
+            f"Num Peaks: {len(peaks)}",
+        ]
+        lines.extend(f"{mz} {intensity}" for mz, intensity in peaks)
+        return "\n".join(lines) + "\n", "chemical/x-msp; charset=utf-8", "msp"
+    if output == "mgf":
+        identity = record.get("compound_identity") or {}
+        lines = [
+            "BEGIN IONS",
+            f"TITLE={name}",
+            f"SPECTRUMID={record.get('spectrum_id', '')}",
+            f"SOURCE={record.get('source', '')}",
+            f"SOURCE_URL={record.get('source_url', '')}",
+            f"LICENSE={policy['license']}",
+        ]
+        if record.get("precursor_mz") is not None:
+            lines.append(f"PEPMASS={record['precursor_mz']}")
+        if record.get("ion_mode"):
+            lines.append(f"IONMODE={record['ion_mode']}")
+        if identity.get("smiles"):
+            lines.append(f"SMILES={identity['smiles']}")
+        lines.extend(f"{mz} {intensity}" for mz, intensity in peaks)
+        lines.append("END IONS")
+        return "\n".join(lines) + "\n", "chemical/x-mgf; charset=utf-8", "mgf"
+    raise ValueError("unsupported spectrum export format")

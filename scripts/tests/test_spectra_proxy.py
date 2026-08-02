@@ -4,6 +4,8 @@ from http.server import ThreadingHTTPServer
 import unittest
 from unittest.mock import patch
 from urllib.request import urlopen
+from urllib.error import HTTPError
+from urllib.request import Request
 
 from fema_proxy_server import (
     Handler,
@@ -85,6 +87,41 @@ class OpenSpectraRouteTests(unittest.TestCase):
                 body = json.loads(response.read().decode("utf-8"))
         self.assertEqual(body, payload)
         mocked.assert_called_once_with("GNPS", "GNPS2LIB00000000001")
+
+    def test_download_route_returns_export_for_permitted_record(self):
+        record = {
+            "source": "MassBank", "spectrum_id": "MB-1", "license": "CC BY",
+            "source_url": "https://example.test/MB-1", "peaks": [[43, 100]],
+            "compound_identity": {"name": "Example"},
+        }
+        with patch("fema_proxy_server.fetch_open_spectrum", return_value=record):
+            with urlopen(self.base + "/spectra/MassBank/MB-1/download?format=msp", timeout=5) as response:
+                body = response.read().decode("utf-8")
+                disposition = response.headers["Content-Disposition"]
+        self.assertIn("Name: Example", body)
+        self.assertIn("MB-1.msp", disposition)
+
+    def test_download_route_rejects_unreviewed_license(self):
+        record = {"source": "GNPS", "spectrum_id": "G-1", "license": "needs_review", "peaks": [[43, 100]]}
+        with patch("fema_proxy_server.fetch_open_spectrum", return_value=record):
+            with self.assertRaises(HTTPError) as raised:
+                urlopen(self.base + "/spectra/GNPS/G-1/download?format=json", timeout=5)
+        self.assertEqual(raised.exception.code, 403)
+
+    def test_compare_route_refetches_both_spectra(self):
+        spectra = {
+            ("MassBank", "A"): {"spectrum_type": "EI", "ms_level": 1, "peaks": [[43, 100]]},
+            ("MassBank", "B"): {"spectrum_type": "EI", "ms_level": 1, "peaks": [[43, 100]]},
+        }
+        body = json.dumps({
+            "a_source": "MassBank", "a_id": "A", "b_source": "MassBank", "b_id": "B", "tolerance": 0.1
+        }).encode("utf-8")
+        request = Request(self.base + "/spectra/compare", data=body, method="POST", headers={"Content-Type": "application/json"})
+        with patch("fema_proxy_server.fetch_open_spectrum", side_effect=lambda source, identifier: spectra[(source, identifier)]):
+            with urlopen(request, timeout=5) as response:
+                result = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(result["similarity"], 1.0)
+        self.assertEqual(result["matched_peak_count"], 1)
 
 
 if __name__ == "__main__":

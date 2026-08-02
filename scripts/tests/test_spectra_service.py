@@ -3,9 +3,11 @@ import unittest
 from spectra_service import (
     assess_compatibility,
     compare_spectra,
+    license_policy,
     match_peaks,
     normalize_spectrum_record,
     rank_identity_match,
+    serialize_spectrum,
 )
 
 
@@ -129,6 +131,47 @@ class SpectrumComparisonTests(unittest.TestCase):
         )
         self.assertIsNone(result["similarity"])
         self.assertEqual(result["matched_peak_count"], 0)
+
+
+class SpectrumExportTests(unittest.TestCase):
+    def setUp(self):
+        self.record = {
+            "spectrum_id": "MB-1",
+            "source": "MassBank",
+            "source_url": "https://example.test/MB-1",
+            "license": "CC BY-NC-SA",
+            "retrieved_at": "2026-08-02T12:00:00Z",
+            "compound_identity": {"name": "Ethyl acetate"},
+            "spectrum_type": "EI",
+            "ms_level": 1,
+            "ion_mode": "positive",
+            "peaks": [[43.0, 100.0], [61.0, 40.0]],
+        }
+
+    def test_creative_commons_record_is_downloadable_with_attribution(self):
+        policy = license_policy(self.record)
+        self.assertTrue(policy["download_allowed"])
+        self.assertTrue(policy["attribution_required"])
+
+    def test_unreviewed_gnps_record_is_not_downloadable(self):
+        policy = license_policy({"source": "GNPS", "license": "needs_review", "license_status": "needs_review"})
+        self.assertFalse(policy["download_allowed"])
+
+    def test_serializes_csv_msp_and_mgf_with_provenance(self):
+        csv_body, csv_type, csv_ext = serialize_spectrum(self.record, "csv")
+        msp_body, _, msp_ext = serialize_spectrum(self.record, "msp")
+        mgf_body, _, mgf_ext = serialize_spectrum(self.record, "mgf")
+        self.assertIn("source_url", csv_body)
+        self.assertIn("https://example.test/MB-1", csv_body)
+        self.assertIn("Name: Ethyl acetate", msp_body)
+        self.assertIn("License: CC BY-NC-SA", msp_body)
+        self.assertIn("BEGIN IONS", mgf_body)
+        self.assertIn("SOURCE_URL=https://example.test/MB-1", mgf_body)
+        self.assertEqual((csv_ext, msp_ext, mgf_ext), ("csv", "msp", "mgf"))
+
+    def test_restricted_record_cannot_be_serialized(self):
+        with self.assertRaises(PermissionError):
+            serialize_spectrum({**self.record, "source": "GNPS", "license": "needs_review"}, "json")
 
 
 if __name__ == "__main__":
