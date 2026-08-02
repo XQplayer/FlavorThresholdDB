@@ -312,3 +312,10 @@ pnpm run build
 - GtoPdb 禁止直接使用会忽略 InChIKey 条件的全局 interactions 接口，必须先解析精确 ligand ID；BindingDB 仅允许结构相似度 1.0 的查询；
 - 前端新增分来源切换、长列表滚动和精确匹配说明，明确体外数据库活性不能直接解释为生理效应、香气感知或因果；
 - 乙酸乙酯实测返回 PubChem BioAssay 606 条（页面保留前 100 条）和 ChEMBL 41 条；GtoPdb、BindingDB 精确检索均为无记录，不以相似化合物填充。
+
+## 17. 蛋白结构证据（2026-08-02）
+
+- 新增 RCSB PDB、AlphaFold DB 与 GPCRdb 结构证据接口，输入严格来自 ChEBI → Rhea → UniProt 链中的 accession；
+- RCSB PDB 记录标为实验结构并链接结构页与 mmCIF 下载；AlphaFold DB 标为预测模型并保留版本及 global pLDDT；GPCRdb 必须精确匹配 UniProt accession；
+- 前端将实验结构、预测模型和 GPCR 受体分栏显示，明确 AlphaFold 模型不是实验性配体—蛋白复合物证据；
+- 乙酸乙酯实测得到 2 个 RCSB PDB 实验结构、14 个 AlphaFold 预测模型和 0 个精确 GPCRdb 记录；三来源并发查询并按来源 TTL 缓存。

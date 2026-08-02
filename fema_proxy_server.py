@@ -19,6 +19,7 @@ from biochemistry_service import resolve_biochemistry
 from biochemistry_cache import BiochemistryCache
 from biological_context import build_biological_context
 from bioactivity_service import resolve_bioactivity
+from structure_evidence import resolve_structure_evidence
 from nist_webbook import PARSER_VERSION as NIST_PARSER_VERSION, query_nist_webbook
 from spectra_gnps import fetch_gnps_spectrum, fetch_gnps_usi, search_gnps_records
 from spectra_massbank import fetch_massbank_record, query_massbank_records
@@ -1126,6 +1127,19 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(400, {"status": "invalid_query", "error": "cid, inchikey, or smiles is required"})
                 return
             result = resolve_bioactivity({"cid": cid, "inchikey": inchikey, "smiles": smiles}, cache=BIOCHEMISTRY_CACHE)
+            self.send_json(200, result)
+            return
+        if parsed.path == "/structures/resolve":
+            params = parse_qs(parsed.query)
+            inchikey = (params.get("inchikey") or [""])[0].strip().upper()
+            cas = (params.get("cas") or [""])[0].strip()
+            names = [name.strip() for name in params.get("name", []) if name.strip()]
+            if not inchikey and not cas and not names:
+                self.send_json(400, {"status": "invalid_query", "error": "inchikey, cas, or name is required"})
+                return
+            target = {"inchikey": inchikey, "cas": cas, "names": names}
+            biochemistry = resolve_biochemistry(target, cache=BIOCHEMISTRY_CACHE)
+            result = resolve_structure_evidence(biochemistry, cache=BIOCHEMISTRY_CACHE)
             self.send_json(200, result)
             return
         if parsed.path == "/spectra/index-status":

@@ -48,10 +48,17 @@ const bioactivityFixture = {
   sources: { 'PubChem BioAssay': { status: 'ok', total: 606 }, ChEMBL: { status: 'ok', total: 41 }, GtoPdb: { status: 'no_data' }, BindingDB: { status: 'no_data', match_mode: 'exact_structure' } },
 };
 
+const structureFixture = {
+  experimental_structures: [{ pdb_id: '1ABC', accession: 'P12345', evidence_type: 'experimental_structure', source_url: 'https://www.rcsb.org/structure/1ABC' }],
+  predicted_models: [{ model_id: 'AF-P12345-F1', accession: 'P12345', evidence_type: 'predicted_structure', global_plddt: 91.2, version: 6, source_url: 'https://alphafold.ebi.ac.uk/entry/AF-P12345-F1' }],
+  gpcr_proteins: [], sources: { 'RCSB PDB': { status: 'ok' }, 'AlphaFold DB': { status: 'ok' }, GPCRdb: { status: 'no_data' } },
+};
+
 async function installBiochemicalFixture(page) {
   await page.route('**/biochemistry/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(biochemicalFixture) }));
   await page.route('**/biological-context/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(biologicalContextFixture) }));
   await page.route('**/bioactivity/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bioactivityFixture) }));
+  await page.route('**/structures/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(structureFixture) }));
 }
 
 async function portIsFree(port) {
@@ -263,6 +270,11 @@ async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
   await activityPanel.getByText('Example target', { exact: true }).waitFor();
   await activityPanel.getByRole('tab', { name: /BindingDB/ }).click();
   await activityPanel.getByText('BindingDB 仅采用结构相似度 1.0 的精确检索。', { exact: true }).waitFor();
+  const structurePanel = page.locator('.structure-evidence');
+  await structurePanel.getByRole('heading', { name: '实验与预测蛋白结构' }).waitFor();
+  await structurePanel.getByText('PDB 1ABC', { exact: true }).waitFor();
+  await structurePanel.getByText('AF-P12345-F1', { exact: true }).waitFor();
+  await structurePanel.getByText('PDB 为实验结构档案；AlphaFold 为预测模型，不作为实验性配体—蛋白复合物证据。', { exact: true }).waitFor();
   const panel = page.locator('.pubchem-volatile');
   if (populatedKeys.length) await panel.locator('.pubchem-volatile-property').first().waitFor({ timeout: 30_000 });
   assert.equal(await panel.locator('.pubchem-volatile-property').count(), populatedKeys.length, `${name}: visible section count`);

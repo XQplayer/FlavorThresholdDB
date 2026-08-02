@@ -27,6 +27,7 @@ All notable changes to FlavorThresholdDB are recorded here. Versions follow
 - Added a responsive biological-context card with per-source failure isolation, bounded lists, and desktop/mobile E2E coverage.
 - Added exact-identity PubChem BioAssay and ChEMBL activity records, plus identity-gated GtoPdb and exact-structure BindingDB searches.
 - Added a source-tabbed, bounded bioactivity evidence card with assay identifiers, target links, measurement context, and causal-interpretation warnings.
+- Added UniProt-linked RCSB PDB experimental structures, AlphaFold DB predicted models, and exact-accession GPCRdb records with explicit evidence-type separation.
 
 ## [1.4.0] - 2026-08-02
 

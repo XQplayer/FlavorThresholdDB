@@ -22,6 +22,9 @@ TTLS = {
     "ChEMBL": timedelta(days=7),
     "GtoPdb": timedelta(days=7),
     "BindingDB": timedelta(days=7),
+    "RCSB PDB": timedelta(days=7),
+    "AlphaFold DB": timedelta(days=30),
+    "GPCRdb": timedelta(days=7),
 }
 PERSISTABLE = {"ok", "no_data", "candidate"}
 
