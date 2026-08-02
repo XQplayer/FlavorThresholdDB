@@ -4,19 +4,173 @@ import html
 import json
 import os
 import re
+import socket
+import threading
+import time
+import tempfile
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.error import HTTPError
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
+
+from biochemistry_service import resolve_biochemistry
+from biochemistry_cache import BiochemistryCache
+from nist_webbook import PARSER_VERSION as NIST_PARSER_VERSION, query_nist_webbook
+from spectra_gnps import fetch_gnps_spectrum, fetch_gnps_usi, search_gnps_records
+from spectra_massbank import fetch_massbank_record, query_massbank_records
+from spectra_cache import OpenSpectraCache
+from spectra_index_distribution import install_public_index
+from spectra_service import compare_spectra, serialize_spectrum
 
 
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8787"))
 BASE_URL = "https://www.femaflavor.org"
 PUBCHEM_BASE_URL = "https://pubchem.ncbi.nlm.nih.gov"
-FLAVORDB_BASE_URL = "https://cosylab.iiitd.edu.in/flavordb"
-CACHE_PATH = Path(__file__).resolve().with_name("fema_flavor_cache.json")
+FLAVORDB_BASE_URL = "https://cosylab.iiitd.edu.in/flavordb2"
+PROJECT_ROOT = Path(__file__).resolve().parent
+CACHE_PATH = Path(
+    os.environ.get(
+        "FLAVOR_CACHE_PATH",
+        PROJECT_ROOT / "_local" / "cache" / "fema_flavor_cache.json",
+    )
+).resolve()
+_CACHE_PERSIST_LOCK = threading.RLock()
+OPEN_SPECTRA_CACHE = OpenSpectraCache(
+    Path(os.environ.get("OPEN_SPECTRA_CACHE_PATH", PROJECT_ROOT / "_local" / "cache" / "open_spectra_cache.json")).resolve()
+)
+BIOCHEMISTRY_CACHE = BiochemistryCache(
+    Path(os.environ.get("BIOCHEMISTRY_CACHE_PATH", PROJECT_ROOT / "_local" / "cache" / "biochemistry_cache.json")).resolve()
+)
+PUBLIC_SPECTRUM_MANIFEST_PATH = Path(os.environ.get("PUBLIC_SPECTRUM_MANIFEST_PATH", PROJECT_ROOT / "data" / "manifests" / "public_spectrum_index.json")).resolve()
+PUBLIC_SPECTRUM_RUNTIME_DIR = Path(os.environ.get("PUBLIC_SPECTRUM_RUNTIME_DIR", PROJECT_ROOT / "_local" / "indexes" / "public")).resolve()
+_PUBLIC_INDEX_STATUS_LOCK = threading.RLock()
+_PUBLIC_INDEX_STATUS = {"status": "missing", "degraded": True, "index_path": str(PUBLIC_SPECTRUM_RUNTIME_DIR / "public_spectrum_index.sqlite")}
+NIST_CACHE_SCHEMA_VERSION = 1
+NIST_CACHE_TTL = timedelta(days=7)
+
+
+def initialize_public_spectrum_index() -> dict:
+    global _PUBLIC_INDEX_STATUS
+    if not PUBLIC_SPECTRUM_MANIFEST_PATH.exists():
+        return get_public_spectrum_index_status()
+    try:
+        manifest = json.loads(PUBLIC_SPECTRUM_MANIFEST_PATH.read_text(encoding="utf-8"))
+        result = install_public_index(manifest, PUBLIC_SPECTRUM_RUNTIME_DIR)
+        result["degraded"] = result.get("status") != "ready"
+    except Exception as exc:
+        result = {"status": "invalid", "degraded": True, "index_path": str(PUBLIC_SPECTRUM_RUNTIME_DIR / "public_spectrum_index.sqlite"), "error": str(exc)}
+    with _PUBLIC_INDEX_STATUS_LOCK:
+        _PUBLIC_INDEX_STATUS = result
+    return dict(result)
+
+
+def get_public_spectrum_index_status() -> dict:
+    with _PUBLIC_INDEX_STATUS_LOCK:
+        return dict(_PUBLIC_INDEX_STATUS)
+
+
+def get_nist_webbook_cached(cache: dict, cas: str, *, query=None, now=None, persist=None) -> tuple[dict, bool]:
+    reference_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    key = f"nist-webbook:{cas}"
+    entry = cache.get(key)
+    if isinstance(entry, dict) and entry.get("cache_schema_version") == NIST_CACHE_SCHEMA_VERSION and entry.get("parser_version") == NIST_PARSER_VERSION:
+        stored_at = _parse_utc_timestamp(entry.get("cache_stored_at"))
+        if stored_at and timedelta(0) <= reference_time - stored_at <= NIST_CACHE_TTL:
+            return entry, True
+    result = (query or query_nist_webbook)(cas)
+    if result.get("status") in {"ok", "no_data"}:
+        result = {**result, "cache_schema_version": NIST_CACHE_SCHEMA_VERSION, "parser_version": NIST_PARSER_VERSION, "cache_stored_at": reference_time.isoformat().replace("+00:00", "Z")}
+        (persist or _store_cache_result)(cache, key, result)
+        cache[key] = result
+    return result, False
+
+
+def search_gnps_with_available_index(target: dict) -> dict:
+    status = get_public_spectrum_index_status()
+    if status.get("status") == "ready" and status.get("index_path"):
+        return search_gnps_records(target, status["index_path"])
+    return search_gnps_records(target)
+
+
+def aggregate_open_spectra(
+    target: dict,
+    *,
+    massbank_query=None,
+    gnps_query=None,
+    cache=None,
+) -> dict:
+    """Search independent public sources while preserving partial results."""
+    active_cache = cache if cache is not None else (OPEN_SPECTRA_CACHE if massbank_query is None and gnps_query is None else None)
+    cache_key = json.dumps(target, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    if active_cache is not None:
+        cached = active_cache.get_search(cache_key)
+        if cached is not None:
+            return cached
+    queries = {
+        "MassBank": massbank_query or query_massbank_records,
+        "GNPS": gnps_query or search_gnps_with_available_index,
+    }
+    sources = {}
+    records = []
+    for source, query_function in queries.items():
+        try:
+            result = query_function(target)
+            if not isinstance(result, dict):
+                raise ValueError("source adapter returned a non-object response")
+        except Exception as exc:
+            result = {
+                "source": source,
+                "status": "upstream_unavailable",
+                "records": [],
+                "error": str(exc),
+            }
+        source_records = result.get("records") if isinstance(result.get("records"), list) else []
+        sources[source] = {
+            "status": result.get("status", "invalid_response"),
+            "count": len(source_records),
+            **({"error": result["error"]} if result.get("error") else {}),
+        }
+        records.extend(source_records)
+    response = {
+        "compound_identity": target,
+        "summary": {
+            "total": len(records),
+            "massbank": sources["MassBank"]["count"],
+            "gnps": sources["GNPS"]["count"],
+            "ei": sum(1 for record in records if record.get("spectrum_type") == "EI"),
+            "ms2": sum(1 for record in records if record.get("spectrum_type") == "MS2"),
+            "verified": sum(
+                1 for record in records if (record.get("compound_identity") or {}).get("verified")
+            ),
+        },
+        "sources": sources,
+        "records": records,
+        "retrieved_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    if active_cache is not None:
+        active_cache.put_search(cache_key, response)
+    return response
+
+
+def fetch_open_spectrum(source: str, spectrum_id: str, *, massbank_fetch=None, gnps_fetch=None, cache=None) -> dict:
+    normalized_source = str(source or "").strip().casefold()
+    active_cache = cache if cache is not None else (OPEN_SPECTRA_CACHE if massbank_fetch is None and gnps_fetch is None else None)
+    if active_cache is not None:
+        cached = active_cache.get_detail(normalized_source, spectrum_id)
+        if cached is not None:
+            return cached
+    if normalized_source == "massbank":
+        record = (massbank_fetch or fetch_massbank_record)(spectrum_id)
+    elif normalized_source == "gnps":
+        record = (gnps_fetch or fetch_gnps_spectrum)(spectrum_id)
+    else:
+        raise ValueError("unsupported spectrum source")
+    if active_cache is not None:
+        active_cache.put_detail(normalized_source, spectrum_id, record)
+    return record
 
 
 def load_cache() -> dict[str, dict]:
@@ -29,13 +183,116 @@ def load_cache() -> dict[str, dict]:
 
 
 def save_cache(cache: dict[str, dict]) -> None:
-    CACHE_PATH.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary_path = None
+    with _CACHE_PERSIST_LOCK:
+        snapshot = dict(cache)
+        CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=CACHE_PATH.parent,
+            prefix=f".{CACHE_PATH.name}.",
+            suffix=".tmp",
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+                json.dump(snapshot, handle, ensure_ascii=False, indent=2)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, CACHE_PATH)
+            temporary_path = None
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+
+
+_CACHE_MISSING = object()
+
+
+def _store_cache_result(cache: dict, key: str, result: dict) -> None:
+    with _CACHE_PERSIST_LOCK:
+        previous = cache.get(key, _CACHE_MISSING)
+        cache[key] = result
+        try:
+            save_cache(cache)
+        except Exception:
+            if previous is _CACHE_MISSING:
+                cache.pop(key, None)
+            else:
+                cache[key] = previous
+            raise
 
 
 def fetch_text(url: str) -> str:
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urlopen(req, timeout=25) as resp:
         return resp.read().decode("utf-8", errors="replace")
+
+
+_PUBCHEM_VOLATILE_RATE_LOCK = threading.Lock()
+_PUBCHEM_VOLATILE_LAST_REQUEST = None
+_PUBCHEM_VOLATILE_MIN_INTERVAL = 0.2
+_PUBCHEM_VOLATILE_FLIGHTS_LOCK = threading.Lock()
+_PUBCHEM_VOLATILE_FLIGHTS = {}
+PUBCHEM_VOLATILE_CACHE_SCHEMA_VERSION = 1
+PUBCHEM_VOLATILE_PARSER_VERSION = "2026-08-02-water-medium-v2"
+PUBCHEM_VOLATILE_CACHE_TTL = timedelta(days=30)
+
+
+def _parse_utc_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def is_pubchem_volatile_cache_entry_current(
+    entry: dict,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("schema_version") != PUBCHEM_VOLATILE_CACHE_SCHEMA_VERSION:
+        return False
+    if entry.get("parser_version") != PUBCHEM_VOLATILE_PARSER_VERSION:
+        return False
+    retrieved_at = _parse_utc_timestamp(entry.get("retrieved_at"))
+    reference_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    if retrieved_at is None or retrieved_at > reference_time:
+        return False
+    return reference_time - retrieved_at <= PUBCHEM_VOLATILE_CACHE_TTL
+
+
+def _stamp_pubchem_volatile_cache_metadata(result: dict) -> dict:
+    return {
+        **result,
+        "schema_version": PUBCHEM_VOLATILE_CACHE_SCHEMA_VERSION,
+        "parser_version": PUBCHEM_VOLATILE_PARSER_VERSION,
+    }
+
+
+def _reset_pubchem_volatile_throttle_for_tests() -> None:
+    global _PUBCHEM_VOLATILE_LAST_REQUEST
+    with _PUBCHEM_VOLATILE_RATE_LOCK:
+        _PUBCHEM_VOLATILE_LAST_REQUEST = None
+
+
+def _throttled_pubchem_volatile_fetch(url, fetcher=fetch_text, clock=time.monotonic, sleeper=time.sleep):
+    global _PUBCHEM_VOLATILE_LAST_REQUEST
+    with _PUBCHEM_VOLATILE_RATE_LOCK:
+        now = clock()
+        if _PUBCHEM_VOLATILE_LAST_REQUEST is not None:
+            delay = _PUBCHEM_VOLATILE_MIN_INTERVAL - (now - _PUBCHEM_VOLATILE_LAST_REQUEST)
+            if delay > 0:
+                sleeper(delay)
+                now = clock()
+        _PUBCHEM_VOLATILE_LAST_REQUEST = now
+    return fetcher(url)
 
 
 def fetch_bytes(url: str) -> tuple[bytes, str]:
@@ -167,6 +424,370 @@ def query_pubchem(cas_or_query: str) -> dict:
     }
 
 
+PUBCHEM_VOLATILE_PROPERTY_HEADINGS = {
+    "Boiling Point": "boiling_point",
+    "Vapor Pressure": "vapor_pressure",
+    "Henry's Law Constant": "henrys_law_constant",
+    "Solubility": "water_solubility",
+    "LogP": "experimental_logp",
+    "Density": "density",
+    "Melting Point": "melting_point",
+    "Physical Description": "physical_state",
+}
+
+PUBCHEM_PROPERTY_UNIT_ALIASES = {
+    "mm hg": "mmHg",
+    "mmhg": "mmHg",
+    "atm": "atm",
+    "atm-cu m/mole": "atm·m³/mol",
+    "mg/l": "mg/L",
+    "g/cm3": "g/cm³",
+    "g/cm³": "g/cm³",
+    "°c": "°C",
+}
+
+PUBCHEM_PROPERTY_PRIMARY_UNITS = {
+    "boiling_point": {"°C"},
+    "vapor_pressure": {"mmHg", "atm"},
+    "henrys_law_constant": {"atm·m³/mol"},
+    "water_solubility": {"mg/L"},
+    "density": {"g/cm³"},
+    "melting_point": {"°C"},
+}
+
+
+def parse_pubchem_property_text(raw_value: str, property_key: str = "") -> dict:
+    """Conservatively extract explicit PubChem property values and conditions."""
+    result = {
+        "raw_value": raw_value,
+        "normalized_value": None,
+        "unit": "",
+        "temperature": "",
+        "pressure": "",
+        "medium": "",
+    }
+    text = str(raw_value)
+
+    if property_key == "physical_state":
+        states = {state.lower() for state in re.findall(r"\b(liquid|solid|gas)\b", text, re.I)}
+        negated_state = re.search(
+            r"\b(?:not|no|without)\s+(?:an?\s+)?(?:liquid|solid|gas)\b|\bnon[- ](?:liquid|solid|gas)\b",
+            text,
+            re.I,
+        )
+        if len(states) == 1 and not negated_state:
+            result["normalized_value"] = next(iter(states))
+        return result
+
+    aqueous_medium = re.search(r"\bwater\b|\baqueous\b|\baqua(?:tic)?\b", text, re.I)
+    if aqueous_medium:
+        result["medium"] = "water"
+
+    number_pattern = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:(?:[eE][+-]?\d+)|(?:\s*[x×]\s*10[+-]?\d+))?"
+    malformed_exponent = re.search(r"\d(?:\.\d+)?[eE](?:[+-](?!\d)|(?![+\-\d]))", text)
+    numeric_range = re.search(
+        r"(?<![x×X])\b\d+(?:\.\d+)?\s*[-–—]\s*\d+(?:\.\d+)?\b",
+        text,
+    )
+    if malformed_exponent or numeric_range:
+        result["medium"] = ""
+        return result
+
+    aliases = sorted(PUBCHEM_PROPERTY_UNIT_ALIASES, key=len, reverse=True)
+    unit_pattern = "|".join(re.escape(alias) for alias in aliases)
+    value_pattern = re.compile(
+        rf"(?<![\w.+-])(?P<number>{number_pattern})\s*(?P<unit>{unit_pattern})(?![A-Za-z0-9])",
+        re.I,
+    )
+    candidates = [
+        {
+            "number": match.group("number"),
+            "unit": PUBCHEM_PROPERTY_UNIT_ALIASES[match.group("unit").lower()],
+        }
+        for match in value_pattern.finditer(text)
+    ]
+
+    if property_key == "experimental_logp":
+        logp_matches = re.findall(
+            rf"\bLog\s+(?:Kow|P)\s*=\s*(?P<number>{number_pattern})(?![\w.+-])",
+            text,
+            re.I,
+        )
+        if len(logp_matches) != 1:
+            result["medium"] = ""
+            return result
+        result["normalized_value"] = float(
+            re.sub(r"\s*[x×]\s*10", "e", logp_matches[0], flags=re.I)
+        )
+        return result
+
+    expected_units = PUBCHEM_PROPERTY_PRIMARY_UNITS.get(property_key)
+    if expected_units is None:
+        non_temperature = [candidate for candidate in candidates if candidate["unit"] != "°C"]
+        primary_candidates = non_temperature or candidates
+    else:
+        primary_candidates = [candidate for candidate in candidates if candidate["unit"] in expected_units]
+
+    temperatures = [candidate for candidate in candidates if candidate["unit"] == "°C"]
+    pressures = [candidate for candidate in candidates if candidate["unit"] in {"mmHg", "atm"}]
+    if len(primary_candidates) != 1 or len(temperatures) > 1 or (
+        property_key not in {"vapor_pressure"} and len(pressures) > 1
+    ):
+        result["medium"] = ""
+        return result
+
+    primary = primary_candidates[0]
+    normalized_number = re.sub(r"\s*[x×]\s*10", "e", primary["number"], flags=re.I)
+    try:
+        result["normalized_value"] = float(normalized_number)
+    except ValueError:
+        result["medium"] = ""
+        return result
+    result["unit"] = primary["unit"]
+
+    if primary["unit"] != "°C" and len(temperatures) == 1:
+        result["temperature"] = f"{temperatures[0]['number']} °C"
+    pressure_conditions = [candidate for candidate in pressures if candidate is not primary]
+    if len(pressure_conditions) > 1:
+        return {
+            **result,
+            "normalized_value": None,
+            "unit": "",
+            "temperature": "",
+            "pressure": "",
+            "medium": "",
+        }
+    if pressure_conditions:
+        pressure = pressure_conditions[0]
+        result["pressure"] = f"{pressure['number']} {pressure['unit']}"
+    return result
+
+
+def _pubchem_information_strings(information: dict) -> list[str]:
+    value = information.get("Value", {})
+    strings = []
+    for item in value.get("StringWithMarkup", []):
+        text = item.get("String", "") if isinstance(item, dict) else str(item)
+        if text.strip():
+            strings.append(text.strip())
+    if not strings and isinstance(value.get("String"), str) and value["String"].strip():
+        strings.append(value["String"].strip())
+    return strings
+
+
+def _pubchem_has_aqueous_context(information: dict, raw_value: str) -> bool:
+    context_parts = [raw_value]
+
+    def collect_strings(value: object) -> None:
+        if isinstance(value, str):
+            context_parts.append(value)
+        elif isinstance(value, dict):
+            for nested in value.values():
+                collect_strings(nested)
+        elif isinstance(value, list):
+            for nested in value:
+                collect_strings(nested)
+
+    collect_strings(information.get("Description", ""))
+    context = " ".join(context_parts)
+    return bool(re.search(r"\bwater\b|\baqueous\b|\baqua(?:tic)?\b", context, re.I))
+
+
+def _parse_pubchem_volatile_record(information: dict, references: dict, property_key: str) -> list[dict]:
+    reference_number = information.get("ReferenceNumber")
+    reference = references.get(reference_number, {})
+    records = []
+    for raw_value in _pubchem_information_strings(information):
+        if property_key == "water_solubility" and not _pubchem_has_aqueous_context(information, raw_value):
+            continue
+        record = {
+            "raw_value": raw_value,
+            "reference_number": reference_number,
+            "source": reference.get("SourceName", ""),
+        }
+        record.update(parse_pubchem_property_text(raw_value, property_key))
+        if reference.get("URL"):
+            record["source_url"] = reference["URL"]
+        records.append(record)
+    return records
+
+
+def _deduplicate_pubchem_records(records: list[dict]) -> list[dict]:
+    unique = []
+    seen = set()
+    for record in records:
+        key = (record.get("raw_value"), record.get("reference_number"))
+        if key not in seen:
+            seen.add(key)
+            unique.append(record)
+    return unique
+
+
+def parse_pubchem_volatile_properties(payload: dict, cid: int | str) -> dict:
+    properties = {key: [] for key in PUBCHEM_VOLATILE_PROPERTY_HEADINGS.values()}
+    record = payload.get("Record", {})
+    references = {
+        reference.get("ReferenceNumber"): reference
+        for reference in record.get("Reference", [])
+        if reference.get("ReferenceNumber") is not None
+    }
+
+    def parse_property_sections(sections: list[dict]) -> None:
+        for section in sections or []:
+            property_key = PUBCHEM_VOLATILE_PROPERTY_HEADINGS.get(section.get("TOCHeading"))
+            if property_key:
+                parsed = []
+                for information in section.get("Information", []):
+                    parsed.extend(_parse_pubchem_volatile_record(information, references, property_key))
+                properties[property_key].extend(parsed)
+            parse_property_sections(section.get("Section", []))
+
+    parse_property_sections(record.get("Section", []))
+    for property_key, records in properties.items():
+        properties[property_key] = _deduplicate_pubchem_records(records)
+
+    cid_text = str(cid)
+    return {
+        "found": any(properties.values()),
+        "cid": cid_text,
+        "properties": properties,
+        "source": "PubChem PUG View",
+        "url": f"{PUBCHEM_BASE_URL}/compound/{cid_text}#section=Experimental-Properties",
+    }
+
+
+def _empty_pubchem_volatile(cid: int | str, status: str) -> dict:
+    cid_text = str(cid).strip()
+    return {
+        "found": False,
+        "status": status,
+        "cid": cid_text,
+        "properties": {key: [] for key in PUBCHEM_VOLATILE_PROPERTY_HEADINGS.values()},
+        "source": "PubChem PUG View",
+        "url": f"{PUBCHEM_BASE_URL}/compound/{cid_text}#section=Experimental-Properties",
+    }
+
+
+def _canonical_pubchem_cid(cid: int | str) -> str | None:
+    cid_text = str(cid).strip()
+    if not re.fullmatch(r"[0-9]+", cid_text):
+        return None
+    canonical = str(int(cid_text))
+    return canonical if canonical != "0" else None
+
+
+def query_pubchem_volatile_properties(cid: int | str, fetcher=None) -> dict:
+    cid_text = str(cid).strip()
+    canonical_cid = _canonical_pubchem_cid(cid_text)
+    if canonical_cid is None:
+        return _empty_pubchem_volatile(cid_text, "invalid_cid")
+    cid_text = canonical_cid
+
+    retrieved_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    url = (
+        f"{PUBCHEM_BASE_URL}/rest/pug_view/data/compound/{cid_text}/JSON"
+        "?heading=Experimental%20Properties"
+    )
+    try:
+        payload_text = (
+            _throttled_pubchem_volatile_fetch(url)
+            if fetcher is None
+            else fetcher(url)
+        )
+    except HTTPError as exc:
+        if exc.code == 404:
+            return _stamp_pubchem_volatile_cache_metadata({
+                **_empty_pubchem_volatile(cid_text, "no_data"),
+                "retrieved_at": retrieved_at,
+            })
+        if exc.code in {408, 425, 429} or 500 <= exc.code <= 599:
+            return _empty_pubchem_volatile(cid_text, "upstream_unavailable")
+        raise
+    except (TimeoutError, socket.timeout, URLError):
+        return _empty_pubchem_volatile(cid_text, "upstream_unavailable")
+
+    if not isinstance(payload_text, str) or re.match(r"^\s*(?:<!doctype\s+html|<html\b)", payload_text, re.I):
+        return _empty_pubchem_volatile(cid_text, "invalid_response")
+    try:
+        payload = json.loads(payload_text)
+    except json.JSONDecodeError:
+        return _empty_pubchem_volatile(cid_text, "invalid_response")
+    if not isinstance(payload, dict) or not isinstance(payload.get("Record"), dict):
+        return _empty_pubchem_volatile(cid_text, "invalid_response")
+    record = payload["Record"]
+    if (
+        ("Section" in record and not isinstance(record["Section"], list))
+        or ("Reference" in record and not isinstance(record["Reference"], list))
+    ):
+        return _empty_pubchem_volatile(cid_text, "invalid_response")
+
+    result = parse_pubchem_volatile_properties(payload, cid_text)
+
+    status = "ok" if result["found"] else "no_data"
+    return _stamp_pubchem_volatile_cache_metadata({
+        **result,
+        "status": status,
+        "retrieved_at": retrieved_at,
+    })
+
+
+def _get_pubchem_volatile_cached(cache: dict, cid: int | str) -> tuple[dict, bool]:
+    canonical_cid = _canonical_pubchem_cid(cid)
+    if canonical_cid is None:
+        return query_pubchem_volatile_properties(cid), False
+    cache_key = f"pubchem-volatile:{canonical_cid}"
+
+    with _PUBCHEM_VOLATILE_FLIGHTS_LOCK:
+        cached_result = cache.get(cache_key)
+        if cached_result is not None and is_pubchem_volatile_cache_entry_current(cached_result):
+            return cached_result, True
+        flight = _PUBCHEM_VOLATILE_FLIGHTS.get(canonical_cid)
+        if flight is None:
+            flight = {
+                "event": threading.Event(),
+                "result": None,
+                "error": None,
+                "persisted": False,
+            }
+            _PUBCHEM_VOLATILE_FLIGHTS[canonical_cid] = flight
+            leader = True
+        else:
+            leader = False
+
+    if not leader:
+        flight["event"].wait()
+        if flight["error"] is not None:
+            raise flight["error"]
+        return flight["result"], flight["persisted"]
+
+    try:
+        result = _stamp_pubchem_volatile_cache_metadata(
+            query_pubchem_volatile_properties(canonical_cid)
+        )
+        flight["result"] = result
+        if result["status"] in {"ok", "no_data"}:
+            with _CACHE_PERSIST_LOCK:
+                previous = cache.get(cache_key)
+                cache[cache_key] = result
+                try:
+                    save_cache(cache)
+                except OSError:
+                    if previous is None:
+                        cache.pop(cache_key, None)
+                    else:
+                        cache[cache_key] = previous
+                else:
+                    flight["persisted"] = True
+        return result, False
+    except BaseException as exc:
+        flight["error"] = exc
+        raise
+    finally:
+        with _PUBCHEM_VOLATILE_FLIGHTS_LOCK:
+            _PUBCHEM_VOLATILE_FLIGHTS.pop(canonical_cid, None)
+            flight["event"].set()
+
+
 def query_pubchem_crystal_structures(cid: str) -> dict:
     url = f"{PUBCHEM_BASE_URL}/rest/pug_view/data/compound/{cid}/JSON?heading=Crystal%20Structures"
     payload = json.loads(fetch_text(url))
@@ -222,6 +843,152 @@ def query_pubchem_crystal_structures(cid: str) -> dict:
     }
 
 
+def parse_flavordb2_molecule_entities(detail_html: str, cid: int | str) -> dict:
+    entities = []
+    seen_ids = set()
+    pattern = r'href=["\']/flavordb2/entity_details\?id=(\d+)["\'][^>]*>\s*(?:<strong[^>]*>)?([^<]+)'
+    for entity_id_text, name_html in re.findall(pattern, detail_html, re.I):
+        entity_id = int(entity_id_text)
+        if entity_id in seen_ids:
+            continue
+        seen_ids.add(entity_id)
+        entities.append({
+            "id": entity_id,
+            "name": strip_tags(name_html),
+            "url": f"{FLAVORDB_BASE_URL}/entity_details?id={entity_id}",
+        })
+    return {
+        "found": bool(entities),
+        "cid": str(cid),
+        "entities": entities,
+        "source": "FlavorDB2",
+        "url": f"{FLAVORDB_BASE_URL}/molecules_details?id={cid}",
+    }
+
+
+def parse_flavordb2_entities(payload_text: str) -> list[dict]:
+    payload = json.loads(payload_text)
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    results = []
+    for entity in payload or []:
+        entity_id = entity.get("entity_id")
+        results.append({
+            "id": entity_id,
+            "name": entity.get("entity_alias_readable") or entity.get("entity_alias") or "",
+            "category": entity.get("category_readable") or entity.get("category") or "",
+            "synonyms": entity.get("entity_alias_synonyms") or "",
+            "natural_source": {
+                "name": entity.get("natural_source_name") or "",
+                "url": entity.get("natural_source_url") or "",
+            },
+            "url": f"{FLAVORDB_BASE_URL}/entity_details?id={entity_id}",
+        })
+    return results
+
+
+def _flavordb2_label_value(detail_html: str, label: str) -> str:
+    patterns = [
+        rf'<t[dh][^>]*>\s*(?:<strong[^>]*>)?{re.escape(label)}\s*:?(?:</strong>)?\s*</t[dh]>\s*<td[^>]*>([\s\S]*?)</td>',
+        rf'<h[1-6][^>]*>\s*{re.escape(label)}\s*:\s*<strong[^>]*>([\s\S]*?)</strong>\s*</h[1-6]>',
+        rf'<strong[^>]*>\s*{re.escape(label)}\s*:?</strong>\s*([^<]+)',
+    ]
+    for pattern in patterns:
+        value = first_match(pattern, detail_html)
+        if value:
+            return strip_tags(value)
+    return ""
+
+
+def parse_flavordb2_entity_detail(detail_html: str, entity_id: int | str) -> dict:
+    name = strip_tags(first_match(r'<div[^>]+id=["\']entity_details["\'][\s\S]*?<h1[^>]*>([\s\S]*?)</h1>', detail_html))
+    category = _flavordb2_label_value(detail_html, "Category")
+    synonyms = _flavordb2_label_value(detail_html, "Synonyms")
+    natural_source_name = first_match(
+        r'Natural Source of[\s\S]*?</t[dh]>\s*<td[^>]*>([\s\S]*?)</td>',
+        detail_html,
+    )
+    if not natural_source_name:
+        natural_source_name = first_match(
+            r'Natural Source of[\s\S]*?</a>\s*:\s*<a[^>]*>([\s\S]*?)</a>',
+            detail_html,
+        )
+    taxonomy = {}
+    for label in ("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"):
+        value = _flavordb2_label_value(detail_html, label)
+        if value:
+            taxonomy[label.lower()] = value
+
+    compounds = []
+    table_body = first_match(r'<table[^>]+id=["\']molecules["\'][^>]*>[\s\S]*?<tbody[^>]*>([\s\S]*?)</tbody>', detail_html)
+    for row_html in re.findall(r'<tr[^>]*>([\s\S]*?)</tr>', table_body, re.I):
+        cid_match = re.search(r'pubchem\.ncbi\.nlm\.nih\.gov/compound/(\d+)', row_html, re.I)
+        cells = re.findall(r'<td[^>]*>([\s\S]*?)</td>', row_html, re.I)
+        if not cid_match or not cells:
+            continue
+        profile = [
+            strip_tags(term)
+            for term in re.findall(r'<a[^>]*>([\s\S]*?)</a>', cells[2] if len(cells) > 2 else "", re.I)
+            if strip_tags(term)
+        ]
+        compounds.append({
+            "cid": int(cid_match.group(1)),
+            "name": strip_tags(cells[0]),
+            "flavor_profile": profile,
+            "url": f"{PUBCHEM_BASE_URL}/compound/{cid_match.group(1)}",
+        })
+
+    entity_id_text = str(entity_id)
+    return {
+        "found": bool(name),
+        "id": int(entity_id_text) if entity_id_text.isdigit() else entity_id_text,
+        "name": name,
+        "category": category,
+        "synonyms": [part.strip() for part in synonyms.split(",") if part.strip()],
+        "natural_source": {
+            "name": strip_tags(natural_source_name),
+            "taxonomy": taxonomy,
+        },
+        "compounds": compounds,
+        "source": "FlavorDB2",
+        "url": f"{FLAVORDB_BASE_URL}/entity_details?id={entity_id_text}",
+    }
+
+
+def query_flavordb2_molecule_entities(
+    cid: int | str,
+    fetcher=fetch_text,
+) -> dict:
+    cid_text = str(cid).strip()
+    if not cid_text.isdigit():
+        return {"found": False, "cid": cid_text, "entities": [], "error": "Missing or invalid PubChem CID"}
+    url = f"{FLAVORDB_BASE_URL}/molecules_details?id={cid_text}"
+    return parse_flavordb2_molecule_entities(fetcher(url), cid_text)
+
+
+def query_flavordb2_entities(query: str, fetcher=fetch_text) -> dict:
+    query_text = str(query).strip()
+    if not query_text:
+        return {"found": False, "query": query_text, "entities": [], "error": "Missing entity query"}
+    url = f"{FLAVORDB_BASE_URL}/entities?entity={quote(query_text, safe='')}"
+    entities = parse_flavordb2_entities(fetcher(url))
+    return {
+        "found": bool(entities),
+        "query": query_text,
+        "entities": entities,
+        "source": "FlavorDB2",
+        "url": url,
+    }
+
+
+def query_flavordb2_entity(entity_id: int | str, fetcher=fetch_text) -> dict:
+    entity_id_text = str(entity_id).strip()
+    if not entity_id_text.isdigit():
+        return {"found": False, "id": entity_id_text, "error": "Missing or invalid entity id"}
+    url = f"{FLAVORDB_BASE_URL}/entity_details?id={entity_id_text}"
+    return parse_flavordb2_entity_detail(fetcher(url), entity_id_text)
+
+
 def query_flavordb(cid: int | str) -> dict:
     cid_text = str(cid).strip()
     if not cid_text.isdigit():
@@ -260,7 +1027,7 @@ def query_flavordb(cid: int | str) -> dict:
         "url": f"{FLAVORDB_BASE_URL}/molecules?pubchem_id={cid_text}",
         "json_url": json_url,
         "image_url": f"{FLAVORDB_BASE_URL}/static/molecules_images/{cid_text}.png",
-        "source": "FlavorDB",
+        "source": "FlavorDB2",
         "license": "CC BY-NC-SA 3.0",
     }
 
@@ -273,7 +1040,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -303,6 +1070,83 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             self.send_json(200, {"ok": True, "service": "flavor_data_proxy"})
+            return
+        if parsed.path == "/nist-webbook":
+            cas = (parse_qs(parsed.query).get("cas") or [""])[0].strip()
+            try:
+                result, cached = get_nist_webbook_cached(self.cache, cas)
+                status = 502 if result.get("status") in {"upstream_unavailable", "invalid_response"} else 200
+                self.send_json(status, {**result, "cached": cached})
+            except ValueError as exc:
+                self.send_json(400, {"found": False, "status": "invalid_query", "error": str(exc), "cas": cas})
+            return
+        if parsed.path == "/biochemistry/resolve":
+            params = parse_qs(parsed.query)
+            inchikey = (params.get("inchikey") or [""])[0].strip().upper()
+            cas = (params.get("cas") or [""])[0].strip()
+            names = [name.strip() for name in params.get("name", []) if name.strip()]
+            if not inchikey and not cas and not names:
+                self.send_json(400, {"status": "invalid_query", "error": "inchikey, cas, or name is required"})
+                return
+            result = resolve_biochemistry({"inchikey": inchikey, "cas": cas, "names": names}, cache=BIOCHEMISTRY_CACHE)
+            status = 502 if all(source.get("status") in {"upstream_unavailable", "invalid_response"} for source in result["sources"].values()) else 200
+            self.send_json(status, result)
+            return
+        if parsed.path == "/spectra/index-status":
+            self.send_json(200, get_public_spectrum_index_status())
+            return
+        if parsed.path == "/spectra/search":
+            params = parse_qs(parsed.query)
+            inchikey = (params.get("inchikey") or [""])[0].strip().upper()
+            cas = (params.get("cas") or [""])[0].strip()
+            smiles = (params.get("smiles") or [""])[0].strip()
+            names = [name.strip() for name in params.get("name", []) if name.strip()]
+            if not inchikey and not cas and not names:
+                self.send_json(400, {"error": "inchikey, cas, or name is required"})
+                return
+            self.send_json(
+                200,
+                aggregate_open_spectra(
+                    {"inchikey": inchikey, "cas": cas, "smiles": smiles, "names": names}
+                ),
+            )
+            return
+        if parsed.path == "/spectra/usi":
+            usi = (parse_qs(parsed.query).get("usi") or [""])[0].strip()
+            if not usi:
+                self.send_json(400, {"error": "usi is required"})
+                return
+            try:
+                self.send_json(200, fetch_gnps_usi(usi))
+            except Exception as exc:
+                self.send_json(502, {"error": str(exc), "usi": usi})
+            return
+        spectrum_path = parsed.path.strip("/").split("/")
+        if len(spectrum_path) == 4 and spectrum_path[0] == "spectra" and spectrum_path[3] == "download":
+            source = unquote(spectrum_path[1])
+            spectrum_id = unquote(spectrum_path[2])
+            output_format = (parse_qs(parsed.query).get("format") or ["json"])[0].strip().lower()
+            try:
+                record = fetch_open_spectrum(source, spectrum_id)
+                body, content_type, extension = serialize_spectrum(record, output_format)
+                safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", spectrum_id)
+                self.send_binary(200, body.encode("utf-8"), content_type, f"{safe_id}.{extension}")
+            except PermissionError as exc:
+                self.send_json(403, {"error": str(exc), "license": "download_not_permitted"})
+            except ValueError as exc:
+                self.send_json(400, {"error": str(exc)})
+            except Exception as exc:
+                self.send_json(502, {"error": str(exc), "source": source, "spectrum_id": spectrum_id})
+            return
+        if len(spectrum_path) == 3 and spectrum_path[0] == "spectra":
+            source = unquote(spectrum_path[1])
+            spectrum_id = unquote(spectrum_path[2])
+            try:
+                self.send_json(200, fetch_open_spectrum(source, spectrum_id))
+            except ValueError as exc:
+                self.send_json(400, {"error": str(exc)})
+            except Exception as exc:
+                self.send_json(502, {"error": str(exc), "source": source, "spectrum_id": spectrum_id})
             return
         if parsed.path == "/pubchem-image":
             params = parse_qs(parsed.query)
@@ -389,7 +1233,16 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self.send_json(502, {"error": str(exc)})
             return
-        if parsed.path not in {"/fema", "/pubchem", "/flavordb", "/compound"}:
+        if parsed.path not in {
+            "/fema",
+            "/pubchem",
+            "/pubchem-volatile",
+            "/flavordb",
+            "/compound",
+            "/flavordb2/compound-entities",
+            "/flavordb2/entities",
+            "/flavordb2/entity",
+        }:
             self.send_json(404, {"error": "Not found"})
             return
 
@@ -397,11 +1250,86 @@ class Handler(BaseHTTPRequestHandler):
         query = (params.get("cas") or params.get("q") or [""])[0].strip()
         cid = (params.get("cid") or [""])[0].strip()
 
+        if parsed.path == "/pubchem-volatile":
+            try:
+                result, cached = _get_pubchem_volatile_cached(self.cache, cid)
+            except (HTTPError, URLError, TimeoutError, socket.timeout):
+                result = _empty_pubchem_volatile(cid, "upstream_unavailable")
+                cached = False
+            status_code = 200
+            if result["status"] == "invalid_cid":
+                status_code = 400
+            elif result["status"] in {"upstream_unavailable", "invalid_response"}:
+                status_code = 502
+            self.send_json(status_code, {**result, "cached": cached})
+            return
+
+        if parsed.path == "/flavordb2/compound-entities":
+            if not cid.isdigit():
+                self.send_json(400, {"found": False, "entities": [], "error": "Missing or invalid cid"})
+                return
+            cache_key = f"flavordb2:compound-entities:{cid}"
+            try:
+                if cache_key not in self.cache:
+                    result = query_flavordb2_molecule_entities(cid)
+                    _store_cache_result(self.cache, cache_key, result)
+                self.send_json(200, {**self.cache[cache_key], "cached": True})
+            except Exception as exc:
+                self.send_json(502, {
+                    "found": False,
+                    "cid": cid,
+                    "entities": [],
+                    "cached": False,
+                    "error": str(exc),
+                })
+            return
+
+        if parsed.path == "/flavordb2/entities":
+            entity_query = (params.get("q") or params.get("entity") or [""])[0].strip()
+            if not entity_query:
+                self.send_json(400, {"found": False, "entities": [], "error": "Missing entity query"})
+                return
+            cache_key = f"flavordb2:entities:{entity_query.lower()}"
+            try:
+                if cache_key not in self.cache:
+                    result = query_flavordb2_entities(entity_query)
+                    _store_cache_result(self.cache, cache_key, result)
+                self.send_json(200, {**self.cache[cache_key], "cached": True})
+            except Exception as exc:
+                self.send_json(502, {
+                    "found": False,
+                    "query": entity_query,
+                    "entities": [],
+                    "cached": False,
+                    "error": str(exc),
+                })
+            return
+
+        if parsed.path == "/flavordb2/entity":
+            entity_id = (params.get("id") or [""])[0].strip()
+            if not entity_id.isdigit():
+                self.send_json(400, {"found": False, "error": "Missing or invalid entity id"})
+                return
+            cache_key = f"flavordb2:entity:{entity_id}"
+            try:
+                if cache_key not in self.cache:
+                    result = query_flavordb2_entity(entity_id)
+                    _store_cache_result(self.cache, cache_key, result)
+                self.send_json(200, {**self.cache[cache_key], "cached": True})
+            except Exception as exc:
+                self.send_json(502, {
+                    "found": False,
+                    "id": entity_id,
+                    "cached": False,
+                    "error": str(exc),
+                })
+            return
+
         if parsed.path == "/flavordb":
             if not cid:
                 self.send_json(400, {"found": False, "error": "Missing cid"})
                 return
-            key = f"flavordb:{cid}"
+            key = f"flavordb2:molecule:{cid}"
             if key not in self.cache:
                 try:
                     self.cache[key] = query_flavordb(cid)
@@ -429,13 +1357,68 @@ class Handler(BaseHTTPRequestHandler):
                     return
 
                 flavordb = {"found": False, "error": "PubChem CID unavailable"}
+                flavordb2_entities = {"found": False, "entities": [], "error": "PubChem CID unavailable"}
+                pubchem_volatile = {
+                    **_empty_pubchem_volatile("", "invalid_cid"),
+                    "cached": False,
+                }
                 if pubchem.get("found") and pubchem.get("cid"):
-                    flavordb_key = f"flavordb:{pubchem['cid']}"
+                    flavordb_key = f"flavordb2:molecule:{pubchem['cid']}"
                     if flavordb_key not in self.cache:
-                        self.cache[flavordb_key] = query_flavordb(pubchem["cid"])
-                        save_cache(self.cache)
-                    flavordb = self.cache[flavordb_key]
-                self.send_json(200, {"query": query, "pubchem": pubchem, "flavordb": flavordb})
+                        try:
+                            self.cache[flavordb_key] = query_flavordb(pubchem["cid"])
+                            save_cache(self.cache)
+                        except Exception as exc:
+                            self.cache.pop(flavordb_key, None)
+                            flavordb = {
+                                "found": False,
+                                "cid": str(pubchem["cid"]),
+                                "status": (
+                                    "upstream_unavailable"
+                                    if isinstance(exc, (TimeoutError, socket.timeout, URLError))
+                                    else "error"
+                                ),
+                                "error": str(exc),
+                            }
+                    if flavordb_key in self.cache:
+                        flavordb = self.cache[flavordb_key]
+                    entities_key = f"flavordb2:compound-entities:{pubchem['cid']}"
+                    if entities_key not in self.cache:
+                        try:
+                            self.cache[entities_key] = query_flavordb2_molecule_entities(pubchem["cid"])
+                            save_cache(self.cache)
+                        except Exception as exc:
+                            self.cache.pop(entities_key, None)
+                            flavordb2_entities = {
+                                "found": False,
+                                "cid": str(pubchem["cid"]),
+                                "entities": [],
+                                "status": (
+                                    "upstream_unavailable"
+                                    if isinstance(exc, (TimeoutError, socket.timeout, URLError))
+                                    else "error"
+                                ),
+                                "error": str(exc),
+                            }
+                    if entities_key in self.cache:
+                        flavordb2_entities = self.cache[entities_key]
+                    try:
+                        volatile_result, volatile_cached = _get_pubchem_volatile_cached(
+                            self.cache, pubchem["cid"]
+                        )
+                    except (HTTPError, URLError, TimeoutError, socket.timeout):
+                        volatile_result = _empty_pubchem_volatile(
+                            pubchem["cid"], "upstream_unavailable"
+                        )
+                        volatile_cached = False
+                    pubchem_volatile = {**volatile_result, "cached": volatile_cached}
+                self.send_json(200, {
+                    "query": query,
+                    "pubchem": pubchem,
+                    "flavordb": flavordb,
+                    "flavordb2_entities": flavordb2_entities,
+                    "pubchem_volatile": pubchem_volatile,
+                })
             except Exception as exc:
                 self.send_json(502, {"query": query, "pubchem": {"found": False}, "flavordb": {"found": False}, "error": str(exc)})
             return
@@ -452,11 +1435,42 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             self.send_json(502, {"found": False, "query": query, "error": str(exc)})
 
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path != "/spectra/compare":
+            self.send_json(404, {"error": "Not found"})
+            return
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            content_length = 0
+        if content_length <= 0 or content_length > 1_000_000:
+            self.send_json(400, {"error": "invalid request body"})
+            return
+        try:
+            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+            a_source = str(payload.get("a_source") or "").strip()
+            a_id = str(payload.get("a_id") or "").strip()
+            b_source = str(payload.get("b_source") or "").strip()
+            b_id = str(payload.get("b_id") or "").strip()
+            tolerance = float(payload.get("tolerance", 0.1))
+            tolerance_mode = str(payload.get("tolerance_mode") or "da").strip().lower()
+            if not all((a_source, a_id, b_source, b_id)):
+                raise ValueError("both spectrum sources and identifiers are required")
+            spectrum_a = fetch_open_spectrum(a_source, a_id)
+            spectrum_b = fetch_open_spectrum(b_source, b_id)
+            self.send_json(200, compare_spectra(spectrum_a, spectrum_b, tolerance, tolerance_mode))
+        except (ValueError, json.JSONDecodeError) as exc:
+            self.send_json(400, {"error": str(exc)})
+        except Exception as exc:
+            self.send_json(502, {"error": str(exc)})
+
     def log_message(self, format: str, *args) -> None:
         return
 
 
 def main() -> None:
+    initialize_public_spectrum_index()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"FEMA proxy running at http://{HOST}:{PORT}")
     server.serve_forever()

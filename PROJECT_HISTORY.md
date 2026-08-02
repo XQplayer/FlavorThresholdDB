@@ -9,7 +9,7 @@ FlavorThresholdDB 是一个面向风味化学研究的中英文双语检索平�
 - 支持通过 CAS 号、中文名和英文名检索单一化合物；
 - 支持批量清单匹配；
 - 保留检测介质、阈值类型、数值、单位、文献来源和页码等可追溯信息；
-- 汇集 FEMA、PubChem 和 FlavorDB 等外部数据库信息；
+- 汇集 FEMA、PubChem、FlavorDB 与 FlavorDB2 等外部数据库信息；
 - 为风味化合物注释、OAV 分析和科研写作提供结构化数据支持；
 - 提供适合 Excel 后续分析的精简版与详细版 CSV 导出。
 
@@ -238,12 +238,26 @@ pnpm run build
 
 ## 11. 当前稳定版本
 
-- 当前版本：`v1.3.1`；
+- 当前正式版本：`v1.3.1`；当前候选版本：`v1.4.0`；
 - 当前主分支：`main`；
-- 当前版本提交：`4cbe586`；
+- 当前版本标签提交：`5af7619`；
+- 当前主分支提交：`00131bd`；
 - 本地主仓库：`E:\codex\Projects\FlavorThresholdDB`；
 - 本地发布候选：`E:\codex\Projects\FlavorThresholdDB\_local\release-candidates`；
 - 本地源码备份：`E:\codex\Projects\FlavorThresholdDB\_local\backups`。
+
+### 未发布候选（2026-08-02）
+
+- 当前开发分支：`codex/pubchem-volatile-properties`，尚未合并 `main`，不属于公网稳定版本；
+- 新增 FlavorDB2 天然来源、食材实体、食材—化合物关系和反向食材详情；
+- 新增 PubChem PUG View 八组挥发与分配实验性质，保留逐条原文、来源和链接；
+- PubChem 实验性质缓存使用模式版本、解析器版本和 30 天 TTL，旧解析缓存自动失效；
+- Excel 文件上传已暂停，SheetJS 已移除；批量文本检索和 CSV 导出继续保留；
+- 本地服务统一为前端 `127.0.0.1:5174` 与代理 `127.0.0.1:8787`，采用隐藏窗口、项目进程核验、单实例复用和健康检查；
+- E2E 验证产物写入 `_local/verification`，不进入发布源码。
+- 新增 MassBank 与 GNPS/GNPS2 开放光谱层：按 InChIKey/CAS 检索、单谱峰表、许可门控下载、Da/ppm 镜像比较、匹配峰高亮和 JSON/CSV/SVG 比较导出；
+- GNPS2 精简元数据索引保存在 `_local/indexes/gnps_spectra.sqlite`，不进入 Git；检索缓存 24 小时，明确开放许可峰表缓存 30 天，待核许可峰表仅保存在内存；
+- 当前候选验证：代理与运行控制 Python 测试 51/51、书籍索引 60/60、前端测试 37/37、ESLint、生产构建、生产依赖审计及桌面/移动端 E2E 全部通过。
 
 ## 12. 后续维护原则
 
@@ -272,4 +286,13 @@ pnpm run build
 - 阈值记录新增前鼻/后鼻路径、来源页介质补全、主体名称补全和完全重复去重；第 27 页三氯茴香醚阈值已按原页修正为 `3×10⁻⁵ μg/kg`；
 - 氯化钠跨 OCR 分块造成的白葡萄汁、红葡萄酒与换算值遗漏已按第 607 页原图补录，并以 `source_verified_page_supplement` 单独追溯；
 - 新增构建阻断型质量门槛，覆盖页数/记录/实体/阈值下限、异常上限、固定查询、错误单位模式及全部金标准；
-- Python 管线测试 59/59、前端测试 14/14、ESLint 与生产构建均通过。
+- Python 书籍索引管线测试 60/60；当前候选的完整测试数量以发布前最终验证结果为准。
+
+## 14. 公共光谱与生化证据层（2026-08-02）
+
+- MassBank 与 GNPS 已统一为开放光谱检索、单谱峰表、许可门控下载和镜像比较接口；前端新增峰表滚动视图与 PNG 镜像图导出；
+- GNPS 公网索引采用“本地构建、外部分发、清单校验、原子安装”的方式，约 1 GB SQLite 与生成缓存均保留在 `_local/`，不进入 Git；
+- NIST Chemistry WebBook 仅接入 CAS 原始页面跳转和栏目存在性标记，不复制或再分发受限制光谱；
+- 新增 ChEBI → Rhea → UniProt 关系链：只对结构/CAS 已核验实体自动展开，名称候选会停止扩展；
+- 生化关系卡片保留 ChEBI、Rhea、UniProt 原始记录链接，并明确不得将数据库关联解释为食材存在、微生物来源或风味形成因果；
+- 本阶段仍需在正式发布前完成完整 Python/前端/E2E 回归，并在外部发布 GNPS 索引资产后写入稳定的轻量清单 URL。

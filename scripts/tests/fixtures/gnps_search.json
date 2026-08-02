@@ -1,0 +1,30 @@
+[
+  {
+    "adduct": "[M+H]+",
+    "charge": 1,
+    "compound_name": "Ethyl acetate",
+    "exact_mass": 88.05243,
+    "inchikey": "XEKOWRVHYACXOJ-UHFFFAOYSA-N",
+    "instrument": "ESI-QTOF",
+    "ion_mode": "Positive",
+    "ion_source": "ESI",
+    "precursor_mz": 89.0597,
+    "smiles": "CCOC(=O)C",
+    "spectrum_id": "CCMSLIB00000000001",
+    "spectrum_index": 0
+  },
+  {
+    "adduct": "[M+Na]+",
+    "charge": 1,
+    "compound_name": "Ethyl acetate sodium adduct",
+    "exact_mass": 88.05243,
+    "inchikey": "XEKOWRVHYACXOJ-UHFFFAOYSA-N",
+    "instrument": "ESI-Orbitrap",
+    "ion_mode": "Positive",
+    "ion_source": "ESI",
+    "precursor_mz": 111.0416,
+    "smiles": "CCOC(=O)C",
+    "spectrum_id": "CCMSLIB00000000002",
+    "spectrum_index": 1
+  }
+]

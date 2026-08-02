@@ -1,0 +1,11 @@
+[
+  {
+    "data_source": "GNPS2",
+    "description": "Small test library",
+    "display_source": "GNPS",
+    "imported_at": "2026-07-16T18:06:35+00:00",
+    "name": "TEST-GNPS-LIBRARY",
+    "spectra_count": 2,
+    "type": "Standard"
+  }
+]

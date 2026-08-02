@@ -1,0 +1,33 @@
+{
+  "accession": "MSBNK-Fac_Eng_Univ_Tokyo-JP001519",
+  "title": "ETHYL ACETATE; EI-B; MS",
+  "license": "CC BY-NC-SA",
+  "compound": {
+    "names": ["ETHYL ACETATE"],
+    "formula": "C4H8O2",
+    "smiles": "CCOC(C)=O",
+    "link": [
+      {"database": "INCHIKEY", "identifier": "XEKOWRVHYACXOJ-UHFFFAOYSA-N"}
+    ]
+  },
+  "acquisition": {
+    "instrument": "HITACHI RMU-6M",
+    "instrument_type": "EI-B",
+    "mass_spectrometry": {
+      "ms_type": "MS",
+      "ion_mode": "POSITIVE",
+      "subtags": [{"subtag": "IONIZATION_ENERGY", "value": "70 eV"}]
+    }
+  },
+  "mass_spectrometry": {
+    "focused_ion": [{"subtag": "ION_TYPE", "value": "[M]+*"}]
+  },
+  "peak": {
+    "peak": {
+      "values": [
+        {"mz": 43.0, "intensity": 100.0, "rel": 999},
+        {"mz": 61.0, "intensity": 40.0, "rel": 400}
+      ]
+    }
+  }
+}

@@ -46,6 +46,14 @@ supabase/.temp/
 # Local release candidates, verification artifacts, and offline backups.
 # These files must never be committed or deployed.
 _local/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+*.sqlite.gz
+*.sqlite.zst
 .media-build/
+/.playwright-cli/
+/.superpowers/
 
 # 由于前端有自己的 .gitignore，所以 node_modules 会被默认过滤
