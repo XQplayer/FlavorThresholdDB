@@ -54,10 +54,10 @@
 - Create: `scripts/tests/fixtures/gnps_record.json`
 - Create: `scripts/tests/test_spectra_gnps.py`
 
-- [ ] Add fixture-backed failing tests for library discovery, incremental SQLite indexing, atomic per-library replacement, InChIKey lookup, SpectrumID, USI, peaks, precursor, ion mode, adduct, instrument, identity evidence, imported-library license caution, and upstream errors.
-- [ ] Confirm failures before implementation.
-- [ ] Implement the GNPS2 slim-metadata indexer and documented single-spectrum adapters with injected fetchers. Store the generated database under `_local/indexes` and never commit it.
-- [ ] Run adapter and service tests.
+- [x] Add fixture-backed failing tests for library discovery, incremental SQLite indexing, atomic per-library replacement, InChIKey lookup, SpectrumID, USI, peaks, precursor, ion mode, adduct, instrument, identity evidence, imported-library license caution, and upstream errors.
+- [x] Confirm failures before implementation.
+- [x] Implement the GNPS2 slim-metadata indexer and documented single-spectrum adapters with injected fetchers. Store the generated database under `_local/indexes` and never commit it.
+- [x] Run adapter and service tests.
 
 ### Task 5: Unified proxy routes and cache policy
 

@@ -1,0 +1,43 @@
+{
+  "gnps2": {
+    "adduct": "[M-H]-",
+    "charge": 1,
+    "collision_energy": "20",
+    "compound_name": "10(11)-EpDPE",
+    "inchikey": "YYZNJWZRJUGQCW-UQZHZJRSSA-N",
+    "instrument": "ESI(-)-QTOF Agilent 6546",
+    "ion_mode": "Negative",
+    "ion_source": "ESI",
+    "library": "CEMBIO_OXYLIPINS",
+    "ms_level": 2,
+    "peaks": [[105.0707, 15.02], [107.0502, 63.87]],
+    "precursor_mz": 343.2279,
+    "smiles": "example"
+  },
+  "legacy": {
+    "annotations": [{
+      "Compound_Name": "Theophyllin",
+      "Ion_Source": "LC-ESI",
+      "Instrument": "Orbitrap",
+      "Adduct": "M-H",
+      "Precursor_MZ": "179.057",
+      "CAS_Number": "N/A",
+      "Smiles": "CN1C=NC2=C1C(=O)N(C(=O)N2C)C",
+      "SpectrumID": "CCMSLIB00000579358",
+      "Ion_Mode": "Negative"
+    }],
+    "spectruminfo": {
+      "spectrum_id": "CCMSLIB00000579358",
+      "ms_level": "2",
+      "library_membership": "CASMI",
+      "peaks_json": "[[164.033997,32294.5],[179.057495,129907.1]]"
+    }
+  },
+  "usi": {
+    "n_peaks": 2,
+    "peaks": [[164.0339966, 32294.5], [179.0574951, 129907.1]],
+    "precursor_charge": 1,
+    "precursor_mz": 179.057,
+    "splash": "splash10-test"
+  }
+}

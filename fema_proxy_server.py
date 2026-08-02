@@ -12,8 +12,11 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
+
+from spectra_gnps import fetch_gnps_spectrum, fetch_gnps_usi, search_gnps_records
+from spectra_massbank import fetch_massbank_record, query_massbank_records
 
 
 HOST = os.environ.get("HOST", "0.0.0.0")
@@ -29,6 +32,65 @@ CACHE_PATH = Path(
     )
 ).resolve()
 _CACHE_PERSIST_LOCK = threading.RLock()
+
+
+def aggregate_open_spectra(
+    target: dict,
+    *,
+    massbank_query=None,
+    gnps_query=None,
+) -> dict:
+    """Search independent public sources while preserving partial results."""
+    queries = {
+        "MassBank": massbank_query or query_massbank_records,
+        "GNPS": gnps_query or search_gnps_records,
+    }
+    sources = {}
+    records = []
+    for source, query_function in queries.items():
+        try:
+            result = query_function(target)
+            if not isinstance(result, dict):
+                raise ValueError("source adapter returned a non-object response")
+        except Exception as exc:
+            result = {
+                "source": source,
+                "status": "upstream_unavailable",
+                "records": [],
+                "error": str(exc),
+            }
+        source_records = result.get("records") if isinstance(result.get("records"), list) else []
+        sources[source] = {
+            "status": result.get("status", "invalid_response"),
+            "count": len(source_records),
+            **({"error": result["error"]} if result.get("error") else {}),
+        }
+        records.extend(source_records)
+    return {
+        "compound_identity": target,
+        "summary": {
+            "total": len(records),
+            "massbank": sources["MassBank"]["count"],
+            "gnps": sources["GNPS"]["count"],
+            "ei": sum(1 for record in records if record.get("spectrum_type") == "EI"),
+            "ms2": sum(1 for record in records if record.get("spectrum_type") == "MS2"),
+            "verified": sum(
+                1 for record in records if (record.get("compound_identity") or {}).get("verified")
+            ),
+        },
+        "sources": sources,
+        "records": records,
+        "retrieved_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def fetch_open_spectrum(source: str, spectrum_id: str, *, massbank_fetch=None, gnps_fetch=None) -> dict:
+    normalized_source = str(source or "").strip().casefold()
+    if normalized_source == "massbank":
+        return (massbank_fetch or fetch_massbank_record)(spectrum_id)
+    if normalized_source == "gnps":
+        return (gnps_fetch or fetch_gnps_spectrum)(spectrum_id)
+    raise ValueError("unsupported spectrum source")
 
 
 def load_cache() -> dict[str, dict]:
@@ -928,6 +990,43 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             self.send_json(200, {"ok": True, "service": "flavor_data_proxy"})
+            return
+        if parsed.path == "/spectra/search":
+            params = parse_qs(parsed.query)
+            inchikey = (params.get("inchikey") or [""])[0].strip().upper()
+            cas = (params.get("cas") or [""])[0].strip()
+            smiles = (params.get("smiles") or [""])[0].strip()
+            names = [name.strip() for name in params.get("name", []) if name.strip()]
+            if not inchikey and not cas and not names:
+                self.send_json(400, {"error": "inchikey, cas, or name is required"})
+                return
+            self.send_json(
+                200,
+                aggregate_open_spectra(
+                    {"inchikey": inchikey, "cas": cas, "smiles": smiles, "names": names}
+                ),
+            )
+            return
+        if parsed.path == "/spectra/usi":
+            usi = (parse_qs(parsed.query).get("usi") or [""])[0].strip()
+            if not usi:
+                self.send_json(400, {"error": "usi is required"})
+                return
+            try:
+                self.send_json(200, fetch_gnps_usi(usi))
+            except Exception as exc:
+                self.send_json(502, {"error": str(exc), "usi": usi})
+            return
+        spectrum_path = parsed.path.strip("/").split("/")
+        if len(spectrum_path) == 3 and spectrum_path[0] == "spectra":
+            source = unquote(spectrum_path[1])
+            spectrum_id = unquote(spectrum_path[2])
+            try:
+                self.send_json(200, fetch_open_spectrum(source, spectrum_id))
+            except ValueError as exc:
+                self.send_json(400, {"error": str(exc)})
+            except Exception as exc:
+                self.send_json(502, {"error": str(exc), "source": source, "spectrum_id": spectrum_id})
             return
         if parsed.path == "/pubchem-image":
             params = parse_qs(parsed.query)

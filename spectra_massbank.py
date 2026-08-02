@@ -101,3 +101,14 @@ def query_massbank_records(target: dict, fetch_json=None) -> dict:
         "records": [parse_massbank_record(record, target, retrieved_at) for record in payload if isinstance(record, dict)],
         "retrieved_at": retrieved_at,
     }
+
+
+def fetch_massbank_record(accession: str, target: dict | None = None, fetch_json=None) -> dict:
+    identifier = str(accession or "").strip()
+    if not identifier:
+        raise ValueError("accession is required")
+    fetcher = fetch_json or _fetch_json
+    payload = fetcher(f"{MASSBANK_API_URL}/records/{quote(identifier, safe='-_')}")
+    if not isinstance(payload, dict):
+        raise ValueError("invalid MassBank record response")
+    return parse_massbank_record(payload, target or {}, datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"))

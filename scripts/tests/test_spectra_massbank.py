@@ -2,7 +2,12 @@ import json
 from pathlib import Path
 import unittest
 
-from spectra_massbank import MASSBANK_API_URL, parse_massbank_record, query_massbank_records
+from spectra_massbank import (
+    MASSBANK_API_URL,
+    fetch_massbank_record,
+    parse_massbank_record,
+    query_massbank_records,
+)
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "massbank_record.json"
@@ -56,6 +61,18 @@ class MassBankAdapterTests(unittest.TestCase):
         result = query_massbank_records({"names": ["ethyl acetate"]}, fetch_json=lambda _url: [])
         self.assertEqual(result["status"], "identity_required")
         self.assertEqual(result["records"], [])
+
+    def test_fetches_one_record_by_accession(self):
+        seen = []
+
+        def fetch_json(url):
+            seen.append(url)
+            return self.record
+
+        result = fetch_massbank_record("MSBNK-Fac_Eng_Univ_Tokyo-JP001519", fetch_json=fetch_json)
+        self.assertEqual(seen, [f"{MASSBANK_API_URL}/records/MSBNK-Fac_Eng_Univ_Tokyo-JP001519"])
+        self.assertEqual(result["spectrum_id"], "MSBNK-Fac_Eng_Univ_Tokyo-JP001519")
+        self.assertEqual(len(result["peaks"]), 2)
 
 
 if __name__ == "__main__":
