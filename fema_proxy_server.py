@@ -8,7 +8,7 @@ import socket
 import threading
 import time
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -20,7 +20,7 @@ HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8787"))
 BASE_URL = "https://www.femaflavor.org"
 PUBCHEM_BASE_URL = "https://pubchem.ncbi.nlm.nih.gov"
-FLAVORDB_BASE_URL = "https://cosylab.iiitd.edu.in/flavordb"
+FLAVORDB_BASE_URL = "https://cosylab.iiitd.edu.in/flavordb2"
 CACHE_PATH = Path(__file__).resolve().with_name("fema_flavor_cache.json")
 _CACHE_PERSIST_LOCK = threading.RLock()
 
@@ -57,6 +57,23 @@ def save_cache(cache: dict[str, dict]) -> None:
                 temporary_path.unlink(missing_ok=True)
 
 
+_CACHE_MISSING = object()
+
+
+def _store_cache_result(cache: dict, key: str, result: dict) -> None:
+    with _CACHE_PERSIST_LOCK:
+        previous = cache.get(key, _CACHE_MISSING)
+        cache[key] = result
+        try:
+            save_cache(cache)
+        except Exception:
+            if previous is _CACHE_MISSING:
+                cache.pop(key, None)
+            else:
+                cache[key] = previous
+            raise
+
+
 def fetch_text(url: str) -> str:
     req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urlopen(req, timeout=25) as resp:
@@ -68,6 +85,47 @@ _PUBCHEM_VOLATILE_LAST_REQUEST = None
 _PUBCHEM_VOLATILE_MIN_INTERVAL = 0.2
 _PUBCHEM_VOLATILE_FLIGHTS_LOCK = threading.Lock()
 _PUBCHEM_VOLATILE_FLIGHTS = {}
+PUBCHEM_VOLATILE_CACHE_SCHEMA_VERSION = 1
+PUBCHEM_VOLATILE_PARSER_VERSION = "2026-08-02-water-medium-v2"
+PUBCHEM_VOLATILE_CACHE_TTL = timedelta(days=30)
+
+
+def _parse_utc_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def is_pubchem_volatile_cache_entry_current(
+    entry: dict,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("schema_version") != PUBCHEM_VOLATILE_CACHE_SCHEMA_VERSION:
+        return False
+    if entry.get("parser_version") != PUBCHEM_VOLATILE_PARSER_VERSION:
+        return False
+    retrieved_at = _parse_utc_timestamp(entry.get("retrieved_at"))
+    reference_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    if retrieved_at is None or retrieved_at > reference_time:
+        return False
+    return reference_time - retrieved_at <= PUBCHEM_VOLATILE_CACHE_TTL
+
+
+def _stamp_pubchem_volatile_cache_metadata(result: dict) -> dict:
+    return {
+        **result,
+        "schema_version": PUBCHEM_VOLATILE_CACHE_SCHEMA_VERSION,
+        "parser_version": PUBCHEM_VOLATILE_PARSER_VERSION,
+    }
 
 
 def _reset_pubchem_volatile_throttle_for_tests() -> None:
@@ -490,7 +548,10 @@ def query_pubchem_volatile_properties(cid: int | str, fetcher=None) -> dict:
         )
     except HTTPError as exc:
         if exc.code == 404:
-            return {**_empty_pubchem_volatile(cid_text, "no_data"), "retrieved_at": retrieved_at}
+            return _stamp_pubchem_volatile_cache_metadata({
+                **_empty_pubchem_volatile(cid_text, "no_data"),
+                "retrieved_at": retrieved_at,
+            })
         if exc.code in {408, 425, 429} or 500 <= exc.code <= 599:
             return _empty_pubchem_volatile(cid_text, "upstream_unavailable")
         raise
@@ -515,7 +576,11 @@ def query_pubchem_volatile_properties(cid: int | str, fetcher=None) -> dict:
     result = parse_pubchem_volatile_properties(payload, cid_text)
 
     status = "ok" if result["found"] else "no_data"
-    return {**result, "status": status, "retrieved_at": retrieved_at}
+    return _stamp_pubchem_volatile_cache_metadata({
+        **result,
+        "status": status,
+        "retrieved_at": retrieved_at,
+    })
 
 
 def _get_pubchem_volatile_cached(cache: dict, cid: int | str) -> tuple[dict, bool]:
@@ -526,7 +591,7 @@ def _get_pubchem_volatile_cached(cache: dict, cid: int | str) -> tuple[dict, boo
 
     with _PUBCHEM_VOLATILE_FLIGHTS_LOCK:
         cached_result = cache.get(cache_key)
-        if cached_result is not None:
+        if cached_result is not None and is_pubchem_volatile_cache_entry_current(cached_result):
             return cached_result, True
         flight = _PUBCHEM_VOLATILE_FLIGHTS.get(canonical_cid)
         if flight is None:
@@ -548,7 +613,9 @@ def _get_pubchem_volatile_cached(cache: dict, cid: int | str) -> tuple[dict, boo
         return flight["result"], flight["persisted"]
 
     try:
-        result = query_pubchem_volatile_properties(canonical_cid)
+        result = _stamp_pubchem_volatile_cache_metadata(
+            query_pubchem_volatile_properties(canonical_cid)
+        )
         flight["result"] = result
         if result["status"] in {"ok", "no_data"}:
             with _CACHE_PERSIST_LOCK:
@@ -628,6 +695,152 @@ def query_pubchem_crystal_structures(cid: str) -> dict:
     }
 
 
+def parse_flavordb2_molecule_entities(detail_html: str, cid: int | str) -> dict:
+    entities = []
+    seen_ids = set()
+    pattern = r'href=["\']/flavordb2/entity_details\?id=(\d+)["\'][^>]*>\s*(?:<strong[^>]*>)?([^<]+)'
+    for entity_id_text, name_html in re.findall(pattern, detail_html, re.I):
+        entity_id = int(entity_id_text)
+        if entity_id in seen_ids:
+            continue
+        seen_ids.add(entity_id)
+        entities.append({
+            "id": entity_id,
+            "name": strip_tags(name_html),
+            "url": f"{FLAVORDB_BASE_URL}/entity_details?id={entity_id}",
+        })
+    return {
+        "found": bool(entities),
+        "cid": str(cid),
+        "entities": entities,
+        "source": "FlavorDB2",
+        "url": f"{FLAVORDB_BASE_URL}/molecules_details?id={cid}",
+    }
+
+
+def parse_flavordb2_entities(payload_text: str) -> list[dict]:
+    payload = json.loads(payload_text)
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+    results = []
+    for entity in payload or []:
+        entity_id = entity.get("entity_id")
+        results.append({
+            "id": entity_id,
+            "name": entity.get("entity_alias_readable") or entity.get("entity_alias") or "",
+            "category": entity.get("category_readable") or entity.get("category") or "",
+            "synonyms": entity.get("entity_alias_synonyms") or "",
+            "natural_source": {
+                "name": entity.get("natural_source_name") or "",
+                "url": entity.get("natural_source_url") or "",
+            },
+            "url": f"{FLAVORDB_BASE_URL}/entity_details?id={entity_id}",
+        })
+    return results
+
+
+def _flavordb2_label_value(detail_html: str, label: str) -> str:
+    patterns = [
+        rf'<t[dh][^>]*>\s*(?:<strong[^>]*>)?{re.escape(label)}\s*:?(?:</strong>)?\s*</t[dh]>\s*<td[^>]*>([\s\S]*?)</td>',
+        rf'<h[1-6][^>]*>\s*{re.escape(label)}\s*:\s*<strong[^>]*>([\s\S]*?)</strong>\s*</h[1-6]>',
+        rf'<strong[^>]*>\s*{re.escape(label)}\s*:?</strong>\s*([^<]+)',
+    ]
+    for pattern in patterns:
+        value = first_match(pattern, detail_html)
+        if value:
+            return strip_tags(value)
+    return ""
+
+
+def parse_flavordb2_entity_detail(detail_html: str, entity_id: int | str) -> dict:
+    name = strip_tags(first_match(r'<div[^>]+id=["\']entity_details["\'][\s\S]*?<h1[^>]*>([\s\S]*?)</h1>', detail_html))
+    category = _flavordb2_label_value(detail_html, "Category")
+    synonyms = _flavordb2_label_value(detail_html, "Synonyms")
+    natural_source_name = first_match(
+        r'Natural Source of[\s\S]*?</t[dh]>\s*<td[^>]*>([\s\S]*?)</td>',
+        detail_html,
+    )
+    if not natural_source_name:
+        natural_source_name = first_match(
+            r'Natural Source of[\s\S]*?</a>\s*:\s*<a[^>]*>([\s\S]*?)</a>',
+            detail_html,
+        )
+    taxonomy = {}
+    for label in ("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"):
+        value = _flavordb2_label_value(detail_html, label)
+        if value:
+            taxonomy[label.lower()] = value
+
+    compounds = []
+    table_body = first_match(r'<table[^>]+id=["\']molecules["\'][^>]*>[\s\S]*?<tbody[^>]*>([\s\S]*?)</tbody>', detail_html)
+    for row_html in re.findall(r'<tr[^>]*>([\s\S]*?)</tr>', table_body, re.I):
+        cid_match = re.search(r'pubchem\.ncbi\.nlm\.nih\.gov/compound/(\d+)', row_html, re.I)
+        cells = re.findall(r'<td[^>]*>([\s\S]*?)</td>', row_html, re.I)
+        if not cid_match or not cells:
+            continue
+        profile = [
+            strip_tags(term)
+            for term in re.findall(r'<a[^>]*>([\s\S]*?)</a>', cells[2] if len(cells) > 2 else "", re.I)
+            if strip_tags(term)
+        ]
+        compounds.append({
+            "cid": int(cid_match.group(1)),
+            "name": strip_tags(cells[0]),
+            "flavor_profile": profile,
+            "url": f"{PUBCHEM_BASE_URL}/compound/{cid_match.group(1)}",
+        })
+
+    entity_id_text = str(entity_id)
+    return {
+        "found": bool(name),
+        "id": int(entity_id_text) if entity_id_text.isdigit() else entity_id_text,
+        "name": name,
+        "category": category,
+        "synonyms": [part.strip() for part in synonyms.split(",") if part.strip()],
+        "natural_source": {
+            "name": strip_tags(natural_source_name),
+            "taxonomy": taxonomy,
+        },
+        "compounds": compounds,
+        "source": "FlavorDB2",
+        "url": f"{FLAVORDB_BASE_URL}/entity_details?id={entity_id_text}",
+    }
+
+
+def query_flavordb2_molecule_entities(
+    cid: int | str,
+    fetcher=fetch_text,
+) -> dict:
+    cid_text = str(cid).strip()
+    if not cid_text.isdigit():
+        return {"found": False, "cid": cid_text, "entities": [], "error": "Missing or invalid PubChem CID"}
+    url = f"{FLAVORDB_BASE_URL}/molecules_details?id={cid_text}"
+    return parse_flavordb2_molecule_entities(fetcher(url), cid_text)
+
+
+def query_flavordb2_entities(query: str, fetcher=fetch_text) -> dict:
+    query_text = str(query).strip()
+    if not query_text:
+        return {"found": False, "query": query_text, "entities": [], "error": "Missing entity query"}
+    url = f"{FLAVORDB_BASE_URL}/entities?entity={quote(query_text, safe='')}"
+    entities = parse_flavordb2_entities(fetcher(url))
+    return {
+        "found": bool(entities),
+        "query": query_text,
+        "entities": entities,
+        "source": "FlavorDB2",
+        "url": url,
+    }
+
+
+def query_flavordb2_entity(entity_id: int | str, fetcher=fetch_text) -> dict:
+    entity_id_text = str(entity_id).strip()
+    if not entity_id_text.isdigit():
+        return {"found": False, "id": entity_id_text, "error": "Missing or invalid entity id"}
+    url = f"{FLAVORDB_BASE_URL}/entity_details?id={entity_id_text}"
+    return parse_flavordb2_entity_detail(fetcher(url), entity_id_text)
+
+
 def query_flavordb(cid: int | str) -> dict:
     cid_text = str(cid).strip()
     if not cid_text.isdigit():
@@ -666,7 +879,7 @@ def query_flavordb(cid: int | str) -> dict:
         "url": f"{FLAVORDB_BASE_URL}/molecules?pubchem_id={cid_text}",
         "json_url": json_url,
         "image_url": f"{FLAVORDB_BASE_URL}/static/molecules_images/{cid_text}.png",
-        "source": "FlavorDB",
+        "source": "FlavorDB2",
         "license": "CC BY-NC-SA 3.0",
     }
 
@@ -795,7 +1008,16 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self.send_json(502, {"error": str(exc)})
             return
-        if parsed.path not in {"/fema", "/pubchem", "/pubchem-volatile", "/flavordb", "/compound"}:
+        if parsed.path not in {
+            "/fema",
+            "/pubchem",
+            "/pubchem-volatile",
+            "/flavordb",
+            "/compound",
+            "/flavordb2/compound-entities",
+            "/flavordb2/entities",
+            "/flavordb2/entity",
+        }:
             self.send_json(404, {"error": "Not found"})
             return
 
@@ -817,11 +1039,72 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(status_code, {**result, "cached": cached})
             return
 
+        if parsed.path == "/flavordb2/compound-entities":
+            if not cid.isdigit():
+                self.send_json(400, {"found": False, "entities": [], "error": "Missing or invalid cid"})
+                return
+            cache_key = f"flavordb2:compound-entities:{cid}"
+            try:
+                if cache_key not in self.cache:
+                    result = query_flavordb2_molecule_entities(cid)
+                    _store_cache_result(self.cache, cache_key, result)
+                self.send_json(200, {**self.cache[cache_key], "cached": True})
+            except Exception as exc:
+                self.send_json(502, {
+                    "found": False,
+                    "cid": cid,
+                    "entities": [],
+                    "cached": False,
+                    "error": str(exc),
+                })
+            return
+
+        if parsed.path == "/flavordb2/entities":
+            entity_query = (params.get("q") or params.get("entity") or [""])[0].strip()
+            if not entity_query:
+                self.send_json(400, {"found": False, "entities": [], "error": "Missing entity query"})
+                return
+            cache_key = f"flavordb2:entities:{entity_query.lower()}"
+            try:
+                if cache_key not in self.cache:
+                    result = query_flavordb2_entities(entity_query)
+                    _store_cache_result(self.cache, cache_key, result)
+                self.send_json(200, {**self.cache[cache_key], "cached": True})
+            except Exception as exc:
+                self.send_json(502, {
+                    "found": False,
+                    "query": entity_query,
+                    "entities": [],
+                    "cached": False,
+                    "error": str(exc),
+                })
+            return
+
+        if parsed.path == "/flavordb2/entity":
+            entity_id = (params.get("id") or [""])[0].strip()
+            if not entity_id.isdigit():
+                self.send_json(400, {"found": False, "error": "Missing or invalid entity id"})
+                return
+            cache_key = f"flavordb2:entity:{entity_id}"
+            try:
+                if cache_key not in self.cache:
+                    result = query_flavordb2_entity(entity_id)
+                    _store_cache_result(self.cache, cache_key, result)
+                self.send_json(200, {**self.cache[cache_key], "cached": True})
+            except Exception as exc:
+                self.send_json(502, {
+                    "found": False,
+                    "id": entity_id,
+                    "cached": False,
+                    "error": str(exc),
+                })
+            return
+
         if parsed.path == "/flavordb":
             if not cid:
                 self.send_json(400, {"found": False, "error": "Missing cid"})
                 return
-            key = f"flavordb:{cid}"
+            key = f"flavordb2:molecule:{cid}"
             if key not in self.cache:
                 try:
                     self.cache[key] = query_flavordb(cid)
@@ -849,16 +1132,51 @@ class Handler(BaseHTTPRequestHandler):
                     return
 
                 flavordb = {"found": False, "error": "PubChem CID unavailable"}
+                flavordb2_entities = {"found": False, "entities": [], "error": "PubChem CID unavailable"}
                 pubchem_volatile = {
                     **_empty_pubchem_volatile("", "invalid_cid"),
                     "cached": False,
                 }
                 if pubchem.get("found") and pubchem.get("cid"):
-                    flavordb_key = f"flavordb:{pubchem['cid']}"
+                    flavordb_key = f"flavordb2:molecule:{pubchem['cid']}"
                     if flavordb_key not in self.cache:
-                        self.cache[flavordb_key] = query_flavordb(pubchem["cid"])
-                        save_cache(self.cache)
-                    flavordb = self.cache[flavordb_key]
+                        try:
+                            self.cache[flavordb_key] = query_flavordb(pubchem["cid"])
+                            save_cache(self.cache)
+                        except Exception as exc:
+                            self.cache.pop(flavordb_key, None)
+                            flavordb = {
+                                "found": False,
+                                "cid": str(pubchem["cid"]),
+                                "status": (
+                                    "upstream_unavailable"
+                                    if isinstance(exc, (TimeoutError, socket.timeout, URLError))
+                                    else "error"
+                                ),
+                                "error": str(exc),
+                            }
+                    if flavordb_key in self.cache:
+                        flavordb = self.cache[flavordb_key]
+                    entities_key = f"flavordb2:compound-entities:{pubchem['cid']}"
+                    if entities_key not in self.cache:
+                        try:
+                            self.cache[entities_key] = query_flavordb2_molecule_entities(pubchem["cid"])
+                            save_cache(self.cache)
+                        except Exception as exc:
+                            self.cache.pop(entities_key, None)
+                            flavordb2_entities = {
+                                "found": False,
+                                "cid": str(pubchem["cid"]),
+                                "entities": [],
+                                "status": (
+                                    "upstream_unavailable"
+                                    if isinstance(exc, (TimeoutError, socket.timeout, URLError))
+                                    else "error"
+                                ),
+                                "error": str(exc),
+                            }
+                    if entities_key in self.cache:
+                        flavordb2_entities = self.cache[entities_key]
                     try:
                         volatile_result, volatile_cached = _get_pubchem_volatile_cached(
                             self.cache, pubchem["cid"]
@@ -873,6 +1191,7 @@ class Handler(BaseHTTPRequestHandler):
                     "query": query,
                     "pubchem": pubchem,
                     "flavordb": flavordb,
+                    "flavordb2_entities": flavordb2_entities,
                     "pubchem_volatile": pubchem_volatile,
                 })
             except Exception as exc:

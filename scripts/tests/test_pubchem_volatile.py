@@ -5,6 +5,7 @@ import tempfile
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 from unittest.mock import patch
@@ -431,6 +432,56 @@ class PubChemVolatilePropertyHandlerTests(unittest.TestCase):
         except HTTPError as error:
             return error.code, json.loads(error.read()), error.headers
         self.fail("expected HTTP error response")
+
+    def make_cached_result(self, **overrides):
+        result = {
+            **fema_proxy_server._empty_pubchem_volatile("8857", "no_data"),
+            "schema_version": fema_proxy_server.PUBCHEM_VOLATILE_CACHE_SCHEMA_VERSION,
+            "parser_version": fema_proxy_server.PUBCHEM_VOLATILE_PARSER_VERSION,
+            "retrieved_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+        result.update(overrides)
+        return result
+
+    def test_pubchem_volatile_cache_requires_current_parser_version(self):
+        stale = self.make_cached_result(parser_version="old-parser")
+        self.assertFalse(
+            fema_proxy_server.is_pubchem_volatile_cache_entry_current(
+                stale,
+                now=datetime.now(timezone.utc),
+            )
+        )
+
+    def test_pubchem_volatile_cache_expires_after_ttl(self):
+        expired_at = datetime.now(timezone.utc) - fema_proxy_server.PUBCHEM_VOLATILE_CACHE_TTL - timedelta(seconds=1)
+        expired = self.make_cached_result(retrieved_at=expired_at.isoformat().replace("+00:00", "Z"))
+        self.assertFalse(
+            fema_proxy_server.is_pubchem_volatile_cache_entry_current(
+                expired,
+                now=datetime.now(timezone.utc),
+            )
+        )
+
+    def test_pubchem_volatile_cache_accepts_current_metadata(self):
+        self.assertTrue(
+            fema_proxy_server.is_pubchem_volatile_cache_entry_current(
+                self.make_cached_result(),
+                now=datetime.now(timezone.utc),
+            )
+        )
+
+    def test_stale_pubchem_volatile_cache_is_replaced(self):
+        Handler.cache = {"pubchem-volatile:8857": self.make_cached_result(parser_version="old-parser")}
+        fresh = self.make_cached_result()
+        with (
+            patch.object(fema_proxy_server, "query_pubchem_volatile_properties", return_value=fresh) as query,
+            patch.object(fema_proxy_server, "save_cache"),
+        ):
+            _, result, _ = self.get_json("/pubchem-volatile?cid=8857")
+
+        self.assertFalse(result["cached"])
+        self.assertEqual(query.call_count, 1)
+        self.assertEqual(Handler.cache["pubchem-volatile:8857"]["parser_version"], fema_proxy_server.PUBCHEM_VOLATILE_PARSER_VERSION)
 
     def test_pubchem_volatile_endpoint_returns_contract_and_caches_ok(self):
         response = {
