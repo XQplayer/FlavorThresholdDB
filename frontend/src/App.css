@@ -4599,3 +4599,14 @@ select:focus-visible,
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.nist-webbook-presence { margin: 18px 22px; padding: 18px 20px; border: 1px solid #d7dce4; border-radius: 16px; background: #fafbfc; color: #303b49; }
+.nist-webbook-presence header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.nist-webbook-presence header span { color: #687586; font-size: 10px; font-weight: 850; letter-spacing: .12em; }
+.nist-webbook-presence h4 { margin: 3px 0 0; font-size: 17px; }
+.nist-webbook-presence header > a { color: #315e8b; font-size: 12px; font-weight: 750; }
+.nist-webbook-presence > p { margin: 13px 0 0; color: #657181; font-size: 12px; }
+.nist-section-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.nist-section-links a { padding: 7px 10px; border: 1px solid #cad5e1; border-radius: 999px; background: #fff; color: #315e8b; font-size: 12px; font-weight: 750; text-decoration: none; }
+.nist-webbook-presence footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid #e2e6ec; color: #788493; font-size: 10px; }
+@media (max-width: 760px) { .nist-webbook-presence { margin-inline: 10px; }.nist-webbook-presence header { flex-direction: column; } }

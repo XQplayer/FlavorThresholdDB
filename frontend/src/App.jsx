@@ -6,6 +6,7 @@ import PubChemStructureViewer from './components/PubChemStructureViewer';
 import FlavorDB2Sources from './components/FlavorDB2Sources';
 import PubChemVolatileProperties from './components/PubChemVolatileProperties';
 import OpenSpectraWorkbench from './components/spectra/OpenSpectraWorkbench';
+import NistWebbookPresence from './components/NistWebbookPresence';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
 import {
@@ -1833,6 +1834,8 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                         isEnglish={isEnglish}
                       />
                     )}
+
+                    <NistWebbookPresence apiUrl={FEMA_API_URL} cas={item.cas} isEnglish={isEnglish} />
 
                     <footer className="integrated-source-links">
                       <div><strong>{isEnglish ? 'Sources and original records' : '来源与原始记录'}</strong><span>{isEnglish ? 'Open the source page to verify the record.' : '可跳转原网页核验数据。'}</span></div>
