@@ -19,6 +19,8 @@ All notable changes to FlavorThresholdDB are recorded here. Versions follow
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-08-02
+
 - Added project history and maintainership documentation.
 - Established local-only release-candidate and backup directories.
 - Upgraded the live flavor-data integration from FlavorDB to FlavorDB2.
@@ -30,6 +32,9 @@ All notable changes to FlavorThresholdDB are recorded here. Versions follow
 - Suspended Excel upload and removed the vulnerable SheetJS production dependency; text batch input and CSV export remain available.
 - Standardized hidden single-instance local startup on frontend port 5174 and proxy port 8787, with project ownership and health checks.
 - Promoted desktop/mobile/failure-isolation Playwright coverage to a repository-owned E2E command and isolated generated artifacts under `_local/`.
+- Added MassBank and GNPS open-spectrum search, license-gated downloads, peak tables, mirror comparison, PNG/SVG/CSV/JSON exports, and a separately distributed GNPS metadata index.
+- Added NIST Chemistry WebBook original-page availability links without copying restricted spectra.
+- Added identity-safe ChEBI to Rhea to reviewed UniProt biochemical relationships with source-specific caching, pagination, partial-failure isolation, and evidence caveats.
 
 ## [1.3.0] - 2026-07-31
 
@@ -55,7 +60,8 @@ All notable changes to FlavorThresholdDB are recorded here. Versions follow
 - Unified the public home, navigation, and search workbench design.
 - Added bilingual UI, responsive behavior, metadata, and route fallback.
 
-[Unreleased]: https://github.com/XQplayer/FlavorThresholdDB/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/XQplayer/FlavorThresholdDB/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/XQplayer/FlavorThresholdDB/releases/tag/v1.4.0
 [1.3.1]: https://github.com/XQplayer/FlavorThresholdDB/releases/tag/v1.3.1
 [1.3.0]: https://github.com/XQplayer/FlavorThresholdDB/releases/tag/v1.3.0
 [1.2.0]: https://github.com/XQplayer/FlavorThresholdDB/releases/tag/v1.2.0
