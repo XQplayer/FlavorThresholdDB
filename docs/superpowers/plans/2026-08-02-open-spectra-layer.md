@@ -48,14 +48,15 @@
 ### Task 4: GNPS adapter
 
 **Files:**
+- Create: `scripts/spectra/rebuild_gnps_index.py`
 - Create: `spectra_gnps.py`
 - Create: `scripts/tests/fixtures/gnps_search.json`
 - Create: `scripts/tests/fixtures/gnps_record.json`
 - Create: `scripts/tests/test_spectra_gnps.py`
 
-- [ ] Add fixture-backed failing tests for SpectrumID, USI, peaks, precursor, ion mode, adduct, instrument, identity evidence, imported-library license caution, and upstream errors.
+- [ ] Add fixture-backed failing tests for library discovery, incremental SQLite indexing, atomic per-library replacement, InChIKey lookup, SpectrumID, USI, peaks, precursor, ion mode, adduct, instrument, identity evidence, imported-library license caution, and upstream errors.
 - [ ] Confirm failures before implementation.
-- [ ] Implement the documented GNPS public-library and single-spectrum adapters with injected fetchers.
+- [ ] Implement the GNPS2 slim-metadata indexer and documented single-spectrum adapters with injected fetchers. Store the generated database under `_local/indexes` and never commit it.
 - [ ] Run adapter and service tests.
 
 ### Task 5: Unified proxy routes and cache policy
