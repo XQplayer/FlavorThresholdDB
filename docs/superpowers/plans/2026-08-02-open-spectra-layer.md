@@ -40,10 +40,10 @@
 - Create: `scripts/tests/fixtures/massbank_record.json`
 - Create: `scripts/tests/test_spectra_massbank.py`
 
-- [ ] Add fixture-backed failing tests for search parsing, one-record peak parsing, experimental metadata, identity evidence, upstream errors, and license state.
-- [ ] Confirm failures before implementation.
-- [ ] Implement the official MassBank API adapter with injected fetchers and conversion to the unified contract.
-- [ ] Run adapter and service tests.
+- [x] Add fixture-backed failing tests for search parsing, one-record peak parsing, experimental metadata, identity evidence, upstream errors, and license state.
+- [x] Confirm failures before implementation.
+- [x] Implement the official MassBank API adapter with injected fetchers and conversion to the unified contract.
+- [x] Run adapter and service tests.
 
 ### Task 4: GNPS adapter
 
