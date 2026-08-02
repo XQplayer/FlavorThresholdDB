@@ -21,7 +21,13 @@ PORT = int(os.environ.get("PORT", "8787"))
 BASE_URL = "https://www.femaflavor.org"
 PUBCHEM_BASE_URL = "https://pubchem.ncbi.nlm.nih.gov"
 FLAVORDB_BASE_URL = "https://cosylab.iiitd.edu.in/flavordb2"
-CACHE_PATH = Path(__file__).resolve().with_name("fema_flavor_cache.json")
+PROJECT_ROOT = Path(__file__).resolve().parent
+CACHE_PATH = Path(
+    os.environ.get(
+        "FLAVOR_CACHE_PATH",
+        PROJECT_ROOT / "_local" / "cache" / "fema_flavor_cache.json",
+    )
+).resolve()
 _CACHE_PERSIST_LOCK = threading.RLock()
 
 

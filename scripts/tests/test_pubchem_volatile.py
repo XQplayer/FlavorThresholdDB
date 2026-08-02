@@ -433,6 +433,10 @@ class PubChemVolatilePropertyHandlerTests(unittest.TestCase):
             return error.code, json.loads(error.read()), error.headers
         self.fail("expected HTTP error response")
 
+    def test_default_runtime_cache_is_outside_tracked_source_files(self):
+        relative = fema_proxy_server.CACHE_PATH.relative_to(fema_proxy_server.Path(__file__).resolve().parents[2])
+        self.assertEqual(relative.parts[:2], ("_local", "cache"))
+
     def make_cached_result(self, **overrides):
         result = {
             **fema_proxy_server._empty_pubchem_volatile("8857", "no_data"),
