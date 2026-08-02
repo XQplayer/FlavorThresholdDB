@@ -15,6 +15,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
+from nist_webbook import PARSER_VERSION as NIST_PARSER_VERSION, query_nist_webbook
 from spectra_gnps import fetch_gnps_spectrum, fetch_gnps_usi, search_gnps_records
 from spectra_massbank import fetch_massbank_record, query_massbank_records
 from spectra_cache import OpenSpectraCache
@@ -42,6 +43,8 @@ PUBLIC_SPECTRUM_MANIFEST_PATH = Path(os.environ.get("PUBLIC_SPECTRUM_MANIFEST_PA
 PUBLIC_SPECTRUM_RUNTIME_DIR = Path(os.environ.get("PUBLIC_SPECTRUM_RUNTIME_DIR", PROJECT_ROOT / "_local" / "indexes" / "public")).resolve()
 _PUBLIC_INDEX_STATUS_LOCK = threading.RLock()
 _PUBLIC_INDEX_STATUS = {"status": "missing", "degraded": True, "index_path": str(PUBLIC_SPECTRUM_RUNTIME_DIR / "public_spectrum_index.sqlite")}
+NIST_CACHE_SCHEMA_VERSION = 1
+NIST_CACHE_TTL = timedelta(days=7)
 
 
 def initialize_public_spectrum_index() -> dict:
@@ -62,6 +65,22 @@ def initialize_public_spectrum_index() -> dict:
 def get_public_spectrum_index_status() -> dict:
     with _PUBLIC_INDEX_STATUS_LOCK:
         return dict(_PUBLIC_INDEX_STATUS)
+
+
+def get_nist_webbook_cached(cache: dict, cas: str, *, query=None, now=None, persist=None) -> tuple[dict, bool]:
+    reference_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    key = f"nist-webbook:{cas}"
+    entry = cache.get(key)
+    if isinstance(entry, dict) and entry.get("cache_schema_version") == NIST_CACHE_SCHEMA_VERSION and entry.get("parser_version") == NIST_PARSER_VERSION:
+        stored_at = _parse_utc_timestamp(entry.get("cache_stored_at"))
+        if stored_at and timedelta(0) <= reference_time - stored_at <= NIST_CACHE_TTL:
+            return entry, True
+    result = (query or query_nist_webbook)(cas)
+    if result.get("status") in {"ok", "no_data"}:
+        result = {**result, "cache_schema_version": NIST_CACHE_SCHEMA_VERSION, "parser_version": NIST_PARSER_VERSION, "cache_stored_at": reference_time.isoformat().replace("+00:00", "Z")}
+        (persist or _store_cache_result)(cache, key, result)
+        cache[key] = result
+    return result, False
 
 
 def search_gnps_with_available_index(target: dict) -> dict:
@@ -1046,6 +1065,15 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             self.send_json(200, {"ok": True, "service": "flavor_data_proxy"})
+            return
+        if parsed.path == "/nist-webbook":
+            cas = (parse_qs(parsed.query).get("cas") or [""])[0].strip()
+            try:
+                result, cached = get_nist_webbook_cached(self.cache, cas)
+                status = 502 if result.get("status") in {"upstream_unavailable", "invalid_response"} else 200
+                self.send_json(status, {**result, "cached": cached})
+            except ValueError as exc:
+                self.send_json(400, {"found": False, "status": "invalid_query", "error": str(exc), "cas": cas})
             return
         if parsed.path == "/spectra/index-status":
             self.send_json(200, get_public_spectrum_index_status())
