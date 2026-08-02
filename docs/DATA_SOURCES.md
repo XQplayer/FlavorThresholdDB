@@ -72,6 +72,39 @@ refetched, and compatible entries expire after 30 days. This prevents an older
 scientific parsing rule from surviving after classifications such as explicit
 aqueous solubility have been corrected.
 
+## NIST Chemistry WebBook boundary
+
+The NIST integration checks a canonical CAS page and exposes only original-page
+links plus presence flags for EI-MS, IR, GC data, vapor pressure, Henry-law
+constants, and thermochemistry. FlavorThresholdDB does not copy or redistribute
+NIST spectra. A presence flag means that the checked NIST page advertised the
+section; it is not a local scientific validation of the underlying record.
+
+## ChEBI, Rhea, and UniProt relationship layer
+
+ChEBI is the identity bridge. Automatic expansion to Rhea is permitted only
+after an exact structural identifier, connectivity identifier, CAS, or canonical
+structure match. An exact name is retained as an unverified candidate and stops
+the chain. Rhea joins use ChEBI and Rhea identifiers, and UniProt queries use
+reviewed entries explicitly annotated to the Rhea reaction.
+
+The resulting links are biochemical database evidence. They do not by themselves
+establish that a compound occurs in a food, is produced by a microorganism, or
+causes an aroma phenotype. Each entity and relationship retains an original
+source URL, and a failure in one upstream source must not suppress unrelated
+threshold, flavor, spectrum, PubChem, or NIST records.
+
+## Public GNPS index distribution
+
+The full local GNPS SQLite index is generated under `_local/indexes/` and is
+never committed to Git. Release preparation creates a slim SQLite file, gzip
+archive, SHA-256 checksum, row/library counts, schema version, and integrity
+result under `_local/release-assets/`. The binary is intended for an external
+release asset or object store; Git contains only code and, after an asset URL is
+stable, a small manifest. The proxy verifies size and SHA-256 before atomically
+installing an index under `_local/indexes/public/`, and falls back to remote GNPS
+lookup when no verified public index is installed.
+
 ## Publication rules
 
 1. Do not commit source PDFs, books, credentials, or private local indexes.

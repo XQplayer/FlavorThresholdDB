@@ -15,6 +15,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, unquote, urlparse
 from urllib.request import Request, urlopen
 
+from biochemistry_service import resolve_biochemistry
 from nist_webbook import PARSER_VERSION as NIST_PARSER_VERSION, query_nist_webbook
 from spectra_gnps import fetch_gnps_spectrum, fetch_gnps_usi, search_gnps_records
 from spectra_massbank import fetch_massbank_record, query_massbank_records
@@ -1074,6 +1075,18 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(status, {**result, "cached": cached})
             except ValueError as exc:
                 self.send_json(400, {"found": False, "status": "invalid_query", "error": str(exc), "cas": cas})
+            return
+        if parsed.path == "/biochemistry/resolve":
+            params = parse_qs(parsed.query)
+            inchikey = (params.get("inchikey") or [""])[0].strip().upper()
+            cas = (params.get("cas") or [""])[0].strip()
+            names = [name.strip() for name in params.get("name", []) if name.strip()]
+            if not inchikey and not cas and not names:
+                self.send_json(400, {"status": "invalid_query", "error": "inchikey, cas, or name is required"})
+                return
+            result = resolve_biochemistry({"inchikey": inchikey, "cas": cas, "names": names})
+            status = 502 if all(source.get("status") in {"upstream_unavailable", "invalid_response"} for source in result["sources"].values()) else 200
+            self.send_json(status, result)
             return
         if parsed.path == "/spectra/index-status":
             self.send_json(200, get_public_spectrum_index_status())

@@ -113,3 +113,22 @@ Comparison responses include `compatibility`, `tolerance`, `similarity`,
 `matched_peak_count`, `coverage_a`, `coverage_b`, and `matches`. Each match
 retains both peak indices, both m/z and intensity values, `delta_da`, and
 `delta_ppm` so the highlighted mirror peaks can be audited.
+
+## Biochemical relationship contract
+
+- `chebi`: normalized ChEBI entity with `chebi_id`, `name`, `formula`, `charge`,
+  `inchikey`, `smiles`, `source_url`, and `identity_match`.
+- `reactions[]`: Rhea records keyed by `rhea_id`, with equation, participant
+  `chebi_ids`, EC numbers, and source URL.
+- `proteins[]`: reviewed UniProt records keyed by accession, with protein name,
+  gene names, organism name/taxonomy ID, EC numbers, Rhea ID, and source URL.
+- `edges[]`: identifier-only joins. `participates_in` connects ChEBI to Rhea;
+  `catalyzed_by` connects Rhea to UniProt.
+- `sources`: per-source status. `blocked_unverified_identity` means a ChEBI name
+  candidate was shown but downstream automatic expansion was deliberately stopped.
+
+## NIST presence contract
+
+`GET /nist-webbook?cas=...` returns the canonical page URL, retrieval status,
+and a `sections[]` list containing only supported section type, label, and the
+original NIST URL. It contains no copied spectrum peaks or images.

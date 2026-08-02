@@ -4610,3 +4610,27 @@ select:focus-visible,
 .nist-section-links a { padding: 7px 10px; border: 1px solid #cad5e1; border-radius: 999px; background: #fff; color: #315e8b; font-size: 12px; font-weight: 750; text-decoration: none; }
 .nist-webbook-presence footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid #e2e6ec; color: #788493; font-size: 10px; }
 @media (max-width: 760px) { .nist-webbook-presence { margin-inline: 10px; }.nist-webbook-presence header { flex-direction: column; } }
+.biochemical-relationships {
+  margin: 1rem 1.5rem;
+  padding: 1rem;
+  border: 1px solid #d7e4df;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f7fbf9, #fbfcff);
+  color: #27354a;
+}
+.biochemical-relationships > header { display: flex; justify-content: space-between; gap: 1rem; align-items: start; }
+.biochemical-relationships > header span { color: #57736a; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
+.biochemical-relationships h4 { margin: .2rem 0 .75rem; font-size: 1rem; }
+.biochemical-relationships a { color: #315d8e; overflow-wrap: anywhere; }
+.biochemical-graph { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(0, 2fr); gap: 1rem; }
+.biochemical-entity { display: flex; flex-direction: column; gap: .3rem; padding: .8rem; border-radius: 12px; background: #edf6f1; }
+.biochemical-entity small { color: #60716b; overflow-wrap: anywhere; }
+.biochemical-reaction-list { min-width: 0; display: grid; gap: .55rem; }
+.biochemical-reaction-list details { border: 1px solid #dae3eb; border-radius: 10px; background: white; overflow: hidden; }
+.biochemical-reaction-list summary { display: flex; gap: .65rem; padding: .7rem .8rem; cursor: pointer; }
+.biochemical-reaction-list summary strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.biochemical-equation { max-height: 7rem; overflow: auto; padding: .75rem; border-top: 1px solid #e8edf1; font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+.biochemical-proteins { display: grid; gap: .45rem; padding: .75rem; }
+.biochemical-proteins a { display: flex; flex-direction: column; padding: .6rem; border-radius: 8px; background: #f4f7fa; }
+.biochemical-relationships > footer { margin-top: .75rem; padding-top: .65rem; border-top: 1px solid #dfe8e4; color: #68756f; font-size: .78rem; }
+@media (max-width: 720px) { .biochemical-graph { grid-template-columns: 1fr; } .biochemical-relationships { margin-inline: .75rem; } }
