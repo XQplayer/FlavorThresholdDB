@@ -6,8 +6,11 @@ services:
     buildCommand: ""
     startCommand: python fema_proxy_server.py
     healthCheckPath: /health
+    autoDeploy: true
     envVars:
       - key: PYTHON_VERSION
         value: 3.13.5
       - key: PUBLIC_SPECTRUM_INDEX_AUTO_INSTALL
         value: "false"
+      - key: API_VERSION
+        value: "1.5.0"
