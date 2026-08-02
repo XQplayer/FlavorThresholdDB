@@ -112,6 +112,15 @@ class OpenSpectraRouteTests(unittest.TestCase):
                 body = json.loads(response.read().decode("utf-8"))
         self.assertEqual(body, {"status": "missing", "degraded": True})
 
+    def test_public_index_auto_install_can_be_disabled_for_ephemeral_hosts(self):
+        with patch.dict("os.environ", {"PUBLIC_SPECTRUM_INDEX_AUTO_INSTALL": "false"}):
+            with patch("fema_proxy_server.install_public_index") as installer:
+                from fema_proxy_server import initialize_public_spectrum_index
+                result = initialize_public_spectrum_index()
+        installer.assert_not_called()
+        self.assertEqual(result["status"], "remote_fallback")
+        self.assertTrue(result["degraded"])
+
     def test_detail_route_dispatches_source_and_identifier(self):
         payload = {"source": "GNPS", "spectrum_id": "GNPS2LIB00000000001", "peaks": []}
         with patch("fema_proxy_server.fetch_open_spectrum", return_value=payload) as mocked:

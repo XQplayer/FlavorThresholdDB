@@ -54,6 +54,11 @@ NIST_CACHE_TTL = timedelta(days=7)
 
 def initialize_public_spectrum_index() -> dict:
     global _PUBLIC_INDEX_STATUS
+    if os.environ.get("PUBLIC_SPECTRUM_INDEX_AUTO_INSTALL", "true").strip().lower() in {"0", "false", "no", "off"}:
+        result = {"status": "remote_fallback", "degraded": True, "index_path": "", "reason": "public index auto-install is disabled"}
+        with _PUBLIC_INDEX_STATUS_LOCK:
+            _PUBLIC_INDEX_STATUS = result
+        return dict(result)
     if not PUBLIC_SPECTRUM_MANIFEST_PATH.exists():
         return get_public_spectrum_index_status()
     try:
