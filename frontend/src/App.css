@@ -4025,6 +4025,317 @@ select:focus-visible,
   }
 }
 
+.flavordb2-sources {
+  margin: 0 24px 24px;
+  padding: 22px;
+  border: 1px solid #d9e8d2;
+  border-radius: 18px;
+  background: linear-gradient(145deg, #fbfdf9 0%, #f4f9f1 100%);
+}
+
+.flavordb2-sources-heading,
+.flavordb2-entity-detail header,
+.flavordb2-compounds-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.flavordb2-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #4f7b3d;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.flavordb2-kicker svg,
+.flavordb2-sources-heading > a svg,
+.flavordb2-entity-detail footer svg {
+  width: 15px;
+  height: 15px;
+}
+
+.flavordb2-sources-heading h4 {
+  margin: 5px 0 3px;
+  color: #1f3528;
+  font-size: 1.12rem;
+}
+
+.flavordb2-sources-heading p {
+  margin: 0;
+  color: #708075;
+  font-size: 0.86rem;
+}
+
+.flavordb2-sources-heading > a,
+.flavordb2-entity-detail footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #416c32;
+  font-size: 0.82rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.flavordb2-search {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 7px 7px 7px 13px;
+  border: 1px solid #dbe6d6;
+  border-radius: 13px;
+  background: #fff;
+}
+
+.flavordb2-search > svg {
+  width: 17px;
+  color: #76906c;
+}
+
+.flavordb2-search input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #25342a;
+}
+
+.flavordb2-search button {
+  padding: 8px 13px;
+  border: 0;
+  border-radius: 9px;
+  background: #4f7b3d;
+  color: #fff;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.flavordb2-search button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.flavordb2-entity-list {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 2px 2px 10px;
+  overflow-x: auto;
+}
+
+.flavordb2-entity-list button {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 2px;
+  max-width: 190px;
+  padding: 9px 12px;
+  border: 1px solid #dbe6d6;
+  border-radius: 11px;
+  background: #fff;
+  color: #334c38;
+  text-align: left;
+  cursor: pointer;
+}
+
+.flavordb2-entity-list button:hover,
+.flavordb2-entity-list button.active {
+  border-color: #78a266;
+  background: #edf6e8;
+}
+
+.flavordb2-entity-list small {
+  overflow: hidden;
+  color: #7b8b7e;
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flavordb2-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 0;
+  color: #607266;
+  font-size: 0.82rem;
+}
+
+.flavordb2-status svg {
+  width: 16px;
+}
+
+.flavordb2-status.error {
+  color: #a94343;
+}
+
+.flavordb2-status .spin {
+  animation: flavordb2-spin 0.85s linear infinite;
+}
+
+@keyframes flavordb2-spin {
+  to { transform: rotate(360deg); }
+}
+
+.flavordb2-entity-detail {
+  margin-top: 16px;
+  padding: 18px;
+  border: 1px solid #d6e4d0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 12px 30px rgba(63, 92, 54, 0.07);
+}
+
+.flavordb2-entity-detail header span {
+  color: #718079;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.flavordb2-entity-detail header h5 {
+  margin: 3px 0 0;
+  color: #243b2a;
+  font-size: 1.15rem;
+}
+
+.flavordb2-entity-detail header button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #dfe8da;
+  border-radius: 50%;
+  background: #fff;
+  color: #6a7a6c;
+  cursor: pointer;
+}
+
+.flavordb2-entity-detail header button svg {
+  width: 15px;
+}
+
+.flavordb2-entity-detail dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.flavordb2-entity-detail dl div {
+  padding: 11px;
+  border-radius: 10px;
+  background: #f4f8f1;
+}
+
+.flavordb2-entity-detail dt {
+  margin-bottom: 4px;
+  color: #819083;
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.flavordb2-entity-detail dd {
+  margin: 0;
+  color: #34473a;
+  font-size: 0.83rem;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.flavordb2-compounds-heading {
+  padding-top: 14px;
+  border-top: 1px solid #e1eae0;
+  color: #33483a;
+  font-size: 0.84rem;
+}
+
+.flavordb2-compounds-heading span {
+  color: #77857b;
+}
+
+.flavordb2-compound-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 310px;
+  margin-top: 10px;
+  padding-right: 5px;
+  overflow-y: auto;
+}
+
+.flavordb2-compound-list a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e3e9e0;
+  border-radius: 10px;
+  color: #34463a;
+  text-decoration: none;
+}
+
+.flavordb2-compound-list a:hover {
+  border-color: #9bbf8b;
+  background: #f6faf3;
+}
+
+.flavordb2-compound-list a span {
+  display: grid;
+  min-width: 0;
+}
+
+.flavordb2-compound-list a strong,
+.flavordb2-compound-list a small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flavordb2-compound-list a small,
+.flavordb2-compound-list a em {
+  color: #809085;
+  font-size: 0.68rem;
+  font-style: normal;
+}
+
+.flavordb2-compound-list a em {
+  max-width: 48%;
+  text-align: right;
+}
+
+.flavordb2-entity-detail footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 13px;
+}
+
+@media (max-width: 760px) {
+  .flavordb2-sources {
+    margin: 0 14px 18px;
+    padding: 16px;
+  }
+
+  .flavordb2-sources-heading {
+    align-items: flex-start;
+  }
+
+  .flavordb2-entity-detail dl,
+  .flavordb2-compound-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 .pubchem-volatile {
   margin: 0 24px 24px;
   padding: 20px 22px;
