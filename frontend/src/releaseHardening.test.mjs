@@ -61,6 +61,8 @@ test('open spectra comparison exposes tolerance, matched peaks, warnings, and ex
   assert.match(comparison, /type="number"/);
   assert.match(comparison, /compatibility\?\.warnings/);
   assert.match(comparison, /JSON|CSV/);
+  assert.match(comparison, /exportSvgElementAsPng/);
+  assert.match(comparison, />PNG</);
   assert.match(mirror, /comparisonMatchSets/);
   assert.match(mirror, /matched/);
   assert.match(mirror, /mirror-spectrum-plot/);

@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { comparisonExportFilename } from '../../spectra/spectrumContract';
 import MirrorSpectrumPlot from './MirrorSpectrumPlot';
 import SpectrumPeakTable from './SpectrumPeakTable';
-import { buildComparisonPeakRows } from '../../spectra/spectrumPresentation';
+import { buildComparisonPeakRows, buildPngFilename } from '../../spectra/spectrumPresentation';
+import { exportSvgElementAsPng } from '../../spectra/svgPngExport';
 
 function downloadText(body, mime, filename) {
   const url = URL.createObjectURL(new Blob([body], { type: mime }));
@@ -24,6 +26,7 @@ function comparisonCsv(comparison, spectrumA, spectrumB) {
 }
 
 export default function SpectrumComparison({ slots, comparison, tolerance, toleranceMode, onToleranceChange, onToleranceModeChange, onClear, isEnglish }) {
+  const [pngState, setPngState] = useState({ busy: false, error: '' });
   const warningLabels = comparison?.compatibility?.warnings || [];
   const blocked = comparison?.compatibility && !comparison.compatibility.comparable;
 
@@ -40,13 +43,24 @@ export default function SpectrumComparison({ slots, comparison, tolerance, toler
     downloadText(body, format === 'json' ? 'application/json' : 'text/csv', comparisonExportFilename(slots.a, slots.b, format));
   }
 
+  async function exportPng() {
+    setPngState({ busy: true, error: '' });
+    try {
+      await exportSvgElementAsPng(document.getElementById('open-spectra-mirror'), { filename: buildPngFilename(slots.a, slots.b), scale: 2 });
+      setPngState({ busy: false, error: '' });
+    } catch (error) {
+      setPngState({ busy: false, error: error.message });
+    }
+  }
+
   return <section className="spectrum-comparison-panel">
     <header><h5>{isEnglish ? 'Mirror comparison' : '镜像谱比较'}</h5><button type="button" onClick={onClear}>{isEnglish ? 'Clear' : '清空'}</button></header>
     <div className="comparison-toolbar">
       <label>{isEnglish ? 'Tolerance' : '匹配容差'}<input type="number" min="0" step={toleranceMode === 'ppm' ? '1' : '0.01'} value={tolerance} onChange={event => onToleranceChange(event.target.value)} /></label>
       <select aria-label={isEnglish ? 'Tolerance mode' : '容差单位'} value={toleranceMode} onChange={event => onToleranceModeChange(event.target.value)}><option value="da">Da</option><option value="ppm">ppm</option></select>
-      {comparison && <div className="comparison-export-actions"><button type="button" onClick={() => exportComparison('json')}>JSON</button><button type="button" onClick={() => exportComparison('csv')}>CSV</button><button type="button" onClick={() => exportComparison('svg')}>SVG</button></div>}
+      {comparison && <div className="comparison-export-actions"><button type="button" onClick={() => exportComparison('json')}>JSON</button><button type="button" onClick={() => exportComparison('csv')}>CSV</button><button type="button" onClick={() => exportComparison('svg')}>SVG</button><button type="button" disabled={pngState.busy} onClick={exportPng}>PNG</button></div>}
     </div>
+    {pngState.error && <p className="comparison-warning">{isEnglish ? 'PNG export failed' : 'PNG 导出失败'}: {pngState.error}</p>}
     <div className="comparison-slot-label">A · {slots.a?.source || '—'} · {slots.a?.spectrum_id || (isEnglish ? 'Select spectrum' : '请选择谱图')}</div>
     {slots.a && slots.b && <MirrorSpectrumPlot spectrumA={slots.a} spectrumB={slots.b} comparison={comparison} />}
     <div className="comparison-slot-label">B · {slots.b?.source || '—'} · {slots.b?.spectrum_id || (isEnglish ? 'Select spectrum' : '请选择谱图')}</div>
