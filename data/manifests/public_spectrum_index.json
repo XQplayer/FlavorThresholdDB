@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "index_version": "2026.08.02",
+  "asset_url": "https://github.com/XQplayer/FlavorThresholdDB/releases/download/spectra-index-2026.08.02/public_spectrum_index-2026.08.02.sqlite.gz",
+  "compression": "gzip",
+  "sha256": "0aaa81d4a6742b669f0f5cc59698dea3587bf8fb47cab823a59da2afebcfd531",
+  "compressed_bytes": 120729288,
+  "sqlite_bytes": 1055993856,
+  "spectrum_count": 1882208,
+  "library_count": 98,
+  "created_at": "2026-08-02T10:12:49.231943Z",
+  "minimum_proxy_version": 1
+}
