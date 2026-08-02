@@ -18,3 +18,13 @@ test('release verification artifacts stay outside source control boundaries', as
   assert.match(ignore, /^\/\.superpowers\/$/m);
   assert.equal(pkg.scripts?.['test:e2e'], 'node ../scripts/e2e/verify_release_candidate.mjs');
 });
+
+test('large chemistry renderers remain lazy loaded', async () => {
+  const structureViewer = await readFile(new URL('./components/PubChemStructureViewer.jsx', import.meta.url), 'utf8');
+  const classifier = await readFile(new URL('./lib/compoundClassification.js', import.meta.url), 'utf8');
+
+  assert.match(structureViewer, /import\(['"]3dmol['"]\)/);
+  assert.doesNotMatch(structureViewer, /^import .* from ['"]3dmol['"]/m);
+  assert.match(classifier, /import\(['"]@rdkit\/rdkit['"]\)/);
+  assert.doesNotMatch(classifier, /^import .* from ['"]@rdkit\/rdkit['"]/m);
+});

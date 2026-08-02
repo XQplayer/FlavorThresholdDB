@@ -187,10 +187,24 @@ async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
   assert.match(link.href, /^https?:\/\//); assert.equal(link.target, '_blank'); assert.match(link.rel, /noopener/); assert.match(link.rel, /noreferrer/);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   assert.equal(overflow, false, `${name}: horizontal overflow`);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const fixedBottomOverlap = await page.evaluate(() => {
+    const main = document.querySelector('#main-content');
+    if (!main) return false;
+    const mainRect = main.getBoundingClientRect();
+    return [...document.querySelectorAll('body *')].some(element => {
+      const style = getComputedStyle(element);
+      if (style.position !== 'fixed' || style.display === 'none' || style.visibility === 'hidden') return false;
+      const rect = element.getBoundingClientRect();
+      const touchesBottom = Math.abs(rect.bottom - window.innerHeight) < 2;
+      return touchesBottom && rect.top < mainRect.bottom && rect.bottom > mainRect.top;
+    });
+  });
+  assert.equal(fixedBottomOverlap, false, `${name}: fixed bottom element overlaps main content`);
   const screenshot = path.join(screenshotsDir, `pubchem-volatile-${name}.png`);
   await page.screenshot({ path: screenshot, fullPage: true });
   assertClean(name, observed);
-  return { name, populatedKeys, sectionCount: populatedKeys.length, raw, link, overflow, screenshot, ...observed };
+  return { name, populatedKeys, sectionCount: populatedKeys.length, raw, link, overflow, fixedBottomOverlap, screenshot, ...observed };
   } finally {
     if (payloadTimer) clearTimeout(payloadTimer);
     await context.close();
