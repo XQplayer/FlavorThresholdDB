@@ -55,6 +55,15 @@ NIST_CACHE_SCHEMA_VERSION = 1
 NIST_CACHE_TTL = timedelta(days=7)
 
 
+def build_health_payload() -> dict:
+    return {
+        "ok": True,
+        "service": "flavor_data_proxy",
+        "api_version": os.environ.get("API_VERSION", "1.5.0"),
+        "deploy_commit": os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or "",
+    }
+
+
 def initialize_public_spectrum_index() -> dict:
     global _PUBLIC_INDEX_STATUS
     if os.environ.get("PUBLIC_SPECTRUM_INDEX_AUTO_INSTALL", "true").strip().lower() in {"0", "false", "no", "off"}:
@@ -1077,7 +1086,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path == "/health":
-            self.send_json(200, {"ok": True, "service": "flavor_data_proxy"})
+            self.send_json(200, build_health_payload())
             return
         if parsed.path == "/nist-webbook":
             cas = (parse_qs(parsed.query).get("cas") or [""])[0].strip()

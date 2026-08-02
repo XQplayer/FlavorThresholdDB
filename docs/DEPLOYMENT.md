@@ -25,16 +25,26 @@ Never commit production credentials to `.env`, source files, or documentation.
 
 ## Render API
 
-The included Blueprint starts `python fema_proxy_server.py` and checks
-`/health`. The public service currently supports:
+The included Blueprint starts `python fema_proxy_server.py`, enables automatic
+deployment, and checks `/health`. The health response includes `api_version`
+and Render's `deploy_commit` so a frontend release can be tied to a specific API
+deployment. The public service supports:
 
 - `/fema`
 - `/compound`
 - `/pubchem`
 - `/flavordb`
 - PubChem image, 3D, coordinate, and crystal helper routes
+- `/spectra/*`, `/nist-webbook`, and `/biochemistry/resolve`
+- `/biological-context/resolve`, `/bioactivity/resolve`, and `/structures/resolve`
 
 After deployment, verify `/health` before updating `FEMA_API_URL`.
+
+If Render auto-deploy is disabled, create a Render Deploy Hook and save it as
+the protected GitHub Actions secret `RENDER_DEPLOY_HOOK_URL`. Then run the
+`Deploy Render API` workflow with the expected API version. The workflow waits
+for the versioned health response and verifies all public evidence endpoints;
+the hook URL must never be committed or printed.
 
 ## Local development
 
