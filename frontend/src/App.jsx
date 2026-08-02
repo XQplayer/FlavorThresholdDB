@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
-import { Search, FileSpreadsheet, List, FileText, Download, AlertCircle, Loader2, Info, Upload, ExternalLink, X, Copy, Check, ChevronDown, ChevronUp, FlaskConical, Mail, MessageCircle, Network, Database, ShieldCheck } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { Search, FileSpreadsheet, List, FileText, Download, AlertCircle, Loader2, Info, ExternalLink, X, Copy, Check, ChevronDown, ChevronUp, FlaskConical, Mail, MessageCircle, Network, Database, ShieldCheck } from 'lucide-react';
 import './App.css';
 import SearchInsights from './components/SearchInsights';
 import PubChemStructureViewer from './components/PubChemStructureViewer';
+import FlavorDB2Sources from './components/FlavorDB2Sources';
 import PubChemVolatileProperties from './components/PubChemVolatileProperties';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
@@ -80,7 +80,7 @@ const groupFlavorDescriptors = (fema, flavordb) => {
 
   return [
     { key: 'fema', label: 'FEMA', descriptors: femaDescriptors },
-    { key: 'flavordb', label: 'FlavorDB', descriptors: flavorDbDescriptors }
+    { key: 'flavordb', label: 'FlavorDB2', descriptors: flavorDbDescriptors }
   ].filter(group => group.descriptors.length > 0);
 };
 
@@ -113,7 +113,6 @@ export default function App() {
   const [filterOrder, setFilterOrder] = useState(['flavor', 'flavordb', 'pubchem', 'medium:水', 'medium:空气', 'medium:其他介质', 'book', 'threshold:d', 'threshold:r']);
   const [draggedFilterKey, setDraggedFilterKey] = useState(null);
   const [exactMatch, setExactMatch] = useState(true); // Default to exact match
-  const fileInputRef = useRef(null);
   const trackedSearchesRef = useRef(new Set());
   const compoundProfilesRef = useRef({});
 
@@ -239,16 +238,16 @@ export default function App() {
     day: 'numeric',
     year: 'numeric'
   });
-  const citationExampleText = `1. Odor thresholds were queried from FlavorThresholdDB v1.0. For each compound, the original source, measurement medium, and threshold unit were retained to ensure data traceability. Thresholds in water were primarily obtained from Van Gemert (2011), while aroma descriptors and chemical identifiers were cross-referenced against Fan and Xu (2020), the FEMA Flavor Ingredient Library, PubChem, and FlavorDB.
+  const citationExampleText = `1. Odor thresholds were queried from FlavorThresholdDB v1.0. For each compound, the original source, measurement medium, and threshold unit were retained to ensure data traceability. Thresholds in water were primarily obtained from Van Gemert (2011), while aroma descriptors and chemical identifiers were cross-referenced against Fan and Xu (2020), the FEMA Flavor Ingredient Library, PubChem, and FlavorDB2.
 
-2. The odor thresholds, flavor profiles, and chemical identifiers of these compounds were determined based on previous reports and database records (Van Gemert, 2011; Fan and Xu, 2020; FEMA, ${accessYear}; PubChem, ${accessYear}; FlavorDB, ${accessYear}).
+2. The odor thresholds, flavor profiles, and chemical identifiers of these compounds were determined based on previous reports and database records (Van Gemert, 2011; Fan and Xu, 2020; FEMA, ${accessYear}; PubChem, ${accessYear}; FlavorDB2, ${accessYear}).
 
 References:
 Van Gemert, L. J. (2011). Flavour Thresholds (2nd ed.). Flavour or taste threshold values in water (Chapter 1).
 Fan, W. L., & Xu, Y. (2020). Wine flavor chemistry. China Light Industry Press.
 FEMA's Flavor Library. (${accessYear}). Flavor profile analysis. Retrieved from https://www.femaflavor.org/flavor-library. Accessed ${accessDateText}.
 National Center for Biotechnology Information. (${accessYear}). PubChem. Retrieved from https://pubchem.ncbi.nlm.nih.gov/. Accessed ${accessDateText}.
-FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosylab.iiitd.edu.in/flavordb/. Accessed ${accessDateText}.`;
+FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved from https://cosylab.iiitd.edu.in/flavordb2/. Accessed ${accessDateText}.`;
 
   useEffect(() => {
     const normalize = (str) => {
@@ -699,7 +698,7 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
       key: 'flavordb',
       tone: 'flavordb',
       group: 'chemical',
-      label: 'FlavorDB',
+      label: 'FlavorDB2',
       active: includeFlavorDB,
       onClick: () => setIncludeFlavorDB(prev => !prev)
     },
@@ -972,7 +971,7 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
       'CAS号',
       '化合物中文名',
       '常用英文名',
-      ...(includeFlavorDB ? ['主要官能团', 'FlavorDB CID', 'FlavorDB风味描述', 'FlavorDB链接'] : []),
+      ...(includeFlavorDB ? ['主要官能团', 'FlavorDB2 CID', 'FlavorDB2风味描述', 'FlavorDB2链接'] : []),
       ...(includePubChem ? [
         '主要化合物类别',
         'SMARTS命中',
@@ -1183,46 +1182,6 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
     downloadCsv(rows, 'detailed');
   };
 
-  const handleFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const data = evt.target.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
-        const extractedValues = [];
-        jsonData.forEach(row => {
-          if (Array.isArray(row)) {
-            row.forEach(cell => {
-              if (cell !== undefined && cell !== null && cell.toString().trim() !== '') {
-                extractedValues.push(cell.toString().trim());
-              }
-            });
-          }
-        });
-        
-        if (extractedValues.length > 0) {
-          const newLines = extractedValues.join('\n');
-          setBulkQuery(prev => prev ? prev + '\n' + newLines : newLines);
-        }
-      } catch (err) {
-        console.error("Error reading file:", err);
-        alert(isEnglish
-          ? 'The file could not be parsed. Please provide a valid CSV or Excel file.'
-          : '无法解析该文件，请确保它是有效的 CSV 或 Excel 格式。');
-      }
-    };
-    reader.readAsBinaryString(file);
-    if (fileInputRef.current) fileInputRef.current.value = null;
-  };
-
   const summaryEntity = queryMatchedResults[0] || {};
   const summaryIntegrated = integratedCompoundResults.find(({ item }) => item.cas === summaryEntity.cas) || integratedCompoundResults[0] || {};
   const summaryPubChem = summaryIntegrated.profile?.pubchem || {};
@@ -1326,7 +1285,7 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
                   <div className="science-citation-content">
                     <div className="science-source-overview" aria-label={isEnglish ? 'Five core data sources' : '五项核心数据来源'}>
                       <div><span>{isEnglish ? 'Literature' : '文献'}</span><strong>Van Gemert (2011)</strong><strong>Fan & Xu (2020)</strong></div>
-                      <div><span>{isEnglish ? 'Databases' : '数据库'}</span><strong>FEMA</strong><strong>PubChem</strong><strong>FlavorDB</strong></div>
+                      <div><span>{isEnglish ? 'Databases' : '数据库'}</span><strong>FEMA</strong><strong>PubChem</strong><strong>FlavorDB2</strong></div>
                     </div>
                     <pre>{citationExampleText}</pre>
                   </div>
@@ -1474,21 +1433,6 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
                   </label>
                   <div className="bulk-field-actions">
                     <MatchModeControl exactMatch={exactMatch} onChange={setExactMatch} isEnglish={isEnglish} />
-                    <input
-                      type="file"
-                      accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
-                      className="hidden"
-                      ref={fileInputRef}
-                      onChange={handleFileUpload}
-                      id="file-upload"
-                    />
-                    <label 
-                      htmlFor="file-upload" 
-                      className="cursor-pointer text-xs flex items-center bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200 transition-colors font-semibold"
-                    >
-                      <Upload className="w-3.5 h-3.5 mr-1.5" />
-                      {ui.importFile}
-                    </label>
                   </div>
                 </div>
                 <textarea
@@ -1566,7 +1510,7 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
             <div className="search-summary-quick search-summary-flavor" aria-label={isEnglish ? 'Flavor description hits' : '风味描述词命中'}>
               <span className="search-summary-kicker">{isEnglish ? 'Flavor descriptors' : '风味描述词'}</span>
               <span className="search-summary-metric"><span>FEMA</span><strong>{integratedCompoundResults.reduce((total, entry) => total + (groupFlavorDescriptors(entry.fema, entry.profile?.flavordb || {}).find(group => group.key === 'fema')?.descriptors.length || 0), 0)}</strong><span>条</span></span>
-              <span className="search-summary-metric"><span>FlavorDB</span><strong>{integratedCompoundResults.reduce((total, entry) => total + (groupFlavorDescriptors({}, entry.profile?.flavordb || {}).find(group => group.key === 'flavordb')?.descriptors.length || 0), 0)}</strong><span>条</span></span>
+              <span className="search-summary-metric"><span>FlavorDB2</span><strong>{integratedCompoundResults.reduce((total, entry) => total + (groupFlavorDescriptors({}, entry.profile?.flavordb || {}).find(group => group.key === 'flavordb')?.descriptors.length || 0), 0)}</strong><span>条</span></span>
             </div>
             {queryMatchedResults[0] && (
               <div className="search-data-summary" aria-label={isEnglish ? 'Data summary' : '数据摘要'}>
@@ -1727,7 +1671,6 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
                       properties: {},
                     }
                   : profile.pubchem_volatile;
-
                 const descriptorGroups = groupFlavorDescriptors(
                   includeFlavorDescriptions && selectedFlavorSources.includes('FEMA') ? fema : {},
                   includeFlavorDB && selectedFlavorSources.includes('FlavorDB') ? flavordb : {}
@@ -1745,7 +1688,7 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
                 const sourceLinks = [
                   includeFlavorDescriptions && fema.found && { key: 'fema', label: 'FEMA', meta: fema.fema_number ? `FEMA No. ${fema.fema_number}` : '', url: fema.url },
                   includePubChem && pubchem.found && { key: 'pubchem', label: 'PubChem', meta: pubchem.cid ? `CID ${pubchem.cid}` : '', url: pubchem.url },
-                  includeFlavorDB && flavordb.found && { key: 'flavordb', label: 'FlavorDB', meta: flavordb.cid ? `CID ${flavordb.cid}` : '', url: flavordb.url }
+                  includeFlavorDB && flavordb.found && { key: 'flavordb', label: 'FlavorDB2', meta: flavordb.cid ? `CID ${flavordb.cid}` : '', url: flavordb.url }
                 ].filter(Boolean);
 
                 return (
@@ -1840,7 +1783,7 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
                             aria-pressed={selectedFlavorSources.includes('FlavorDB') && includeFlavorDB}
                             onClick={() => toggleFlavorSource('FlavorDB')}
                           >
-                            <span aria-hidden="true" /> FlavorDB
+                            <span aria-hidden="true" /> FlavorDB2
                           </button>
                         </div>
                         {descriptorGroups.length > 0 ? (
@@ -1863,9 +1806,18 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
                         )}
                       </section>
                     </div>
+
                     {showPubChemVolatile && (
                       <PubChemVolatileProperties
                         data={volatileData}
+                        isEnglish={isEnglish}
+                      />
+                    )}
+
+                    {includeFlavorDB && flavordb.found && (
+                      <FlavorDB2Sources
+                        apiUrl={FEMA_API_URL}
+                        entities={profile.flavordb2_entities.entities || []}
                         isEnglish={isEnglish}
                       />
                     )}
@@ -1944,8 +1896,8 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
                         <section className="external-source-card flavordb-source-card">
                           <div className="external-source-title">
                             <span className="external-source-icon"><FlaskConical aria-hidden="true" /></span>
-                            <div><strong>FlavorDB</strong><small>PubChem CID {flavordb.cid}</small></div>
-                            <a href={flavordb.url} target="_blank" rel="noreferrer" aria-label={isEnglish ? 'Open FlavorDB' : '打开 FlavorDB'}><ExternalLink /></a>
+                            <div><strong>FlavorDB2</strong><small>PubChem CID {flavordb.cid}</small></div>
+                            <a href={flavordb.url} target="_blank" rel="noreferrer" aria-label={isEnglish ? 'Open FlavorDB2' : '打开 FlavorDB2'}><ExternalLink /></a>
                           </div>
 
                           <div className="flavordb-group">
@@ -1972,7 +1924,7 @@ FlavorDB. (${accessYear}). Flavor molecule database. Retrieved from https://cosy
                               <p>{flavordb.fema_flavor_profile.join(', ')}</p>
                             </div>
                           )}
-                          <p className="external-source-attribution">{isEnglish ? 'Source: FlavorDB · License: ' : '来源：FlavorDB · 许可：'}{flavordb.license}</p>
+                          <p className="external-source-attribution">{isEnglish ? 'Source: FlavorDB2 · License: ' : '来源：FlavorDB2 · 许可：'}{flavordb.license}</p>
                         </section>
                       )}
                     </div>
