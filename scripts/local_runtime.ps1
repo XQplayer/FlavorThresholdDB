@@ -90,8 +90,8 @@ function Remove-StaleOrDuplicateProjectProcesses {
 }
 
 function Stop-ProjectRuntime {
-    $processes = @((Get-ProjectProcesses -Kind frontend) + (Get-ProjectProcesses -Kind proxy) |
-        Sort-Object ProcessId -Unique)
+    $processes = @(@(Get-ProjectProcesses -Kind frontend) + @(Get-ProjectProcesses -Kind proxy)) |
+        Sort-Object ProcessId -Unique
     foreach ($process in $processes) { Stop-ConfirmedProcess -Process $process }
     if (Test-Path -LiteralPath $RuntimeRoot) {
         Get-ChildItem -LiteralPath $RuntimeRoot -Filter '*.pid' -File -ErrorAction SilentlyContinue |
