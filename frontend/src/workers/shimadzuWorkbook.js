@@ -9,7 +9,8 @@ const inferGroup = sampleName => clean(sampleName).match(/^(.*?)(?:[-_]?)([123])
 const standardName = cas => cas === '123-96-6' ? '2-Octanol' : cas === '589-62-8' ? '4-Octanol' : 'Internal Standard'
 
 export function safeSheetName(value) {
-  const cleaned = clean(value).replace(/[\\/:*?\[\]]/g, '_').slice(0, 31)
+  const invalid = new Set('\\/:*?[]')
+  const cleaned = [...clean(value)].map(character => invalid.has(character) ? '_' : character).join('').slice(0, 31)
   return cleaned || 'Sheet1'
 }
 

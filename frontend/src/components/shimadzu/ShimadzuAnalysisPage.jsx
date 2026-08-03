@@ -23,13 +23,14 @@ import {
   TerminalSquare,
   Upload,
 } from 'lucide-react'
-import { createShimadzuApi, getEnginePresentation, getMonitorStageIndex, getStageProgress, isActiveJob } from '../../lib/shimadzuApi'
+import { createShimadzuApi, getEnginePresentation, getMonitorStageIndex, getStageProgress } from '../../lib/shimadzuApi'
+import { assertWorkbookFile, browserEnginePresentation } from '../../lib/shimadzuBrowserContract'
+import { createShimadzuWorkerClient } from '../../lib/shimadzuWorkerClient'
 import './ShimadzuAnalysisPage.css'
 
 gsap.registerPlugin(useGSAP, ScrollTrigger)
 
 const API_BASE = (import.meta.env.VITE_FEMA_API_URL || 'http://127.0.0.1:8787').replace(/\/$/, '')
-const SESSION_KEY = 'shimadzu-analysis-job-id'
 
 const WORKFLOW = [
   { index: 0, short: '输入配置', label: '输入配置与清单', description: '核对工作表、样品分组、内标参数与名称映射。', work: ['读取原始工作簿与样品信息表', '匹配样品名称和三平行分组', '复算内标终浓度并建立输入清单'] },
@@ -113,8 +114,8 @@ function WorkflowMap({ job }) {
   )
 }
 
-function LiveMonitor({ job, capabilities }) {
-  const engine = getEnginePresentation(capabilities)
+function LiveMonitor({ job, capabilities, engine: engineOverride }) {
+  const engine = engineOverride || getEnginePresentation(capabilities)
   const selectedIndex = getMonitorStageIndex(job, WORKFLOW.length)
   const stage = WORKFLOW[selectedIndex]
   const liveStage = job?.stages?.[selectedIndex]
@@ -174,6 +175,8 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
   const pageRef = useRef(null)
   const rawInputRef = useRef(null)
   const samplesInputRef = useRef(null)
+  const workerClientRef = useRef(null)
+  const resultUrlRef = useRef('')
   const [reducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   const [capabilities, setCapabilities] = useState(null)
   const [rawFile, setRawFile] = useState(null)
@@ -187,15 +190,12 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
   useEffect(() => {
     document.title = '岛津气质分析 | HXQLab'
     api.capabilities().then(setCapabilities).catch(value => setError(value.message))
-    const previousId = sessionStorage.getItem(SESSION_KEY)
-    if (previousId) api.getJob(previousId).then(setJob).catch(() => sessionStorage.removeItem(SESSION_KEY))
+    workerClientRef.current = createShimadzuWorkerClient()
+    return () => {
+      workerClientRef.current?.dispose()
+      if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
+    }
   }, [api])
-
-  useEffect(() => {
-    if (!job?.id || !isActiveJob(job)) return undefined
-    const timer = window.setInterval(() => api.getJob(job.id).then(setJob).catch(value => setError(value.message)), 1500)
-    return () => window.clearInterval(timer)
-  }, [api, job])
 
   useGSAP(() => {
     const revealTargets = gsap.utils.toArray('.shimadzu-reveal')
@@ -232,8 +232,21 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
   }, { scope: pageRef, dependencies: [Boolean(job), reducedMotion], revertOnUpdate: true })
 
   const progress = getStageProgress(job)
-  const engine = getEnginePresentation(capabilities)
-  const canStart = rawFile && samplesFile && capabilities?.available && !submitting
+  const engine = browserEnginePresentation()
+  const canStart = rawFile && samplesFile && !submitting
+
+  const handleWorkerEvent = event => {
+    setJob(current => {
+      if (!current) return current
+      const stages = current.stages.map(stage => ({ ...stage }))
+      if (Number.isInteger(event.stage) && stages[event.stage]) {
+        if (event.type === 'stage-start') stages[event.stage] = { ...stages[event.stage], status: 'running', log_tail: event.message || WORKFLOW[event.stage].work[0] }
+        if (event.type === 'stage-complete') stages[event.stage] = { ...stages[event.stage], status: event.status || 'PASS', counts: event.counts || {}, can_advance: true, log_tail: `${WORKFLOW[event.stage].label}完成` }
+      }
+      if (event.type === 'stage-review') return { ...current, stages, status: 'waiting_review', next_stage: event.stage + 1, updated_at: new Date().toISOString() }
+      return { ...current, stages, status: event.type === 'stage-start' ? 'running' : current.status, next_stage: Number.isInteger(event.stage) ? event.stage + 1 : current.next_stage, updated_at: new Date().toISOString() }
+    })
+  }
 
   const submit = async event => {
     event.preventDefault()
@@ -241,11 +254,23 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
     setSubmitting(true)
     setError('')
     try {
-      const created = await api.createJob({ rawFile, samplesFile, name, mode })
-      sessionStorage.setItem(SESSION_KEY, created.id)
-      setJob(await api.run(created.id))
+      assertWorkbookFile(rawFile)
+      assertWorkbookFile(samplesFile)
+      const created = {
+        id: crypto.randomUUID(), name, status: 'running', next_stage: 0, updated_at: new Date().toISOString(),
+        stages: WORKFLOW.map(stage => ({ index: stage.index, status: 'pending', counts: {} })),
+      }
+      setJob(created)
+      const [rawBytes, sampleBytes] = await Promise.all([rawFile.arrayBuffer(), samplesFile.arrayBuffer()])
+      const result = await workerClientRef.current.run({
+        rawBytes, sampleBytes, rawName: rawFile.name, sampleName: samplesFile.name, name, mode, onEvent: handleWorkerEvent,
+      })
+      if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
+      resultUrlRef.current = URL.createObjectURL(new Blob([result.archiveBytes], { type: 'application/zip' }))
+      setJob(current => ({ ...current, status: 'complete', next_stage: 7, updated_at: new Date().toISOString(), downloadUrl: resultUrlRef.current, resultFileName: result.fileName, archiveSha256: result.archiveSha256, archiveSize: result.archiveSize }))
     } catch (value) {
       setError(value.message)
+      setJob(current => current ? { ...current, status: value.code === 'ANALYSIS_CANCELLED' ? 'cancelled' : 'failed', error: { code: value.code || 'BROWSER_ANALYSIS_FAILED', message: value.message } } : null)
     } finally {
       setSubmitting(false)
     }
@@ -253,12 +278,18 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
 
   const continueJob = async () => {
     setError('')
-    try { setJob(await api.continueJob(job.id)) }
-    catch (value) { setError(value.message) }
+    workerClientRef.current?.continueReview()
+    setJob(current => ({ ...current, status: 'running', updated_at: new Date().toISOString() }))
+  }
+
+  const cancelJob = () => {
+    workerClientRef.current?.cancel()
   }
 
   const reset = () => {
-    sessionStorage.removeItem(SESSION_KEY)
+    workerClientRef.current?.cancel()
+    if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
+    resultUrlRef.current = ''
     setJob(null); setRawFile(null); setSamplesFile(null); setError('')
     if (rawInputRef.current) rawInputRef.current.value = ''
     if (samplesInputRef.current) samplesInputRef.current.value = ''
@@ -289,12 +320,12 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
             <dl className="shimadzu-hero-facts" aria-label="工作台信息">
               <div><dt>流程</dt><dd>7 个审计节点</dd></div>
               <div><dt>输入</dt><dd>2 个 Excel 工作簿</dd></div>
-              <div><dt>数据边界</dt><dd>仅在本机处理</dd></div>
+              <div><dt>数据边界</dt><dd>当前浏览器处理</dd></div>
             </dl>
           </div>
           <div className="shimadzu-hero-status shimadzu-hero-animate">
             <span className={engine.state}>{engine.state === 'ready' ? <ShieldCheck /> : engine.state === 'checking' ? <Loader2 className="spin" /> : <AlertCircle />}</span>
-            <div><small>LOCAL ENGINE</small><strong>{engine.title}</strong><p>{engine.detail}</p></div>
+            <div><small>BROWSER ENGINE</small><strong>{engine.title}</strong><p>{engine.detail}</p></div>
           </div>
         </div>
       </header>
@@ -311,7 +342,7 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
                 <FilePicker inputRef={rawInputRef} label="岛津原始工作簿" hint="包含 Peak Table、Similarity Search Results 与 Hit #" file={rawFile} onChange={setRawFile} templateHref={api.templateUrl('raw-example')} templateLabel="下载原始工作簿示例" />
                 <FilePicker inputRef={samplesInputRef} label="样品与内标信息表" hint="包含样品分组、形态、内标浓度、添加量与体系" file={samplesFile} onChange={setSamplesFile} templateHref={api.templateUrl('sample-info')} templateLabel="下载样品信息模板" />
               </div>
-              <div className="shimadzu-upload-note"><Upload /><span>仅接受 .xlsx，每个文件不超过 100 MB。示例工作簿中的峰面积与化合物为虚构数据，仅用于结构验证。</span></div>
+              <div className="shimadzu-upload-note"><Upload /><span>仅接受 .xlsx，每个文件不超过 50 MB。原始文件只在当前浏览器中处理，不上传云端；示例数据仅用于结构验证。</span></div>
             </section>
 
             <aside className="shimadzu-settings shimadzu-reveal" aria-labelledby="settings-title">
@@ -325,7 +356,7 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
               <dl className="shimadzu-parameter-list"><div><dt>CV 阈值</dt><dd>30%</dd></div><div><dt>响应因子</dt><dd>1</dd></div><div><dt>内标参数</dt><dd>按样品表</dd></div><div><dt>OAV</dt><dd>关闭</dd></div></dl>
               <button className="shimadzu-run-button" type="submit" disabled={!canStart}>{submitting ? <Loader2 className="spin" /> : <Play />}{submitting ? '正在建立任务' : '开始一站式分析'}</button>
             </aside>
-            <LiveMonitor job={null} capabilities={capabilities} />
+            <LiveMonitor job={null} capabilities={capabilities} engine={engine} />
           </form>
         ) : (
           <div className="shimadzu-job-workspace">
@@ -334,12 +365,13 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
               <div className="shimadzu-job-progress"><div><span>总流程</span><strong>{progress.completed} / {progress.total || 7}</strong></div><div className="shimadzu-progress-track"><span style={{ '--progress': progress.completed / (progress.total || 7) }} /></div></div>
               <div className="shimadzu-job-actions">
                 {job.status === 'waiting_review' && <button type="button" className="primary" onClick={continueJob}><ChevronRight />复核完成，继续</button>}
-                {job.status === 'complete' && <a className="primary" href={api.downloadUrl(job.id)}><Download />下载结果包</a>}
+                {job.status === 'running' && <button type="button" onClick={cancelJob}><AlertCircle />取消分析</button>}
+                {job.status === 'complete' && <a className="primary" href={job.downloadUrl} download={job.resultFileName}><Download />下载结果包</a>}
                 <button type="button" onClick={reset}><RotateCcw />新任务</button>
               </div>
             </section>
             {job.error && <div className="shimadzu-inline-error"><AlertCircle /><span><strong>{job.error.code}</strong>{job.error.message}</span></div>}
-            <LiveMonitor job={job} capabilities={capabilities} />
+            <LiveMonitor job={job} capabilities={capabilities} engine={engine} />
             <section className="shimadzu-stage-detail shimadzu-reveal" aria-labelledby="detail-title">
               <div className="shimadzu-region-heading"><div><h2 id="detail-title">步骤状态与处理计数</h2><p>状态来自各步骤 manifest，WARN 与 REVIEW 会保留到报告。</p></div></div>
               <ol>

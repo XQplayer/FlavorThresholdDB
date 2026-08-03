@@ -272,7 +272,7 @@ function workbookSpecs(index, data) {
   })
 }
 
-export async function runShimadzuBrowserPipeline({ rawBytes, sampleBytes, rawName = 'raw.xlsx', sampleName = 'samples.xlsx', name = '岛津气质分析', onEvent = () => {}, signal }) {
+export async function runShimadzuBrowserPipeline({ rawBytes, sampleBytes, rawName = 'raw.xlsx', sampleName = 'samples.xlsx', name = '岛津气质分析', onEvent = () => {}, reviewGate, signal }) {
   const raw = rawBytes instanceof Uint8Array ? rawBytes : new Uint8Array(rawBytes)
   const samples = sampleBytes instanceof Uint8Array ? sampleBytes : new Uint8Array(sampleBytes)
   const zip = new JSZip()
@@ -296,6 +296,11 @@ export async function runShimadzuBrowserPipeline({ rawBytes, sampleBytes, rawNam
     stages.push(data)
     manifests.push(manifest)
     onEvent({ type: 'stage-complete', stage: index, progress: Math.round((index + 1) / 7 * 100), status: manifest.severity, counts: data.counts })
+    if (reviewGate && index < builders.length - 1) {
+      onEvent({ type: 'stage-review', stage: index, progress: Math.round((index + 1) / 7 * 100), message: '等待用户复核后继续' })
+      await reviewGate(index)
+      assertNotCancelled(signal)
+    }
   }
   const completeness = {
     schemaVersion: 'shimadzu-v2-completeness-1', verifiedAt: new Date().toISOString(), status: 'PASS',
@@ -312,6 +317,9 @@ export async function runShimadzuBrowserPipeline({ rawBytes, sampleBytes, rawNam
   const archiveBytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 6 } })
   const archiveSha256 = await sha256(archiveBytes)
   onEvent({ type: 'complete', progress: 100, archiveSize: archiveBytes.byteLength, archiveSha256 })
-  const safeName = String(name || '岛津气质分析').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 80) || '岛津气质分析'
+  const invalidName = new Set('<>:"/\\|?*')
+  const safeName = [...String(name || '岛津气质分析')]
+    .map(character => invalidName.has(character) || character.charCodeAt(0) < 32 ? '_' : character)
+    .join('').slice(0, 80) || '岛津气质分析'
   return { ...run, stages, manifests, archiveBytes, archiveSha256, fileName: `${safeName}_步骤0-6结果.zip` }
 }
