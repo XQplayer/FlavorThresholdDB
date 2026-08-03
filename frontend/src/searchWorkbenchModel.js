@@ -93,6 +93,9 @@ const parseStringThreshold = (raw) => {
   const trimmed = text.trim();
   const typeMatch = /(?:^|\s)([dr])\s+(.+)$/i.exec(trimmed);
   const parseReliableValue = (thresholdText) => {
+    if (/\d+[.,]\d+\s+\d+/.test(thresholdText)) {
+      return { value: null, unit: null, parseStatus: 'unparsed' };
+    }
     const parsed = parseThreshold(thresholdText);
     const looksLikeYear = Number.isInteger(parsed.value) && parsed.value >= 1800 && parsed.value <= 2099;
     return looksLikeYear ? { value: null, unit: null, parseStatus: 'unparsed' } : { ...parsed, parseStatus: 'parsed' };

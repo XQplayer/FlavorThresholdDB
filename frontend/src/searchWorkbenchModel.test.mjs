@@ -138,6 +138,21 @@ test('leaves author-led strings without a threshold type unparsed', () => {
   assert.equal(record.originalText, source);
 });
 
+test('preserves spaced-decimal threshold strings as unparsed evidence', () => {
+  const first = 'McGee et al. (1995) d 0.000 5 - 0.005';
+  const second = 'Kraft & Popaj (2004) d 0.000 002';
+  const records = buildCompoundDossier({
+    matchedResults: [{ cas: '123-45-8', medium: '空气', threshold_data: [first, second] }],
+  }).thresholds.records;
+  for (const [record, source] of records.map((record, index) => [record, [first, second][index]])) {
+    assert.equal(record.type, 'd');
+    assert.equal(record.value, null);
+    assert.equal(record.unit, null);
+    assert.equal(record.parseStatus, 'unparsed');
+    assert.equal(record.originalText, source);
+  }
+});
+
 test('gives thresholds stable unique ids and prioritizes a source record key', () => {
   const duplicateStrings = {
     cas: '108-24-7',
