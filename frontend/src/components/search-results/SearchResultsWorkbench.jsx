@@ -6,14 +6,23 @@ import CompoundIdentityHeader from './CompoundIdentityHeader';
 import OverviewChapter from './chapters/OverviewChapter';
 import SensorySourcesChapter from './chapters/SensorySourcesChapter';
 import ThresholdEvidenceChapter from './chapters/ThresholdEvidenceChapter';
+import SpectraChapter from './chapters/SpectraChapter';
+import {
+  BiochemistryChapter,
+  BioactivityChapter,
+  ProteinStructuresChapter,
+} from './chapters/MechanismChapters';
+import CitationExportChapter from './chapters/CitationExportChapter';
 import './SearchResultsWorkbench.css';
 
 const CHAPTER_SOURCE_KEYS = {
   overview: ['local_thresholds', 'fema', 'pubchem', 'flavordb', 'book'],
   sensory: ['fema', 'flavordb'],
   thresholds: ['local_thresholds', 'book'],
-  spectra: ['pubchem'],
-  structures: ['pubchem'],
+  spectra: [],
+  biochemistry: [],
+  bioactivity: [],
+  structures: [],
   citation: ['book'],
 };
 
@@ -23,6 +32,10 @@ export default function SearchResultsWorkbench({
   matchCount = 0,
   candidates = [],
   onCandidateSelect,
+  apiUrl,
+  citationText = '',
+  onExportCompact,
+  onExportDetailed,
   isEnglish = false,
 }) {
   const queryKey = String(query || '').trim().toLowerCase();
@@ -131,9 +144,15 @@ export default function SearchResultsWorkbench({
         return { entityKey, values: { ...values, [chapterId]: nextFilters } };
       });
     };
-    const deferredMessage = isEnglish
-      ? 'This chapter will be connected in a later data-mapping phase.'
-      : '该章节将在后续数据映射中接入';
+    const scientificProps = {
+      apiUrl,
+      cas: dossier.identity.cas,
+      cid: dossier.identity.cid,
+      inchikey: dossier.identity.inchikey,
+      smiles: dossier.identity.smiles,
+      name: dossier.identity.commonName || dossier.identity.englishName || dossier.identity.chineseName,
+      isEnglish,
+    };
 
     return (
       <section className="search-results-workbench search-results-workbench--dossier" data-testid="search-results-workbench">
@@ -182,8 +201,24 @@ export default function SearchResultsWorkbench({
                 onFiltersChange={next => updateChapterFilters('thresholds', next)}
                 isEnglish={isEnglish}
               />
+            ) : activeChapter.id === 'spectra' ? (
+              <SpectraChapter {...scientificProps} />
+            ) : activeChapter.id === 'biochemistry' ? (
+              <BiochemistryChapter {...scientificProps} />
+            ) : activeChapter.id === 'bioactivity' ? (
+              <BioactivityChapter {...scientificProps} />
+            ) : activeChapter.id === 'structures' ? (
+              <ProteinStructuresChapter {...scientificProps} />
+            ) : activeChapter.id === 'citation' ? (
+              <CitationExportChapter
+                citationExampleText={citationText}
+                records={records}
+                onExportCompact={onExportCompact}
+                onExportDetailed={onExportDetailed}
+                isEnglish={isEnglish}
+              />
             ) : (
-              <p className="chapter-panel__empty">{deferredMessage}</p>
+              <p className="chapter-panel__empty">{isEnglish ? 'Chapter unavailable.' : '章节不可用。'}</p>
             )}
           </ChapterPanel>
         </div>

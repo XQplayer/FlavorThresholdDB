@@ -533,9 +533,93 @@
 
 .overview-chapter,
 .sensory-sources-chapter,
-.threshold-evidence-chapter {
+.threshold-evidence-chapter,
+.spectra-chapter,
+.mechanism-chapter,
+.citation-export-chapter {
   display: grid;
   gap: 1rem;
+}
+
+.search-results-workbench .scientific-chapter-note {
+  max-width: none;
+  padding: 0.75rem 0.9rem;
+  border-left: 0.25rem solid #0e7490;
+  border-radius: 0.45rem;
+  background: #e6f4f7;
+  color: #173b55;
+}
+
+.citation-export-chapter__example,
+.citation-export-chapter > section:last-child {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid #8ca9bd;
+  border-radius: 0.875rem;
+  background: #f5fafe;
+}
+
+.citation-export-chapter h4 {
+  margin: 0;
+  color: #102a43;
+}
+
+.citation-export-chapter__heading,
+.citation-export-chapter__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.citation-export-chapter__example > pre {
+  overflow: auto;
+  max-width: 100%;
+  margin: 1rem 0;
+  padding: 0.9rem;
+  border: 1px solid #a6bdcd;
+  border-radius: 0.65rem;
+  background: #eef5fa;
+  color: #102a43;
+  font: 0.82rem/1.6 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.citation-export-chapter button {
+  min-height: 2.75rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid #477692;
+  border-radius: 0.65rem;
+  background: #e4f1f8;
+  color: #123b56;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.citation-export-chapter button:hover {
+  border-color: #075985;
+  background: #cee5f2;
+}
+
+.search-results-workbench button:focus-visible,
+.search-results-workbench a:focus-visible,
+.search-results-workbench select:focus-visible {
+  outline: 2px solid #1e3a8a;
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .citation-export-chapter__heading,
+  .citation-export-chapter__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .citation-export-chapter button {
+    width: 100%;
+  }
 }
 
 .overview-chapter__section {

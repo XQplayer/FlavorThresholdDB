@@ -5,8 +5,6 @@ import SearchInsights from './components/SearchInsights';
 import PubChemStructureViewer from './components/PubChemStructureViewer';
 import FlavorDB2Sources from './components/FlavorDB2Sources';
 import PubChemVolatileProperties from './components/PubChemVolatileProperties';
-import OpenSpectraWorkbench from './components/spectra/OpenSpectraWorkbench';
-import NistWebbookPresence from './components/NistWebbookPresence';
 import BiochemicalRelationships from './components/BiochemicalRelationships';
 import BiologicalContext from './components/BiologicalContext';
 import BioactivityEvidence from './components/BioactivityEvidence';
@@ -25,6 +23,8 @@ import { classifyCompoundBySmarts } from './lib/compoundClassification';
 import { loadResultView, saveResultView } from './resultViewPreference';
 
 const ShimadzuAnalysisPage = lazy(() => import('./components/shimadzu/ShimadzuAnalysisPage'));
+const OpenSpectraWorkbench = lazy(() => import('./components/spectra/OpenSpectraWorkbench'));
+const NistWebbookPresence = lazy(() => import('./components/NistWebbookPresence'));
 import {
   getBookConflictQuality,
   getBookDisplayCas,
@@ -1641,6 +1641,10 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
               entityKey,
               cas,
             })}
+            apiUrl={FEMA_API_URL}
+            citationText={citationExampleText}
+            onExportCompact={() => exportCSV('compact')}
+            onExportDetailed={() => exportCSV('detailed')}
             isEnglish={isEnglish}
           />
         ) : (
@@ -1981,18 +1985,20 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                       />
                     )}
 
-                    {pubchem.found && (
-                      <OpenSpectraWorkbench
-                        apiUrl={FEMA_API_URL}
-                        cas={item.cas}
-                        inchikey={pubchem.inchi_key}
-                        smiles={pubchem.smiles}
-                        compoundName={commonName || item.english_name}
-                        isEnglish={isEnglish}
-                      />
-                    )}
+                    <Suspense fallback={<p className="integrated-empty">{isEnglish ? 'Loading spectrum tools…' : '正在载入谱图工具…'}</p>}>
+                      {pubchem.found && (
+                        <OpenSpectraWorkbench
+                          apiUrl={FEMA_API_URL}
+                          cas={item.cas}
+                          inchikey={pubchem.inchi_key}
+                          smiles={pubchem.smiles}
+                          compoundName={commonName || item.english_name}
+                          isEnglish={isEnglish}
+                        />
+                      )}
 
-                    <NistWebbookPresence apiUrl={FEMA_API_URL} cas={item.cas} isEnglish={isEnglish} />
+                      <NistWebbookPresence apiUrl={FEMA_API_URL} cas={item.cas} isEnglish={isEnglish} />
+                    </Suspense>
 
                     <BiochemicalRelationships
                       apiUrl={FEMA_API_URL}

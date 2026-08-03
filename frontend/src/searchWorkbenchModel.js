@@ -3,10 +3,10 @@ export const CHAPTERS = Object.freeze([
   Object.freeze({ id: 'sensory', zh: '感官', en: 'Sensory' }),
   Object.freeze({ id: 'thresholds', zh: '阈值', en: 'Thresholds' }),
   Object.freeze({ id: 'spectra', zh: '光谱', en: 'Spectra' }),
-  Object.freeze({ id: 'biochemistry', zh: '生物化学', en: 'Biochemistry' }),
-  Object.freeze({ id: 'bioactivity', zh: '生物活性', en: 'Bioactivity' }),
-  Object.freeze({ id: 'structures', zh: '结构', en: 'Structures' }),
-  Object.freeze({ id: 'citation', zh: '引文', en: 'Citation' }),
+  Object.freeze({ id: 'biochemistry', zh: '生化关系', en: 'Biochemical relationships' }),
+  Object.freeze({ id: 'bioactivity', zh: '活性与靶点', en: 'Bioactivity and targets' }),
+  Object.freeze({ id: 'structures', zh: '蛋白结构', en: 'Protein structures' }),
+  Object.freeze({ id: 'citation', zh: '引用与导出', en: 'Citation and export' }),
 ]);
 
 const freezeFilters = (value) => {
@@ -540,7 +540,10 @@ export function buildCompoundDossier({
   const cid = pubchem.cid ?? flavorDb.cid ?? primaryItem.cid ?? null;
   const chineseName = primaryItem.chinese_name ?? primaryItem.chineseName ?? null;
   const englishName = primaryItem.english_name ?? primaryItem.englishName ?? primaryItem.common_english_name ?? null;
+  const commonName = pubchem.title ?? pubchem.name ?? primaryItem.common_name ?? primaryItem.commonName ?? englishName;
   const molecularFormula = pubchem.molecular_formula ?? pubchem.molecularFormula ?? primaryItem.molecular_formula ?? null;
+  const inchikey = pubchem.inchi_key ?? pubchem.inchikey ?? primaryItem.inchi_key ?? primaryItem.inchikey ?? null;
+  const smiles = pubchem.smiles ?? pubchem.canonical_smiles ?? primaryItem.smiles ?? null;
   const normalizedSourceStates = Object.fromEntries(
     Object.entries(sourceStates && typeof sourceStates === 'object' ? sourceStates : {})
       .map(([name, state]) => [name, normalizeSourceStatus(state)]),
@@ -554,7 +557,10 @@ export function buildCompoundDossier({
       cid,
       chineseName,
       englishName,
+      commonName,
       molecularFormula,
+      inchikey,
+      smiles,
       raw: primaryItem,
     },
     sourceStates: normalizedSourceStates,
@@ -567,7 +573,7 @@ export function buildCompoundDossier({
     spectra: chapter(toIntegratedRecords(integrated, ['spectra', 'pubchem_spectra'])),
     biochemistry: chapter(toIntegratedRecords(integrated, ['biochemistry', 'pathways'])),
     bioactivity: chapter(toIntegratedRecords(integrated, ['bioactivity', 'activities'])),
-    structures: chapter(toIntegratedRecords(integrated, ['pubchem', 'structures'])),
+    structures: chapter(toIntegratedRecords(integrated, ['structures'])),
     citation: chapter(asArray(bookResults).filter(Boolean).map((record) => ({ raw: record }))),
   };
 }

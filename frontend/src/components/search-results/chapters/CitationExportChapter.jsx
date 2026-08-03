@@ -1,0 +1,69 @@
+import { useState } from 'react';
+import EvidenceRecordDisclosure from '../EvidenceRecordDisclosure';
+
+const asArray = value => Array.isArray(value) ? value : value == null ? [] : [value];
+
+const locatorText = (raw, isEnglish) => {
+  const pages = asArray(raw?.pages).length ? raw.pages : [raw?.page].filter(value => value != null);
+  const chunks = asArray(raw?.chunks).length ? raw.chunks : [raw?.chunk].filter(value => value != null);
+  const pageText = pages.length ? `${isEnglish ? 'Page' : '第'} ${pages.join(', ')}${isEnglish ? '' : ' 页'}` : null;
+  const blockText = chunks.length ? `${isEnglish ? 'Block' : '区块'} ${chunks.join(', ')}` : null;
+  return [raw?.book_title || (isEnglish ? 'Wine Flavor Chemistry' : '酒类风味化学'), pageText, blockText].filter(Boolean);
+};
+
+export default function CitationExportChapter({ citationExampleText, records = [], onExportCompact, onExportDetailed, isEnglish = false }) {
+  const [copied, setCopied] = useState(false);
+
+  const copyCitation = async () => {
+    try {
+      await navigator.clipboard.writeText(citationExampleText || '');
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <div className="citation-export-chapter">
+      <section className="citation-export-chapter__example" aria-labelledby="citation-example-heading">
+        <div className="citation-export-chapter__heading">
+          <h4 id="citation-example-heading">{isEnglish ? 'Citation and export' : '引用与导出'}</h4>
+          <button type="button" onClick={copyCitation}>{copied ? (isEnglish ? 'Copied' : '已复制') : (isEnglish ? 'Copy citation' : '复制引用')}</button>
+        </div>
+        <pre>{citationExampleText || (isEnglish ? 'No citation example is available.' : '暂无引用示例。')}</pre>
+        <div className="citation-export-chapter__actions" aria-label={isEnglish ? 'CSV exports' : 'CSV 导出'}>
+          <button type="button" onClick={onExportCompact}>{isEnglish ? 'Export compact CSV' : '导出精简版 CSV'}</button>
+          <button type="button" onClick={onExportDetailed}>{isEnglish ? 'Export detailed CSV' : '导出详细版 CSV'}</button>
+        </div>
+      </section>
+
+      <section aria-labelledby="citation-source-heading">
+        <h4 id="citation-source-heading">{isEnglish ? 'Book source records' : '书籍来源记录'}</h4>
+        {records.length ? (
+          <div className="evidence-record-list">
+            {records.map((record, index) => {
+              const raw = record?.raw ?? record;
+              const summary = raw?.text ?? raw?.raw_text ?? raw?.subject_label ?? raw?.id ?? (isEnglish ? 'Book evidence record' : '书籍证据记录');
+              return (
+                <EvidenceRecordDisclosure
+                  key={raw?.id ?? raw?.record_id ?? `${raw?.page ?? 'page'}-${index}`}
+                  record={raw}
+                  summary={summary}
+                  summaryMeta={locatorText(raw, isEnglish)}
+                  isEnglish={isEnglish}
+                  renderRecord={() => (
+                    <dl>
+                      <div><dt>{isEnglish ? 'Source locator' : '来源定位'}</dt><dd>{locatorText(raw, isEnglish).join(' · ')}</dd></div>
+                      <div><dt>{isEnglish ? 'Raw record' : '原始记录'}</dt><dd><pre>{JSON.stringify(raw, null, 2)}</pre></dd></div>
+                    </dl>
+                  )}
+                />
+              );
+            })}
+          </div>
+        ) : <p className="chapter-panel__empty">{isEnglish ? 'No associated book source record.' : '暂无关联书籍来源记录。'}</p>}
+      </section>
+    </div>
+  );
+}

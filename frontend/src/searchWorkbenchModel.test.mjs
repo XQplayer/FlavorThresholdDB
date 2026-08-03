@@ -30,7 +30,13 @@ const threshold = {
 const integrated = {
   item: threshold,
   fema: { flavor_profile: ['fruity'] },
-  profile: { pubchem: { cid: 8857, molecular_formula: 'C4H8O2' } },
+  profile: { pubchem: {
+    cid: 8857,
+    title: 'Ethyl acetate',
+    molecular_formula: 'C4H8O2',
+    smiles: 'CCOC(=O)C',
+    inchi_key: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N',
+  } },
 };
 
 test('groups dossier inputs by stable entity key without cross-contaminating evidence', () => {
@@ -217,10 +223,10 @@ test('defines eight bilingual compound-dossier chapters', () => {
     ['感官', 'Sensory'],
     ['阈值', 'Thresholds'],
     ['光谱', 'Spectra'],
-    ['生物化学', 'Biochemistry'],
-    ['生物活性', 'Bioactivity'],
-    ['结构', 'Structures'],
-    ['引文', 'Citation'],
+    ['生化关系', 'Biochemical relationships'],
+    ['活性与靶点', 'Bioactivity and targets'],
+    ['蛋白结构', 'Protein structures'],
+    ['引用与导出', 'Citation and export'],
   ]);
 });
 
@@ -293,7 +299,10 @@ test('builds identity and preserves parsed threshold provenance', () => {
     cid: 8857,
     chineseName: '乙酸乙酯',
     englishName: 'Ethyl acetate',
+    commonName: 'Ethyl acetate',
     molecularFormula: 'C4H8O2',
+    inchikey: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N',
+    smiles: 'CCOC(=O)C',
     raw: threshold,
   });
   assert.deepEqual(dossier.thresholds.records, [{

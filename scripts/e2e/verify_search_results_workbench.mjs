@@ -98,6 +98,31 @@ const classicEndpointPrefixes = [
   '/bioactivity/resolve',
   '/structures/resolve',
 ];
+const biochemicalFixture = {
+  chebi: { chebi_id: 'CHEBI:27750', name: 'ethyl acetate', formula: 'C4H8O2', source_url: 'https://www.ebi.ac.uk/chebi/searchId.do?chebiId=CHEBI:27750', identity_match: { type: 'inchikey_exact', verified: true } },
+  reactions: [{ rhea_id: 'RHEA:10020', equation: 'ethyl acetate + water = ethanol + acetate', source_url: 'https://www.rhea-db.org/rhea/10020' }],
+  proteins: [{ accession: 'P12345', protein_name: 'Evidence-linked esterase', organism: { scientific_name: 'Saccharomyces cerevisiae', taxon_id: 4932 }, rhea_id: 'RHEA:10020', source_url: 'https://www.uniprot.org/uniprotkb/P12345/entry' }],
+  sources: { ChEBI: { status: 'ok' }, Rhea: { status: 'ok' }, UniProt: { status: 'ok' } },
+};
+const biologicalContextFixture = {
+  genes: [{ gene_id: '559295', symbol: 'ATF2', organism: 'Saccharomyces cerevisiae', source_url: 'https://www.ncbi.nlm.nih.gov/gene/559295', evidence: { uniprot_accession: 'P12345' } }],
+  taxa: [{ taxon_id: 4932, scientific_name: 'Saccharomyces cerevisiae', rank: 'species', source_url: 'https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=4932' }],
+  studies: [{ accession: 'MTBLS1', source_url: 'https://www.ebi.ac.uk/metabolights/MTBLS1' }],
+  sources: { 'NCBI Gene': { status: 'ok' }, 'NCBI Taxonomy': { status: 'ok' }, MetaboLights: { status: 'ok' } },
+  links: {},
+};
+const bioactivityFixture = {
+  pubchem_assays: [{ aid: '421', outcome: 'Inactive', assay_name: 'Fixture cell viability assay', source_url: 'https://pubchem.ncbi.nlm.nih.gov/bioassay/421' }],
+  chembl_activities: [{ activity_id: 7, target_name: 'Fixture ChEMBL target', type: 'IC50', value: '10', units: 'uM', source_url: 'https://www.ebi.ac.uk/chembl/explore/activity/7' }],
+  gtopdb_interactions: [], bindingdb_interactions: [],
+  sources: { 'PubChem BioAssay': { status: 'ok', total: 1 }, ChEMBL: { status: 'ok', total: 1 }, GtoPdb: { status: 'no_data' }, BindingDB: { status: 'no_data' } },
+};
+const structureFixture = {
+  experimental_structures: [{ pdb_id: '1ABC', accession: 'P12345', source_url: 'https://www.rcsb.org/structure/1ABC' }],
+  predicted_models: [{ model_id: 'AF-P12345-F1', accession: 'P12345', global_plddt: 91.2, version: 6, source_url: 'https://alphafold.ebi.ac.uk/entry/AF-P12345-F1' }],
+  gpcr_proteins: [],
+  sources: { 'RCSB PDB': { status: 'ok' }, 'AlphaFold DB': { status: 'ok' }, GPCRdb: { status: 'no_data' } },
+};
 let browser;
 
 try {
@@ -120,7 +145,10 @@ try {
     browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   }
 
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    permissions: ['clipboard-read', 'clipboard-write'],
+  });
   const page = await context.newPage();
   const consoleErrors = [];
   const pageErrors = [];
@@ -202,6 +230,31 @@ try {
     contentType: 'application/json',
     body: JSON.stringify(bookFixture),
   }));
+  await page.route('**/spectra/search?**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      records: [{
+        source: 'MassBank',
+        spectrum_id: 'MB-FIXTURE-1',
+        spectrum_type: 'EI',
+        ion_mode: 'positive',
+        instrument: 'GC-EI-MS',
+        source_url: 'https://massbank.eu/MassBank/RecordDisplay?id=MB-FIXTURE-1',
+      }],
+      summary: { total: 1, massbank: 1, gnps: 0, ei: 1, ms2: 0 },
+      sources: { MassBank: { status: 'ok' }, GNPS: { status: 'no_data' } },
+    }),
+  }));
+  await page.route('**/nist-webbook?**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ status: 'ok', url: 'https://webbook.nist.gov/cgi/cbook.cgi?ID=C141786', sections: [{ type: 'ei_ms', label: 'Mass spectrum', url: 'https://webbook.nist.gov/cgi/cbook.cgi?ID=C141786&Mask=200' }] }),
+  }));
+  await page.route('**/biochemistry/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(biochemicalFixture) }));
+  await page.route('**/biological-context/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(biologicalContextFixture) }));
+  await page.route('**/bioactivity/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bioactivityFixture) }));
+  await page.route('**/structures/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(structureFixture) }));
 
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
   const input = page.getByLabel('化合物名称或 CAS 号');
@@ -247,6 +300,60 @@ try {
   const chapterNavigation = page.getByRole('navigation', { name: '档案章节' });
   const chapterButtons = chapterNavigation.getByRole('button');
   assert.equal(await chapterButtons.count(), 8, 'new dossier exposes eight chapter buttons');
+  const heavyRequests = () => apiRequests.filter(request => classicEndpointPrefixes.some(prefix => request.path.startsWith(prefix)));
+  await page.waitForLoadState('networkidle');
+  assert.equal(await page.getByTestId('spectrum-workbench').count(), 0, 'overview does not mount the spectrum workbench');
+  assert.equal(heavyRequests().length, 0, 'overview performs no chapter-specific heavy requests');
+
+  const spectraChapter = chapterNavigation.getByRole('button', { name: /光谱/ });
+  await spectraChapter.click();
+  await page.getByTestId('spectrum-workbench').waitFor({ state: 'visible', timeout: 30_000 });
+  await workbench.getByText('MassBank · MB-FIXTURE-1', { exact: true }).waitFor({ state: 'visible' });
+  await workbench.getByRole('link', { name: 'EI 质谱' }).waitFor({ state: 'visible' });
+  assert.ok(apiRequests.some(request => request.path === '/spectra/search'), 'spectra request starts only after entering the spectra chapter');
+  assert.ok(apiRequests.some(request => request.path === '/nist-webbook'), 'NIST presence request starts only in the spectra chapter');
+  assert.equal(apiRequests.filter(request => request.path === '/biochemistry/resolve').length, 0, 'spectra does not mount biochemistry');
+  assert.equal(apiRequests.filter(request => request.path === '/bioactivity/resolve').length, 0, 'spectra does not mount bioactivity');
+  assert.equal(apiRequests.filter(request => request.path === '/structures/resolve').length, 0, 'spectra does not mount structures');
+
+  const biochemistryChapter = chapterNavigation.getByRole('button', { name: /生化关系/ });
+  await biochemistryChapter.click();
+  assert.equal(await page.getByTestId('spectrum-workbench').count(), 0, 'leaving spectra unmounts the spectrum workbench');
+  await workbench.getByText('RHEA:10020', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
+  await workbench.getByText('ATF2', { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await workbench.locator('.bioactivity-evidence').count(), 0, 'biochemistry does not mount bioactivity');
+  assert.equal(await workbench.locator('.structure-evidence').count(), 0, 'biochemistry does not mount protein structures');
+
+  const bioactivityChapter = chapterNavigation.getByRole('button', { name: /活性与靶点/ });
+  await bioactivityChapter.click();
+  await workbench.getByRole('tab', { name: /PubChem BioAssay/ }).waitFor({ state: 'visible', timeout: 30_000 });
+  await workbench.getByText('Fixture cell viability assay', { exact: true }).waitFor({ state: 'visible' });
+  await workbench.getByRole('tab', { name: /ChEMBL/ }).click();
+  await workbench.getByText('Fixture ChEMBL target', { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await workbench.locator('.biochemical-relationships').count(), 0, 'bioactivity does not mount biochemistry');
+  assert.equal(await workbench.locator('.biological-context').count(), 0, 'bioactivity does not mount biological context');
+
+  const structuresChapter = chapterNavigation.getByRole('button', { name: /蛋白结构/ });
+  await structuresChapter.click();
+  await workbench.getByText('PDB 1ABC', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
+  await workbench.getByText('AF-P12345-F1', { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await workbench.locator('.bioactivity-evidence').count(), 0, 'protein structures do not mount bioactivity');
+  assert.equal(await workbench.locator('.biochemical-relationships').count(), 0, 'protein structures do not mount biochemistry');
+
+  const citationChapter = chapterNavigation.getByRole('button', { name: /引用与导出/ });
+  await citationChapter.click();
+  await workbench.getByRole('heading', { name: '引用与导出', level: 4 }).waitFor({ state: 'visible' });
+  await workbench.getByRole('button', { name: '复制引用' }).click();
+  await workbench.getByRole('button', { name: '已复制' }).waitFor({ state: 'visible' });
+  const downloadBytes = async click => {
+    const [download] = await Promise.all([page.waitForEvent('download'), click()]);
+    return readFileSync(await download.path());
+  };
+  const newExports = {
+    compact: await downloadBytes(() => workbench.getByRole('button', { name: '导出精简版 CSV' }).click()),
+    detailed: await downloadBytes(() => workbench.getByRole('button', { name: '导出详细版 CSV' }).click()),
+  };
+
   const thresholdChapter = chapterNavigation.getByRole('button', { name: /阈值/ });
   await thresholdChapter.click();
   assert.equal(await thresholdChapter.getAttribute('aria-current'), 'page', 'clicked chapter becomes current');
@@ -406,8 +513,12 @@ try {
     pathname,
     apiRequests.filter(request => request.path === pathname).length,
   ]));
-  const defaultNewClassicRequests = apiRequests.filter(isClassicRequest);
-  assert.equal(defaultNewClassicRequests.length, 0, 'default new dossier does not mount or request classic-only result modules');
+  const newChapterRequestsBeforeClassic = apiRequests.filter(isClassicRequest);
+  assert.deepEqual(
+    [...new Set(newChapterRequestsBeforeClassic.map(request => request.path))].sort(),
+    ['/bioactivity/resolve', '/biochemistry/resolve', '/biological-context/resolve', '/nist-webbook', '/spectra/search', '/structures/resolve'],
+    'new dossier requests each heavy source only after its owning chapter is visited',
+  );
   assert.equal(await page.getByTestId('classic-search-results').count(), 0, 'classic result marker is absent in the new dossier');
   const sharedBeforeClassic = sharedCounts();
   await classicButton.click();
@@ -416,8 +527,15 @@ try {
   await page.getByText('CAS 141-78-6', { exact: true }).first().waitFor({ state: 'visible', timeout: 30_000 });
   await page.waitForLoadState('networkidle');
   const classicRequestsAfterMount = apiRequests.filter(isClassicRequest);
-  assert.ok(classicRequestsAfterMount.length > 0, 'classic-only requests begin when the classic tree is first mounted');
+  assert.ok(classicRequestsAfterMount.length > newChapterRequestsBeforeClassic.length, 'classic heavy requests begin when the classic tree is first mounted');
   assert.deepEqual(sharedCounts(), sharedBeforeClassic, 'switching to classic does not repeat App-level shared lookups');
+  const exportMenu = page.locator('.search-toolbar-export');
+  await exportMenu.locator('.result-export-button').click();
+  const classicCompact = await downloadBytes(() => exportMenu.getByRole('menuitem', { name: /精简版/ }).click());
+  await exportMenu.locator('.result-export-button').click();
+  const classicDetailed = await downloadBytes(() => exportMenu.getByRole('menuitem', { name: /详细版/ }).click());
+  assert.equal(Buffer.compare(newExports.compact, classicCompact), 0, 'new and classic compact CSV exports are byte-identical');
+  assert.equal(Buffer.compare(newExports.detailed, classicDetailed), 0, 'new and classic detailed CSV exports are byte-identical');
   const pubchemFilter = page.locator('[data-filter-key="pubchem"]');
   const bookFilter = page.locator('[data-filter-key="book"]');
   assert.equal(await pubchemFilter.getAttribute('aria-pressed'), 'true', 'classic PubChem filter starts enabled');
@@ -430,7 +548,7 @@ try {
   await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor({ state: 'visible' });
   assert.equal(await workbench.getByText('8857', { exact: true }).count(), 1, 'new dossier keeps PubChem identity when the classic filter is disabled');
   const citationCount = Number(await workbench
-    .getByRole('button', { name: /引文/ })
+    .getByRole('button', { name: /引用与导出/ })
     .locator('.chapter-navigation__meta span')
     .first()
     .textContent());
@@ -539,8 +657,10 @@ try {
     ports: { proxyPort, vitePort },
     defaultNew: {
       sharedRequests: sharedBeforeClassic,
-      classicOnlyRequestCount: defaultNewClassicRequests.length,
+      initialHeavyRequestCount: 0,
+      visitedChapterRequestCount: newChapterRequestsBeforeClassic.length,
     },
+    exportComparison: { compact: 'byte-identical', detailed: 'byte-identical' },
     selectedCandidateRequestEvidence,
     firstClassicMountRequestCount: classicRequestsAfterMount.length,
   }, null, 2));
