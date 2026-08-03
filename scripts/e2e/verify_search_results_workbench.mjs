@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -10,6 +11,21 @@ const root = path.resolve(scriptRoot, '..', '..');
 const frontendRoot = path.join(root, 'frontend');
 const screenshotRoot = path.join(root, '_local', 'verification');
 mkdirSync(screenshotRoot, { recursive: true });
+const resultsPath = path.join(screenshotRoot, 'search-workbench-results.json');
+const runId = randomUUID();
+const startedAt = new Date().toISOString();
+const gitHead = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
+const atomicWriteJson = (target, value) => {
+  const temporary = `${target}.${runId}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  renameSync(temporary, target);
+};
+for (const filename of readdirSync(screenshotRoot)) {
+  if (/^search-workbench(?:-.*\.png|-results\.json(?:\..*\.tmp)?)$/.test(filename)) {
+    rmSync(path.join(screenshotRoot, filename), { force: true });
+  }
+}
+atomicWriteJson(resultsPath, { ok: false, status: 'running', runId, startedAt, gitHead });
 const node = process.env.CODEX_E2E_NODE || process.execPath;
 const python = process.env.CODEX_E2E_PYTHON || path.resolve(path.dirname(node), '..', '..', 'python', 'python.exe');
 const playwrightPath = path.resolve(path.dirname(node), '..', 'node_modules', 'playwright', 'index.mjs');
@@ -142,21 +158,29 @@ const parseCsvLine = line => {
   return cells;
 };
 
-const rgbChannels = (value) => {
+const rgbaChannels = (value) => {
   const hex = String(value).trim().match(/^#([\da-f]{6})$/i)?.[1];
-  if (hex) return [0, 2, 4].map(index => Number.parseInt(hex.slice(index, index + 2), 16));
-  const channels = String(value).match(/[\d.]+/g)?.slice(0, 3).map(Number);
-  assert.equal(channels?.length, 3, `expected an RGB color, received ${value}`);
-  return channels;
+  if (hex) return [...[0, 2, 4].map(index => Number.parseInt(hex.slice(index, index + 2), 16)), 1];
+  const channels = String(value).match(/[\d.]+/g)?.map(Number);
+  assert.ok(channels?.length >= 3, `expected an RGB color, received ${value}`);
+  return [...channels.slice(0, 3), channels[3] ?? 1];
 };
 
-const relativeLuminance = (value) => rgbChannels(value)
+const composite = (foreground, background) => {
+  const [fr, fg, fb, alpha] = rgbaChannels(foreground);
+  const [br, bg, bb] = Array.isArray(background) ? background : rgbaChannels(background);
+  return [fr * alpha + br * (1 - alpha), fg * alpha + bg * (1 - alpha), fb * alpha + bb * (1 - alpha)];
+};
+const compositeBackground = layers => [...layers].reverse().reduce((background, layer) => composite(layer, background), [255, 255, 255]);
+const relativeLuminance = (value) => (Array.isArray(value) ? value : rgbaChannels(value).slice(0, 3))
   .map(channel => channel / 255)
   .map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
   .reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
 
-const contrastRatio = (foreground, background) => {
-  const [lighter, darker] = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => b - a);
+const contrastRatio = (foreground, backgroundLayers) => {
+  const background = compositeBackground(backgroundLayers);
+  const renderedForeground = composite(foreground, background);
+  const [lighter, darker] = [relativeLuminance(renderedForeground), relativeLuminance(background)].sort((a, b) => b - a);
   return (lighter + 0.05) / (darker + 0.05);
 };
 
@@ -206,7 +230,12 @@ async function inspectAccessibility(page, scopeSelector = '.search-view') {
 
 async function inspectViewport(page, width, { screenshot, requireChapterScroll = false, requireTableScroll = false } = {}) {
   await page.setViewportSize({ width, height: 900 });
-  await page.waitForTimeout(50);
+  await page.waitForFunction(expectedWidth => (
+    window.innerWidth === expectedWidth
+    && document.documentElement.clientWidth === expectedWidth
+    && document.querySelector('[data-testid="search-results-workbench"]')?.getBoundingClientRect().width > 0
+  ), width);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const metrics = await page.evaluate(() => {
     const visible = element => {
       const style = getComputedStyle(element);
@@ -292,22 +321,20 @@ async function inspectContrast(page) {
     const sample = (selector, pseudo = null) => {
       const element = document.querySelector(selector);
       const style = getComputedStyle(element, pseudo);
-      let backgroundElement = element;
-      let background = style.backgroundColor;
-      while (backgroundElement && (background === 'rgba(0, 0, 0, 0)' || background === 'transparent')) {
-        backgroundElement = backgroundElement.parentElement;
-        background = backgroundElement ? getComputedStyle(backgroundElement).backgroundColor : 'rgb(255, 255, 255)';
+      const backgroundLayers = [];
+      for (let backgroundElement = element; backgroundElement; backgroundElement = backgroundElement.parentElement) {
+        backgroundLayers.push(getComputedStyle(backgroundElement).backgroundColor);
       }
-      return { color: style.color, background };
+      return { color: style.color, backgroundLayers };
     };
     return {
       body: sample('.search-results-workbench p'),
       label: sample('.search-field-label'),
       placeholder: sample('#compound-search', '::placeholder'),
-      focus: { color: getComputedStyle(document.querySelector('.search-main')).getPropertyValue('--focus-ring').trim(), background: getComputedStyle(document.querySelector('.search-control-panel')).backgroundColor },
+      focus: { ...sample('.search-control-panel'), color: getComputedStyle(document.querySelector('.search-main')).getPropertyValue('--focus-ring').trim() },
     };
   });
-  const ratios = Object.fromEntries(Object.entries(tokens).map(([key, value]) => [key, contrastRatio(value.color, value.background)]));
+  const ratios = Object.fromEntries(Object.entries(tokens).map(([key, value]) => [key, contrastRatio(value.color, value.backgroundLayers)]));
   assert.ok(ratios.body >= 4.5, `body text contrast is ${ratios.body.toFixed(2)}:1`);
   assert.ok(ratios.label >= 4.5, `label contrast is ${ratios.label.toFixed(2)}:1`);
   assert.ok(ratios.placeholder >= 4.5, `placeholder contrast is ${ratios.placeholder.toFixed(2)}:1`);
@@ -331,18 +358,25 @@ const successfulCompound = {
     flavordb: { found: true, cid: 8857, flavor_profile: ['fruity'] },
   };
   const evidence = {};
-  const openScenario = async ({ femaHandler, compoundHandler, coreHandler, bookHandler } = {}) => {
+  const expectedFixtureFailures = [];
+  const openScenario = async ({ name, expected503 = [], femaHandler, compoundHandler, coreHandler, bookHandler } = {}) => {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const page = await context.newPage();
-    const diagnostics = { pageErrors: [], consoleErrors: [], expectedFixtureNetworkErrors: [] };
+    const diagnostics = { pageErrors: [], consoleErrors: [], network503ConsoleErrors: [], expected503Responses: [], unexpected503Responses: [] };
     page.on('pageerror', error => diagnostics.pageErrors.push(error.message));
     page.on('console', message => {
       if (message.type() !== 'error') return;
       if (/^Failed to load resource: the server responded with a status of 503/.test(message.text())) {
-        diagnostics.expectedFixtureNetworkErrors.push(message.text());
+        diagnostics.network503ConsoleErrors.push(message.text());
       } else {
         diagnostics.consoleErrors.push(message.text());
       }
+    });
+    page.on('response', response => {
+      if (response.status() !== 503) return;
+      const endpoint = new URL(response.url()).pathname;
+      const expected = expected503.some(fixture => fixture.endpoint === endpoint);
+      (expected ? diagnostics.expected503Responses : diagnostics.unexpected503Responses).push(endpoint);
     });
     const counts = { core: 0, book: 0, fema: 0, compound: 0 };
     const requestUrls = { core: [], book: [], fema: [], compound: [] };
@@ -372,15 +406,33 @@ const successfulCompound = {
       })))(route, counts);
     });
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-    return { context, page, counts, requestUrls, diagnostics };
+    return { name, expected503, context, page, counts, requestUrls, diagnostics };
   };
   const closeScenario = async (scenario) => {
+    const actualCounts = Object.fromEntries(scenario.expected503.map(({ endpoint }) => [
+      endpoint,
+      scenario.diagnostics.expected503Responses.filter(actual => actual === endpoint).length,
+    ]));
+    assert.deepEqual(
+      actualCounts,
+      Object.fromEntries(scenario.expected503.map(({ endpoint, count }) => [endpoint, count])),
+      `${scenario.name} receives only the declared number of expected fixture 503 responses`,
+    );
+    assert.deepEqual(scenario.diagnostics.unexpected503Responses, [], `${scenario.name} has no unexpected 503 response URLs`);
+    assert.equal(
+      scenario.diagnostics.network503ConsoleErrors.length,
+      scenario.diagnostics.expected503Responses.length,
+      `${scenario.name} generic browser 503 diagnostics correspond one-for-one with declared fixture responses`,
+    );
     assert.deepEqual(scenario.diagnostics.pageErrors, [], 'state scenario has no page errors or unhandled rejections');
     assert.deepEqual(scenario.diagnostics.consoleErrors, [], 'state scenario has no console errors');
+    expectedFixtureFailures.push({ scenario: scenario.name, endpoints: actualCounts });
     await scenario.context.close();
   };
 
   const compoundScenario = await openScenario({
+    name: 'compound-retry',
+    expected503: [{ endpoint: '/compound', count: 1 }],
     compoundHandler: async (route, counts) => {
       if (counts.compound === 1) return route.fulfill({ status: 503, body: 'fixture compound failure' });
       await new Promise(resolve => setTimeout(resolve, 250));
@@ -454,6 +506,7 @@ const successfulCompound = {
   }
 
   const partialCompoundScenario = await openScenario({
+    name: 'partial-compound-retry',
     compoundHandler: async (route, counts) => {
       if (counts.compound === 1) {
         return route.fulfill({
@@ -493,6 +546,8 @@ const successfulCompound = {
   }
 
   const femaScenario = await openScenario({
+    name: 'fema-retry',
+    expected503: [{ endpoint: '/fema', count: 2 }],
     femaHandler: async (route, counts) => {
       if (counts.fema <= 2) {
         if (counts.fema === 2) await new Promise(resolve => setTimeout(resolve, 250));
@@ -538,6 +593,8 @@ const successfulCompound = {
 
   let bookAttempt = 0;
   const bookScenario = await openScenario({
+    name: 'book-retry',
+    expected503: [{ endpoint: '/FlavorThresholdDB/book_flavor_chemistry_index.json', count: 1 }],
     bookHandler: async (route) => {
       bookAttempt += 1;
       if (bookAttempt === 1) return route.fulfill({ status: 503, body: 'fixture book failure' });
@@ -566,6 +623,8 @@ const successfulCompound = {
 
   let coreAttempt = 0;
   const coreScenario = await openScenario({
+    name: 'core-retry',
+    expected503: [{ endpoint: '/FlavorThresholdDB/aroma_data_merged.json', count: 1 }],
     coreHandler: async (route) => {
       coreAttempt += 1;
       if (coreAttempt === 1) await new Promise(resolve => setTimeout(resolve, 500));
@@ -612,7 +671,54 @@ const successfulCompound = {
     await closeScenario(coreScenario);
   }
 
+  evidence.expectedFixtureFailures = expectedFixtureFailures;
   return evidence;
+}
+
+async function inspectClassicLayout(page, width) {
+  await page.setViewportSize({ width, height: 900 });
+  const classic = page.getByTestId('classic-search-results');
+  await classic.waitFor({ state: 'visible' });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const metrics = await classic.evaluate((element) => {
+    const renderedDescendants = [...element.querySelectorAll('*')].filter(child => {
+      const childRect = child.getBoundingClientRect();
+      const style = getComputedStyle(child);
+      return style.display !== 'none' && style.visibility !== 'hidden' && childRect.width > 0 && childRect.height > 0;
+    });
+    const descendantRects = renderedDescendants.map(child => child.getBoundingClientRect());
+    const bounds = {
+      left: Math.min(...descendantRects.map(rect => rect.left)),
+      right: Math.max(...descendantRects.map(rect => rect.right)),
+    };
+    const ownedHorizontalScrollers = [...element.querySelectorAll('*')]
+      .filter(child => child.scrollWidth > child.clientWidth + 1)
+      .filter(child => ['auto', 'scroll'].includes(getComputedStyle(child).overflowX))
+      .map(child => ({ className: String(child.className), clientWidth: child.clientWidth, scrollWidth: child.scrollWidth }));
+    const targets = [...document.querySelectorAll('.search-view button, .search-view input, .search-view select')]
+      .filter(target => {
+        const targetRect = target.getBoundingClientRect();
+        return getComputedStyle(target).display !== 'none' && targetRect.width > 0 && targetRect.height > 0;
+      })
+      .map(target => ({ width: target.getBoundingClientRect().width, height: target.getBoundingClientRect().height }));
+    return {
+      displayMode: getComputedStyle(element).display,
+      visibleDescendantCount: renderedDescendants.length,
+      document: { clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth },
+      renderedBounds: bounds,
+      ownedHorizontalScrollers,
+      touchTargets: {
+        count: targets.length,
+        minimumWidth: targets.length ? Math.min(...targets.map(target => target.width)) : null,
+        minimumHeight: targets.length ? Math.min(...targets.map(target => target.height)) : null,
+        meets44px: targets.length ? targets.every(target => target.width >= 44 && target.height >= 44) : null,
+      },
+    };
+  });
+  assert.ok(metrics.visibleDescendantCount > 0, `${width}px classic display-contents container renders visible result descendants`);
+  assert.ok(metrics.renderedBounds.left >= 0 && metrics.renderedBounds.right <= width, `${width}px classic rendered result bounds stay within the viewport`);
+  assert.ok(metrics.document.scrollWidth <= metrics.document.clientWidth, `${width}px classic page has no document-level horizontal overflow`);
+  return metrics;
 }
 let browser;
 
@@ -1008,7 +1114,7 @@ try {
   await page.evaluate(() => window.__clipboardFixture.pending[1].reject(new Error('latest clipboard request denied')));
   await workbench.getByText('复制失败', { exact: true }).waitFor({ state: 'visible' });
   await page.evaluate(() => window.__clipboardFixture.pending[0].resolve());
-  await page.waitForTimeout(50);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   assert.equal(await workbench.getByText('复制失败', { exact: true }).count(), 1, 'an older clipboard promise cannot overwrite the latest failure');
   assert.equal(await workbench.getByText('引用已复制', { exact: true }).count(), 0, 'stale clipboard success remains ignored');
 
@@ -1029,7 +1135,7 @@ try {
   const thresholdChapterForClipboardUnmount = chapterNavigation.getByRole('button', { name: /阈值/ });
   await thresholdChapterForClipboardUnmount.click();
   await page.evaluate(() => window.__clipboardFixture.pending[3].resolve());
-  await page.waitForTimeout(50);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   assert.equal(await page.evaluate(() => window.__clipboardFixture.resetTimerCreations), 0, 'a clipboard promise settling after unmount creates no reset timer');
   await citationChapter.click();
   await workbench.getByRole('heading', { name: '引用与导出', level: 4 }).waitFor({ state: 'visible' });
@@ -1672,11 +1778,20 @@ try {
   await page.getByRole('button', { name: '经典版' }).focus();
   await page.keyboard.press('Enter');
   const classicRegression = page.getByTestId('classic-search-results');
-  await classicRegression.waitFor({ state: 'attached' });
-  assert.ok(await page.locator('[data-filter-key]').count() > 0, 'classic filters remain available');
+  await classicRegression.waitFor({ state: 'visible' });
+  const classicFilterCount = await page.locator('[data-filter-key]').count();
+  assert.ok(classicFilterCount > 0, 'classic filters remain available');
   const classicExportButton = page.locator('.search-toolbar-export .result-export-button');
   await classicExportButton.waitFor({ state: 'visible' });
-  finalQa.regressions.classic = { layout: true, filters: true, export: true };
+  const classicDesktop = await inspectClassicLayout(page, 1024);
+  const classicMobile = await inspectClassicLayout(page, 375);
+  finalQa.regressions.classic = {
+    resultContainerVisible: true,
+    filterCount: classicFilterCount,
+    exportButtonVisible: true,
+    desktop: classicDesktop,
+    mobile: classicMobile,
+  };
 
   const evidenceStateRetries = await verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin });
   finalQa.screenshots = [
@@ -1692,9 +1807,13 @@ try {
   assert.deepEqual(consoleErrors, [], 'console errors');
   e2eStages.push('complete');
   await context.close();
-  const resultsPath = path.join(screenshotRoot, 'search-workbench-results.json');
   const result = {
     ok: true,
+    status: 'succeeded',
+    runId,
+    startedAt,
+    completedAt: new Date().toISOString(),
+    gitHead,
     resultsPath: path.relative(root, resultsPath).split(path.sep).join('/'),
     ports: { proxyPort, vitePort },
     defaultNew: {
@@ -1733,8 +1852,19 @@ try {
     firstClassicMountRequestCount: classicRequestsAfterMount.length,
   };
   const serializedResult = JSON.stringify(result, null, 2);
-  writeFileSync(resultsPath, `${serializedResult}\n`, 'utf8');
+  atomicWriteJson(resultsPath, result);
   console.log(serializedResult);
+} catch (error) {
+  atomicWriteJson(resultsPath, {
+    ok: false,
+    status: 'failed',
+    runId,
+    startedAt,
+    completedAt: new Date().toISOString(),
+    gitHead,
+    error: { name: error?.name || 'Error', message: error?.message || String(error) },
+  });
+  throw error;
 } finally {
   if (browser) await browser.close();
   for (const record of [...children].reverse()) await stop(record);
