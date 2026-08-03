@@ -209,6 +209,9 @@ const successfulCompound = {
     await pubchem.getByText('失败', { exact: true }).waitFor();
     await flavordb.getByText('失败', { exact: true }).waitFor();
     await workbench.getByRole('button', { name: '引用与导出' }).click();
+    const exportWarning = workbench.locator('.citation-export-chapter__source-warning');
+    await exportWarning.waitFor();
+    assert.match(await exportWarning.textContent(), /PubChem.*FlavorDB2/, 'enabled failed export sources are listed in the warning');
     const [failedExport] = await Promise.all([
       page.waitForEvent('download'),
       workbench.getByRole('button', { name: '导出精简版 CSV' }).click(),
@@ -219,6 +222,14 @@ const successfulCompound = {
     assert.ok(classificationIndex >= 0, 'failed compound export includes classification column');
     assert.equal(parseCsvLine(failedRow)[classificationIndex], '', 'failed compound classification exports blank');
     assert.doesNotMatch(failedRow, /其他类|Others/, 'failed compound classification never falls back to Others');
+    await page.getByRole('button', { name: '经典版' }).click();
+    for (const key of ['pubchem', 'flavordb']) {
+      const filter = page.locator(`[data-filter-key="${key}"]`);
+      if (await filter.getAttribute('aria-pressed') === 'true') await filter.click();
+    }
+    await page.getByRole('button', { name: '新版档案' }).click();
+    await workbench.getByRole('button', { name: '引用与导出' }).click();
+    assert.equal(await workbench.locator('.citation-export-chapter__source-warning').count(), 0, 'disabled failed export sources do not produce a warning');
     await workbench.getByRole('button', { name: '概览' }).click();
     const beforeRetry = { ...counts };
     assert.deepEqual(beforeRetry, { core: 1, book: 1, fema: 1, compound: 1 }, 'compound scenario starts each source exactly once');

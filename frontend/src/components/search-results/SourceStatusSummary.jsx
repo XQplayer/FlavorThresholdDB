@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react';
+
 const STATUS_LABELS = {
   not_requested: { zh: '未请求', en: 'Not requested' },
   loading: { zh: '载入中', en: 'Loading' },
@@ -90,4 +92,3 @@ export default function SourceStatusSummary({ sources, isEnglish = false, onRetr
     </div>
   );
 }
-import { useEffect, useRef, useState } from 'react';

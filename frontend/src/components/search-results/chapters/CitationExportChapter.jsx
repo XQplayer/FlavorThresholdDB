@@ -83,8 +83,8 @@ export default function CitationExportChapter({
         {unavailableSources.length > 0 && (
           <p className="citation-export-chapter__source-warning" aria-live="polite">
             {isEnglish
-              ? 'Exports keep currently available evidence. Unavailable, partial, or loading sources are not represented as zero.'
-              : '导出会保留当前可用证据；未完整可用或载入中的来源不会被表示为 0。'}
+              ? `Exports keep currently available evidence. Unavailable, partial, or loading sources are not represented as zero: ${unavailableSources.map(([, source]) => source.labelEn).join(', ')}.`
+              : `导出会保留当前可用证据；未完整可用或载入中的来源不会被表示为 0：${unavailableSources.map(([, source]) => source.labelZh).join('、')}。`}
           </p>
         )}
       </section>

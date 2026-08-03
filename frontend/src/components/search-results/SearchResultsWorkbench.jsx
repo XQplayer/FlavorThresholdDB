@@ -336,7 +336,6 @@ export default function SearchResultsWorkbench({
                 identity={dossier.identity}
                 chapters={chapters}
                 sourceStates={dossier.sourceStates}
-                exportEnabledSourceKeys={exportEnabledSourceKeys}
                 isEnglish={isEnglish}
               />
             ) : activeChapter.id === 'sensory' ? (
@@ -368,6 +367,7 @@ export default function SearchResultsWorkbench({
                 onExportCompact={onExportCompact}
                 onExportDetailed={onExportDetailed}
                 sourceStates={dossier.sourceStates}
+                exportEnabledSourceKeys={exportEnabledSourceKeys}
                 isEnglish={isEnglish}
               />
             ) : (
