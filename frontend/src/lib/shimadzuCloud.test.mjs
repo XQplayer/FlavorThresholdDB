@@ -37,5 +37,5 @@ test('migration enforces approval, RLS, private storage and cleanup', async () =
   assert.match(bootstrap, /claim_first_shimadzu_admin/)
   assert.match(bootstrap, /administrator already initialized/)
   assert.match(bootstrap, /digest\(coalesce\(bootstrap_code/)
-  assert.doesNotMatch(bootstrap, /9da6095aa8cc4a3f98b94a1bf4e936c6/)
+  assert.doesNotMatch(bootstrap, /bootstrap_code\s*=\s*['"][a-f0-9]{32}['"]/i)
 })

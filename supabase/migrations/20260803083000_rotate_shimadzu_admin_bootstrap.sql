@@ -1,21 +1,5 @@
 begin;
 
-create extension if not exists pgcrypto with schema extensions;
-
-create or replace function public.handle_new_shimadzu_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.profiles(id, display_name, approval_status, is_admin)
-  values (new.id, coalesce(new.raw_user_meta_data ->> 'display_name', ''), 'pending', false)
-  on conflict (id) do nothing;
-  return new;
-end;
-$$;
-
 create or replace function public.claim_first_shimadzu_admin(bootstrap_code text)
 returns public.profiles
 language plpgsql
@@ -39,8 +23,5 @@ begin
   return result;
 end;
 $$;
-
-revoke all on function public.claim_first_shimadzu_admin(text) from public;
-grant execute on function public.claim_first_shimadzu_admin(text) to authenticated;
 
 commit;
