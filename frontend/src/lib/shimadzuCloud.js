@@ -10,6 +10,20 @@ const unwrap = ({ data, error }) => {
   return data
 }
 
+export function shimadzuAuthRedirect(origin, baseUrl = '/') {
+  const basePath = String(baseUrl || '/').replace(/^\/+|\/+$/g, '')
+  const path = basePath ? `/${basePath}/shimadzu-analysis/` : '/shimadzu-analysis/'
+  return new URL(path, origin).toString()
+}
+
+export function authCallbackMessage(fragment = '') {
+  const params = new URLSearchParams(String(fragment).replace(/^[#?]/, ''))
+  if (params.get('error_code') === 'otp_expired') {
+    return '验证链接已过期或已被使用，请重新发送验证邮件，并使用最新邮件中的链接。'
+  }
+  return params.get('error_description') || ''
+}
+
 export function resultObjectPath(userId, jobId) {
   if (!UUID.test(userId) || !UUID.test(jobId)) throw Object.assign(new Error('INVALID_STORAGE_ID'), { code: 'INVALID_STORAGE_ID' })
   return `${userId}/${jobId}/result.zip`
@@ -36,6 +50,9 @@ export function createShimadzuCloud(client) {
     },
     async signUp(email, password, displayName, redirectTo) {
       return unwrap(await requireClient(client).auth.signUp({ email, password, options: { data: { display_name: displayName }, emailRedirectTo: redirectTo } }))
+    },
+    async resendSignup(email, redirectTo) {
+      return unwrap(await requireClient(client).auth.resend({ type: 'signup', email, options: { emailRedirectTo: redirectTo } }))
     },
     async signIn(email, password) {
       return unwrap(await requireClient(client).auth.signInWithPassword({ email, password }))

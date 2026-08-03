@@ -31,7 +31,7 @@ import {
 import { createShimadzuApi, getEnginePresentation, getMonitorStageIndex, getStageProgress } from '../../lib/shimadzuApi'
 import { assertWorkbookFile, browserEnginePresentation } from '../../lib/shimadzuBrowserContract'
 import { createShimadzuWorkerClient } from '../../lib/shimadzuWorkerClient'
-import { createShimadzuCloud } from '../../lib/shimadzuCloud'
+import { authCallbackMessage, createShimadzuCloud, shimadzuAuthRedirect } from '../../lib/shimadzuCloud'
 import { analyticsEnabled, supabase } from '../../lib/supabase'
 import './ShimadzuAnalysisPage.css'
 
@@ -63,7 +63,7 @@ function AccountPanel({ cloud, session, profile, loading, error, onRefresh }) {
   const [displayName, setDisplayName] = useState('')
   const [pendingUsers, setPendingUsers] = useState([])
   const [working, setWorking] = useState(false)
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState(() => authCallbackMessage(window.location.hash))
   const [bootstrapCode, setBootstrapCode] = useState('')
 
   useEffect(() => {
@@ -76,13 +76,27 @@ function AccountPanel({ cloud, session, profile, loading, error, onRefresh }) {
     setWorking(true); setMessage('')
     try {
       if (registering) {
-        await cloud.signUp(email.trim(), password, displayName.trim(), window.location.href)
-        setMessage('注册申请已提交。若邮箱验证已启用，请先完成邮件验证；之后等待管理员审批。')
+        const redirectTo = shimadzuAuthRedirect(window.location.origin, import.meta.env.BASE_URL)
+        await cloud.signUp(email.trim(), password, displayName.trim(), redirectTo)
+        setMessage('注册申请已提交。请打开最新的验证邮件；验证完成后还需等待管理员审批。')
       } else {
         await cloud.signIn(email.trim(), password)
         setMessage('登录成功，正在读取账号权限。')
       }
       await onRefresh()
+    } catch (value) { setMessage(value.message) } finally { setWorking(false) }
+  }
+
+  const resendConfirmation = async () => {
+    if (!email.trim()) {
+      setMessage('请先填写注册邮箱，再重新发送验证邮件。')
+      return
+    }
+    setWorking(true); setMessage('')
+    try {
+      const redirectTo = shimadzuAuthRedirect(window.location.origin, import.meta.env.BASE_URL)
+      await cloud.resendSignup(email.trim(), redirectTo)
+      setMessage('新的验证邮件已发送。请只使用最新邮件中的链接，之前的链接可能已经失效。')
     } catch (value) { setMessage(value.message) } finally { setWorking(false) }
   }
 
@@ -121,6 +135,7 @@ function AccountPanel({ cloud, session, profile, loading, error, onRefresh }) {
         <input aria-label="密码" type="password" minLength="6" placeholder="密码（至少 6 位）" value={password} onChange={event => setPassword(event.target.value)} required />
         <button type="submit" disabled={working}>{working ? <Loader2 className="spin" /> : <UserCheck />}{registering ? '提交注册申请' : '登录'}</button>
         <button type="button" className="text" onClick={() => { setRegistering(value => !value); setMessage('') }}>{registering ? '已有账号，返回登录' : '没有账号，申请使用'}</button>
+        <button type="button" className="text" disabled={working} onClick={resendConfirmation}>验证链接失效？重新发送验证邮件</button>
       </form>
       {(message || error) && <p className="shimadzu-account-message">{message || error}</p>}
     </section>

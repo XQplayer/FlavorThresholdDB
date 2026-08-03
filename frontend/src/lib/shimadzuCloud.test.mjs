@@ -2,7 +2,51 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-import { resultObjectPath, retentionColumns } from './shimadzuCloud.js'
+import {
+  authCallbackMessage,
+  createShimadzuCloud,
+  resultObjectPath,
+  retentionColumns,
+  shimadzuAuthRedirect,
+} from './shimadzuCloud.js'
+
+test('builds a canonical Shimadzu auth callback without query or hash state', () => {
+  assert.equal(
+    shimadzuAuthRedirect('https://xqplayer.github.io', '/FlavorThresholdDB/'),
+    'https://xqplayer.github.io/FlavorThresholdDB/shimadzu-analysis/',
+  )
+  assert.equal(
+    shimadzuAuthRedirect('http://127.0.0.1:5174', '/FlavorThresholdDB/'),
+    'http://127.0.0.1:5174/FlavorThresholdDB/shimadzu-analysis/',
+  )
+})
+
+test('resends signup confirmation to the canonical analysis page', async () => {
+  const calls = []
+  const cloud = createShimadzuCloud({
+    auth: {
+      async resend(payload) {
+        calls.push(payload)
+        return { data: { messageId: 'sent' }, error: null }
+      },
+    },
+  })
+  const data = await cloud.resendSignup('researcher@example.com', 'https://example.test/analysis/')
+  assert.deepEqual(calls, [{
+    type: 'signup',
+    email: 'researcher@example.com',
+    options: { emailRedirectTo: 'https://example.test/analysis/' },
+  }])
+  assert.deepEqual(data, { messageId: 'sent' })
+})
+
+test('explains an expired confirmation callback in Chinese', () => {
+  assert.equal(
+    authCallbackMessage('#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired'),
+    '验证链接已过期或已被使用，请重新发送验证邮件，并使用最新邮件中的链接。',
+  )
+  assert.equal(authCallbackMessage(''), '')
+})
 
 test('scopes every retained result to its user and job', () => {
   assert.equal(
