@@ -546,6 +546,134 @@ const successfulCompound = {
     await closeScenario(partialCompoundScenario);
   }
 
+  const scientificScenario = await openScenario({
+    name: 'scientific-state-truth',
+    compoundHandler: async (route) => {
+      const cas = new URL(route.request().url()).searchParams.get('cas');
+      const isEthanol = cas === '64-17-5';
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...successfulCompound,
+          pubchem: {
+            ...successfulCompound.pubchem,
+            cid: isEthanol ? 702 : 8857,
+            title: isEthanol ? 'Ethanol' : 'Ethyl acetate',
+          },
+        }),
+      });
+    },
+  });
+  try {
+    const { page } = scientificScenario;
+    const bioactivityRequestCounts = new Map();
+    let staleRetrySettledResolve;
+    const staleRetrySettled = new Promise(resolve => { staleRetrySettledResolve = resolve; });
+    await page.route('**/bioactivity/resolve?**', async (route) => {
+      const cid = new URL(route.request().url()).searchParams.get('cid');
+      const requestCount = (bioactivityRequestCounts.get(cid) || 0) + 1;
+      bioactivityRequestCounts.set(cid, requestCount);
+      if (cid === '702' && requestCount === 1) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            pubchem_assays: [{ aid: 'ETHANOL-PARTIAL', outcome: 'Active', assay_name: 'Ethanol partial fixture assay', source_url: 'https://pubchem.ncbi.nlm.nih.gov/bioassay/1' }],
+            chembl_activities: [], gtopdb_interactions: [], bindingdb_interactions: [],
+            sources: { 'PubChem BioAssay': { status: 'ok', total: 1 }, ChEMBL: { status: 'upstream_unavailable' }, GtoPdb: { status: 'no_data' }, BindingDB: { status: 'no_data' } },
+          }),
+        });
+      }
+      if (cid === '702') {
+        await new Promise(resolve => setTimeout(resolve, 900));
+        try {
+          await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              pubchem_assays: [{ aid: 'ETHANOL-STALE', outcome: 'Active', assay_name: 'Stale ethanol retry assay', source_url: 'https://pubchem.ncbi.nlm.nih.gov/bioassay/2' }],
+              chembl_activities: [], gtopdb_interactions: [], bindingdb_interactions: [],
+              sources: { 'PubChem BioAssay': { status: 'ok', total: 1 }, ChEMBL: { status: 'ok', total: 0 }, GtoPdb: { status: 'no_data' }, BindingDB: { status: 'no_data' } },
+            }),
+          });
+        } catch {
+          // Correct identity changes may abort the old retry before the fixture can settle.
+        } finally {
+          staleRetrySettledResolve();
+        }
+        return;
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          pubchem_assays: [], chembl_activities: [], gtopdb_interactions: [], bindingdb_interactions: [],
+          sources: { 'PubChem BioAssay': { status: 'no_data', total: 0 }, ChEMBL: { status: 'no_data', total: 0 }, GtoPdb: { status: 'no_data' }, BindingDB: { status: 'no_data' } },
+        }),
+      });
+    });
+
+    const input = page.getByLabel('化合物名称或 CAS 号');
+    const workbench = page.getByTestId('search-results-workbench');
+    const bioactivityChapter = page.getByRole('navigation', { name: '档案章节' }).getByRole('button', { name: /活性与靶点/ });
+    const assertNavigationPanelStatus = async (status, label, owner) => {
+      const panelStatus = workbench.locator(`.chapter-panel__status[data-status="${status}"]`);
+      await panelStatus.waitFor({ state: 'visible', timeout: 30_000 });
+      const navigationText = (await bioactivityChapter.locator('.chapter-navigation__meta').innerText()).trim();
+      const panelText = (await panelStatus.innerText()).trim();
+      assert.equal(navigationText, label, `${owner} navigation exposes the truthful ${status} label`);
+      assert.equal(panelText, navigationText, `${owner} navigation and panel status text stay identical`);
+    };
+
+    await input.fill('64-17-5');
+    await workbench.getByText('CAS 64-17-5', { exact: true }).waitFor({ state: 'visible' });
+    const partialResponsePromise = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.pathname === '/bioactivity/resolve' && url.searchParams.get('cid') === '702';
+    });
+    await bioactivityChapter.click();
+    const partialResponse = await partialResponsePromise;
+    assert.equal(partialResponse.status(), 200, 'HTTP 200 scientific payload can truthfully resolve to partial');
+    await workbench.getByText('Ethanol partial fixture assay', { exact: true }).waitFor({ state: 'visible' });
+    await assertNavigationPanelStatus('partial', '部分可用', 'HTTP 200 partial bioactivity');
+    const retryButton = workbench.getByRole('button', { name: '重试活性聚合端点中失败的来源', exact: true });
+    const retryRequestPromise = page.waitForRequest(request => {
+      const url = new URL(request.url());
+      return url.pathname === '/bioactivity/resolve' && url.searchParams.get('cid') === '702';
+    });
+    await retryButton.click();
+    await retryRequestPromise;
+    assert.equal(bioactivityRequestCounts.get('702'), 2, 'partial scientific state retries its owning endpoint once');
+
+    await input.fill('141-78-6');
+    await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor({ state: 'visible' });
+    assert.equal(await workbench.getByText('Ethanol partial fixture assay', { exact: true }).count(), 0, 'switching CAS clears retry-era records immediately');
+    const noDataResponsePromise = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.pathname === '/bioactivity/resolve' && url.searchParams.get('cid') === '8857';
+    });
+    await bioactivityChapter.click();
+    const noDataResponse = await noDataResponsePromise;
+    assert.equal(noDataResponse.status(), 200, 'scientific no-data is represented by an HTTP 200 response');
+    await assertNavigationPanelStatus('no_data', '暂无数据', 'scientific no-data');
+    await staleRetrySettled;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await workbench.getByText('Ethanol partial fixture assay', { exact: true }).count(), 0, 'new CAS no-data does not retain the previous partial record');
+    assert.equal(await workbench.getByText('Stale ethanol retry assay', { exact: true }).count(), 0, 'late retry data from the previous CAS cannot repopulate the panel');
+    assert.equal(bioactivityRequestCounts.get('8857'), 1, 'new CAS owns exactly one scientific endpoint request');
+    evidence.scientificTruth = {
+      endpoint: '/bioactivity/resolve',
+      partialHttpStatus: partialResponse.status(),
+      noDataHttpStatus: noDataResponse.status(),
+      requestsByCid: Object.fromEntries(bioactivityRequestCounts),
+      staleRetryIgnored: true,
+      navigationPanelStatusParity: true,
+    };
+  } finally {
+    await closeScenario(scientificScenario);
+  }
+
   const femaScenario = await openScenario({
     name: 'fema-retry',
     expected503: [{ endpoint: '/fema', count: 2 }],
@@ -1528,9 +1656,13 @@ try {
   assert.equal(await ambiguousBatchRow.getAttribute('data-status'), 'conflict', 'same-name multi-CAS input is explicitly marked as a conflict');
   const ambiguousChoices = ambiguousBatchRow.locator('.batch-review__candidate-choice');
   assert.ok(await ambiguousChoices.count() >= 2, 'conflict exposes each distinct CAS candidate');
+  const ambiguousBatchRowId = await ambiguousBatchRow.getAttribute('data-row-id');
   await ambiguousChoices.first().click();
-  assert.equal(await ambiguousBatchRow.getByRole('button', { name: '查看档案' }).count(), 1, 'explicit candidate selection enables dossier opening');
-  await ambiguousBatchRow.getByRole('button', { name: '查看档案' }).click();
+  const ambiguousDossierButton = ambiguousBatchRow.getByRole('button', { name: '查看档案' });
+  assert.equal(await ambiguousDossierButton.count(), 1, 'explicit candidate selection enables dossier opening');
+  await page.waitForFunction(rowId => document.activeElement?.dataset?.batchActionRowId === rowId, ambiguousBatchRowId);
+  assert.equal(await ambiguousDossierButton.evaluate(node => document.activeElement === node), true, 'conflict candidate selection focuses the newly enabled View dossier action');
+  await ambiguousDossierButton.click();
   await workbench.locator('.compound-identity-header').waitFor({ state: 'visible' });
   await workbench.getByRole('button', { name: '返回批量结果' }).click();
   await batchReview.waitFor({ state: 'visible' });
