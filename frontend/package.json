@@ -12,6 +12,7 @@
     "test:static-routes": "node --test src/staticRoutes.test.mjs",
     "test:shimadzu": "node --test src/shimadzuApi.test.mjs",
     "test:e2e": "node ../scripts/e2e/verify_release_candidate.mjs",
+    "test:e2e:search-workbench": "node ../scripts/e2e/verify_search_results_workbench.mjs",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"

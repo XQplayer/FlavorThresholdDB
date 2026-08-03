@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -8,6 +8,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const scriptRoot = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(scriptRoot, '..', '..');
 const frontendRoot = path.join(root, 'frontend');
+const screenshotRoot = path.join(root, '_local', 'verification');
+mkdirSync(screenshotRoot, { recursive: true });
 const node = process.env.CODEX_E2E_NODE || process.execPath;
 const python = process.env.CODEX_E2E_PYTHON || path.resolve(path.dirname(node), '..', '..', 'python', 'python.exe');
 const playwrightPath = path.resolve(path.dirname(node), '..', 'node_modules', 'playwright', 'index.mjs');
@@ -89,6 +91,7 @@ async function stop(record) {
 const proxyPort = await choosePort(18789);
 const vitePort = await choosePort(5177, new Set([proxyPort]));
 const proxyOrigin = `http://127.0.0.1:${proxyPort}`;
+const appRootUrl = `http://127.0.0.1:${vitePort}/FlavorThresholdDB/`;
 const baseUrl = `http://127.0.0.1:${vitePort}/FlavorThresholdDB/aroma-threshold/`;
 const classicEndpointPrefixes = [
   '/spectra/',
@@ -139,6 +142,178 @@ const parseCsvLine = line => {
   return cells;
 };
 
+const rgbChannels = (value) => {
+  const hex = String(value).trim().match(/^#([\da-f]{6})$/i)?.[1];
+  if (hex) return [0, 2, 4].map(index => Number.parseInt(hex.slice(index, index + 2), 16));
+  const channels = String(value).match(/[\d.]+/g)?.slice(0, 3).map(Number);
+  assert.equal(channels?.length, 3, `expected an RGB color, received ${value}`);
+  return channels;
+};
+
+const relativeLuminance = (value) => rgbChannels(value)
+  .map(channel => channel / 255)
+  .map(channel => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
+  .reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+
+const contrastRatio = (foreground, background) => {
+  const [lighter, darker] = [relativeLuminance(foreground), relativeLuminance(background)].sort((a, b) => b - a);
+  return (lighter + 0.05) / (darker + 0.05);
+};
+
+async function inspectAccessibility(page, scopeSelector = '.search-view') {
+  const audit = await page.evaluate((selector) => {
+    const scope = document.querySelector(selector) || document;
+    const visible = element => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const ids = [...document.querySelectorAll('[id]')].map(element => element.id);
+    const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
+    const unnamedButtons = [...scope.querySelectorAll('button')]
+      .filter(visible)
+      .filter(button => !(button.getAttribute('aria-label') || button.textContent.trim()))
+      .map(button => button.outerHTML.slice(0, 180));
+    const missingControls = [...scope.querySelectorAll('[aria-controls]')]
+      .filter(element => !document.getElementById(element.getAttribute('aria-controls')))
+      .map(element => element.getAttribute('aria-controls'));
+    const illegalBooleanAria = [...scope.querySelectorAll('[aria-expanded], [aria-pressed]')]
+      .filter(element => ['aria-expanded', 'aria-pressed'].some(attribute => (
+        element.hasAttribute(attribute) && !['true', 'false', 'mixed'].includes(element.getAttribute(attribute))
+      )))
+      .map(element => element.outerHTML.slice(0, 180));
+    const illegalCurrent = [...scope.querySelectorAll('[aria-current]')]
+      .filter(element => !['page', 'step', 'location', 'date', 'time', 'true', 'false'].includes(element.getAttribute('aria-current')))
+      .map(element => element.getAttribute('aria-current'));
+    const invalidHeaders = [...scope.querySelectorAll('table th')]
+      .filter(header => !['col', 'row', 'colgroup', 'rowgroup'].includes(header.getAttribute('scope')))
+      .map(header => header.textContent.trim());
+    const liveRegions = [...scope.querySelectorAll('[aria-live], [role="status"], [role="alert"]')]
+      .filter(visible)
+      .map(element => ({ role: element.getAttribute('role'), live: element.getAttribute('aria-live'), text: element.textContent.trim().slice(0, 80) }));
+    return { duplicateIds, unnamedButtons, missingControls, illegalBooleanAria, illegalCurrent, invalidHeaders, liveRegions };
+  }, scopeSelector);
+  assert.deepEqual(audit.duplicateIds, [], 'rendered document IDs are unique');
+  assert.deepEqual(audit.unnamedButtons, [], 'every visible button has an accessible name');
+  assert.deepEqual(audit.missingControls, [], 'every aria-controls target exists');
+  assert.deepEqual(audit.illegalBooleanAria, [], 'aria-expanded and aria-pressed values are legal');
+  assert.deepEqual(audit.illegalCurrent, [], 'aria-current values are legal');
+  assert.deepEqual(audit.invalidHeaders, [], 'every rendered table header declares scope');
+  assert.ok(audit.liveRegions.length <= 3, `visible live regions are bounded (${audit.liveRegions.length} <= 3)`);
+  return audit;
+}
+
+async function inspectViewport(page, width, { screenshot, requireChapterScroll = false, requireTableScroll = false } = {}) {
+  await page.setViewportSize({ width, height: 900 });
+  await page.waitForTimeout(50);
+  const metrics = await page.evaluate(() => {
+    const visible = element => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const box = selector => {
+      const element = document.querySelector(selector);
+      return element ? { clientWidth: element.clientWidth, scrollWidth: element.scrollWidth } : null;
+    };
+    const allowedScrollers = new Set(['chapter-navigation', 'batch-review__table-scroll', 'peak-table-scroll']);
+    const clipped = [...document.querySelectorAll('[data-testid="search-results-workbench"] *')]
+      .filter(visible)
+      .filter(element => !String(element.className).includes('sr-only'))
+      .filter(element => element.scrollWidth > element.clientWidth + 1)
+      .filter(element => {
+        const overflow = getComputedStyle(element).overflowX;
+        return ['hidden', 'clip'].includes(overflow)
+          && ![...allowedScrollers].some(className => element.classList.contains(className));
+      })
+      .filter(element => !element.matches('.evidence-record-disclosure__summary strong'))
+      .map(element => ({ tag: element.tagName, className: element.className, clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
+    const workbench = document.querySelector('[data-testid="search-results-workbench"]');
+    const longContent = workbench ? [...workbench.querySelectorAll('h2, strong, dd, pre, td, .evidence-record-disclosure__summary')]
+      .filter(visible)
+      .filter(element => element.textContent.trim().length >= 24) : [];
+    const buttons = workbench ? [...workbench.querySelectorAll('button')].filter(visible) : [];
+    const overlaps = [];
+    for (const content of longContent) {
+      const contentRect = content.getBoundingClientRect();
+      for (const button of buttons) {
+        if (content.contains(button) || button.contains(content)) continue;
+        const buttonRect = button.getBoundingClientRect();
+        if (contentRect.left < buttonRect.right && contentRect.right > buttonRect.left
+          && contentRect.top < buttonRect.bottom && contentRect.bottom > buttonRect.top) {
+          overlaps.push({ content: content.textContent.trim().slice(0, 60), button: button.textContent.trim().slice(0, 40) });
+        }
+      }
+    }
+    const mobileTargets = [...document.querySelectorAll('.search-view button, .search-view input, .search-view textarea, .search-view select, .search-view [tabindex="0"]')]
+      .filter(visible)
+      .map(element => ({ name: element.getAttribute('aria-label') || element.textContent.trim().slice(0, 40) || element.id, tag: element.tagName, width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }));
+    const filterTops = [...document.querySelectorAll('.chapter-filter-group__buttons button')]
+      .filter(visible)
+      .map(element => Math.round(element.getBoundingClientRect().top));
+    return {
+      document: { clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth },
+      workbench: box('[data-testid="search-results-workbench"]'),
+      chapter: box('.chapter-navigation'),
+      table: box('.batch-review__table-scroll'),
+      clipped,
+      overlaps,
+      mobileTargets,
+      filterRows: new Set(filterTops).size,
+    };
+  });
+  assert.ok(metrics.document.scrollWidth <= metrics.document.clientWidth, `${width}px document has no horizontal overflow`);
+  if (metrics.workbench) assert.ok(metrics.workbench.scrollWidth <= metrics.workbench.clientWidth, `${width}px workbench contains its own overflow`);
+  assert.deepEqual(metrics.clipped, [], `${width}px workbench descendants are not unintentionally clipped`);
+  assert.deepEqual(metrics.overlaps, [], `${width}px long content does not overlap workbench buttons`);
+  if (requireChapterScroll) assert.ok(metrics.chapter?.scrollWidth > metrics.chapter?.clientWidth, `${width}px chapter navigation owns horizontal scrolling`);
+  if (requireTableScroll) assert.ok(metrics.table?.scrollWidth > metrics.table?.clientWidth, `${width}px batch table owns horizontal scrolling`);
+  if (width === 375) {
+    const undersized = metrics.mobileTargets.filter(target => target.height < 44 || target.width < 44);
+    assert.deepEqual(undersized, [], '375px visible controls expose at least a 44 by 44px touch target');
+    if (metrics.filterRows > 0) assert.ok(metrics.filterRows > 1, '375px chapter filters wrap to multiple rows');
+  }
+  if (screenshot) await page.screenshot({ path: path.join(screenshotRoot, screenshot), fullPage: true });
+  const compactMetrics = {
+    ...metrics,
+    touchTargets: {
+      count: metrics.mobileTargets.length,
+      minimumWidth: metrics.mobileTargets.length ? Math.min(...metrics.mobileTargets.map(target => target.width)) : null,
+      minimumHeight: metrics.mobileTargets.length ? Math.min(...metrics.mobileTargets.map(target => target.height)) : null,
+    },
+  };
+  delete compactMetrics.mobileTargets;
+  return compactMetrics;
+}
+
+async function inspectContrast(page) {
+  const tokens = await page.evaluate(() => {
+    const sample = (selector, pseudo = null) => {
+      const element = document.querySelector(selector);
+      const style = getComputedStyle(element, pseudo);
+      let backgroundElement = element;
+      let background = style.backgroundColor;
+      while (backgroundElement && (background === 'rgba(0, 0, 0, 0)' || background === 'transparent')) {
+        backgroundElement = backgroundElement.parentElement;
+        background = backgroundElement ? getComputedStyle(backgroundElement).backgroundColor : 'rgb(255, 255, 255)';
+      }
+      return { color: style.color, background };
+    };
+    return {
+      body: sample('.search-results-workbench p'),
+      label: sample('.search-field-label'),
+      placeholder: sample('#compound-search', '::placeholder'),
+      focus: { color: getComputedStyle(document.querySelector('.search-main')).getPropertyValue('--focus-ring').trim(), background: getComputedStyle(document.querySelector('.search-control-panel')).backgroundColor },
+    };
+  });
+  const ratios = Object.fromEntries(Object.entries(tokens).map(([key, value]) => [key, contrastRatio(value.color, value.background)]));
+  assert.ok(ratios.body >= 4.5, `body text contrast is ${ratios.body.toFixed(2)}:1`);
+  assert.ok(ratios.label >= 4.5, `label contrast is ${ratios.label.toFixed(2)}:1`);
+  assert.ok(ratios.placeholder >= 4.5, `placeholder contrast is ${ratios.placeholder.toFixed(2)}:1`);
+  assert.ok(ratios.focus >= 3, `focus indicator contrast is ${ratios.focus.toFixed(2)}:1`);
+  return { tokens, ratios };
+}
+
 async function verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin }) {
   const coreFixture = readFileSync(path.join(frontendRoot, 'public', 'aroma_data_merged.json'), 'utf8');
   const bookFixture = readFileSync(path.join(frontendRoot, 'public', 'book_flavor_chemistry_index.json'), 'utf8');
@@ -158,6 +333,16 @@ const successfulCompound = {
   const openScenario = async ({ femaHandler, compoundHandler, coreHandler, bookHandler } = {}) => {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const page = await context.newPage();
+    const diagnostics = { pageErrors: [], consoleErrors: [], expectedFixtureNetworkErrors: [] };
+    page.on('pageerror', error => diagnostics.pageErrors.push(error.message));
+    page.on('console', message => {
+      if (message.type() !== 'error') return;
+      if (/^Failed to load resource: the server responded with a status of 503/.test(message.text())) {
+        diagnostics.expectedFixtureNetworkErrors.push(message.text());
+      } else {
+        diagnostics.consoleErrors.push(message.text());
+      }
+    });
     const counts = { core: 0, book: 0, fema: 0, compound: 0 };
     const requestUrls = { core: [], book: [], fema: [], compound: [] };
     page.on('request', request => {
@@ -186,7 +371,12 @@ const successfulCompound = {
       })))(route, counts);
     });
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-    return { context, page, counts, requestUrls };
+    return { context, page, counts, requestUrls, diagnostics };
+  };
+  const closeScenario = async (scenario) => {
+    assert.deepEqual(scenario.diagnostics.pageErrors, [], 'state scenario has no page errors or unhandled rejections');
+    assert.deepEqual(scenario.diagnostics.consoleErrors, [], 'state scenario has no console errors');
+    await scenario.context.close();
   };
 
   const compoundScenario = await openScenario({
@@ -208,6 +398,7 @@ const successfulCompound = {
     const flavordb = summary.getByRole('listitem').filter({ hasText: 'FlavorDB2' });
     await pubchem.getByText('失败', { exact: true }).waitFor();
     await flavordb.getByText('失败', { exact: true }).waitFor();
+    await page.screenshot({ path: path.join(screenshotRoot, 'search-workbench-state-failed.png'), fullPage: true });
     await workbench.getByRole('button', { name: '引用与导出' }).click();
     const exportWarning = workbench.locator('.citation-export-chapter__source-warning');
     await exportWarning.waitFor();
@@ -236,6 +427,7 @@ const successfulCompound = {
     await pubchem.getByRole('button', { name: '重试', exact: true }).click();
     await pubchem.getByRole('button', { name: '重试中…', exact: true }).waitFor();
     assert.equal(await pubchem.getByRole('button').isDisabled(), true, 'compound retry button is disabled while loading');
+    await page.screenshot({ path: path.join(screenshotRoot, 'search-workbench-state-disabled.png'), fullPage: true });
     assert.match(await local.textContent(), /可用/, 'local thresholds remain visible during compound retry');
     await workbench.getByText('8857', { exact: true }).waitFor({ timeout: 30_000 });
     await pubchem.getByText('可用', { exact: true }).waitFor();
@@ -250,7 +442,7 @@ const successfulCompound = {
     }, 'compound retry increments only the shared compound endpoint');
     evidence.compound = { ...counts };
   } finally {
-    await compoundScenario.context.close();
+    await closeScenario(compoundScenario);
   }
 
   const partialCompoundScenario = await openScenario({
@@ -279,6 +471,7 @@ const successfulCompound = {
     const flavordb = summary.getByRole('listitem').filter({ hasText: 'FlavorDB2' });
     await pubchem.getByText('可用', { exact: true }).waitFor();
     await flavordb.getByText('失败', { exact: true }).waitFor();
+    await page.screenshot({ path: path.join(screenshotRoot, 'search-workbench-state-partial.png'), fullPage: true });
     assert.deepEqual(counts, { core: 1, book: 1, fema: 1, compound: 1 }, 'partial compound scenario starts each source exactly once');
     await flavordb.getByRole('button', { name: '重试', exact: true }).click();
     await flavordb.getByRole('button', { name: '重试中…', exact: true }).waitFor();
@@ -288,7 +481,7 @@ const successfulCompound = {
     assert.deepEqual(counts, { core: 1, book: 1, fema: 1, compound: 2 }, 'partial retry increments only the shared compound endpoint');
     evidence.partialCompound = { ...counts, pubchemRetained: true };
   } finally {
-    await partialCompoundScenario.context.close();
+    await closeScenario(partialCompoundScenario);
   }
 
   const femaScenario = await openScenario({
@@ -312,7 +505,8 @@ const successfulCompound = {
     await workbench.getByText('8857', { exact: true }).waitFor({ timeout: 30_000 });
     const beforeRetry = { ...counts };
     assert.deepEqual(beforeRetry, { core: 1, book: 1, fema: 1, compound: 1 }, 'FEMA scenario starts each source exactly once');
-    await fema.getByRole('button', { name: '重试', exact: true }).click();
+    await fema.getByRole('button', { name: '重试', exact: true }).focus();
+    await page.keyboard.press('Enter');
     await fema.getByRole('button', { name: '重试中…', exact: true }).waitFor();
     assert.equal(await workbench.getByText('8857', { exact: true }).count(), 1, 'compound identity stays visible during FEMA retry');
     const retainedRetry = fema.getByRole('button', { name: '重试', exact: true });
@@ -331,7 +525,7 @@ const successfulCompound = {
     }, 'FEMA retry increments only the FEMA endpoint');
     evidence.fema = { ...counts };
   } finally {
-    await femaScenario.context.close();
+    await closeScenario(femaScenario);
   }
 
   let bookAttempt = 0;
@@ -359,13 +553,14 @@ const successfulCompound = {
     assert.deepEqual(counts, { core: 1, book: 2, fema: 1, compound: 1 }, 'book retry increments only the book request');
     evidence.book = { ...counts };
   } finally {
-    await bookScenario.context.close();
+    await closeScenario(bookScenario);
   }
 
   let coreAttempt = 0;
   const coreScenario = await openScenario({
-    coreHandler: (route) => {
+    coreHandler: async (route) => {
       coreAttempt += 1;
+      if (coreAttempt === 1) await new Promise(resolve => setTimeout(resolve, 500));
       return coreAttempt === 1
         ? route.fulfill({ status: 503, body: 'fixture core failure' })
         : route.fulfill({ status: 200, contentType: 'application/json', body: coreFixture });
@@ -375,8 +570,11 @@ const successfulCompound = {
     const { page, counts, requestUrls } = coreScenario;
     const input = page.getByLabel('化合物名称或 CAS 号');
     await input.fill('141-78-6');
+    await page.getByText('正在建立化合物档案', { exact: true }).waitFor();
+    await page.screenshot({ path: path.join(screenshotRoot, 'search-workbench-state-loading.png'), fullPage: true });
     const error = page.getByTestId('core-search-error');
     await error.getByText('暂时无法完成检索', { exact: true }).waitFor();
+    await page.screenshot({ path: path.join(screenshotRoot, 'search-workbench-state-core-error.png'), fullPage: true });
     await page.getByRole('button', { name: '经典版' }).click();
     assert.equal(await input.inputValue(), '141-78-6', 'core error preserves the query');
     assert.equal(await page.getByRole('button', { name: '经典版' }).getAttribute('aria-pressed'), 'true', 'core error preserves the selected result view');
@@ -389,9 +587,10 @@ const successfulCompound = {
     await page.getByTestId('search-results-workbench').getByText('CAS 141-78-6', { exact: true }).waitFor();
     await input.fill('definitely missing compound');
     await page.getByText('未找到可确认的化合物身份', { exact: true }).waitFor();
+    await page.screenshot({ path: path.join(screenshotRoot, 'search-workbench-state-no-match.png'), fullPage: true });
     evidence.core = { core: counts.core, inputPreserved: true, viewPreserved: true, noMatchDistinguished: true };
   } finally {
-    await coreScenario.context.close();
+    await closeScenario(coreScenario);
   }
 
   return evidence;
@@ -475,7 +674,7 @@ try {
       pubchem: {
         found: true,
         cid: isSelectedCandidate ? 18127010 : 8857,
-        title: isSelectedCandidate ? 'Selected Bourgeonal' : 'Ethyl acetate',
+        title: isSelectedCandidate ? 'Selected Bourgeonal' : 'Ethyl acetate with an intentionally extended English identity label for responsive workbench verification',
         molecular_formula: isSelectedCandidate ? 'C11H14O' : 'C4H8O2',
         smiles: 'CCOC(=O)C',
         inchi_key: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N',
@@ -500,6 +699,7 @@ try {
     && record.raw_text === '水中觉察嗅阈值0.6μg/L，识别 '
   ));
   assert.ok(lineageThreshold, 'book lineage fixture target exists');
+  lineageThreshold.raw_text += '；用于验证超长中文阈值原始记录在窄屏下能够自然换行且不会覆盖重试、复制或导出按钮。';
   lineageThreshold.source_corrections = [{
     source_text: '0.6pg/L',
     corrected_text: '0.6μg/L',
@@ -583,6 +783,30 @@ try {
   await page.route('**/structures/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(structureFixture) }));
 
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Tab');
+  const skipLink = page.getByRole('link', { name: '跳到检索区域' });
+  assert.equal(await skipLink.evaluate(element => document.activeElement === element), true, 'first Tab reaches the skip link');
+  await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#main-content').evaluate(element => document.activeElement === element || location.hash === '#main-content'), true, 'skip link targets the search main region');
+  const searchModeGroup = page.locator('.search-mode-tabs');
+  const bulkModeKeyboard = searchModeGroup.getByRole('button', { name: '批量匹配' });
+  const singleModeKeyboard = searchModeGroup.getByRole('button', { name: '单物质检索' });
+  await bulkModeKeyboard.focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await bulkModeKeyboard.getAttribute('aria-pressed'), 'true', 'Enter activates bulk search mode');
+  await singleModeKeyboard.focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await singleModeKeyboard.getAttribute('aria-pressed'), 'true', 'Enter restores single search mode');
+  const keyboardMatchMode = page.getByRole('group', { name: '匹配方式' });
+  const fuzzyKeyboard = keyboardMatchMode.getByRole('button', { name: '模糊', exact: true });
+  const exactKeyboard = keyboardMatchMode.getByRole('button', { name: '精确', exact: true });
+  await fuzzyKeyboard.focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await fuzzyKeyboard.getAttribute('aria-pressed'), 'true', 'Enter activates fuzzy matching');
+  await exactKeyboard.focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await exactKeyboard.getAttribute('aria-pressed'), 'true', 'Enter restores exact matching');
   const input = page.getByLabel('化合物名称或 CAS 号');
   await input.waitFor({ timeout: 30_000 });
   await input.fill('141-78-6');
@@ -757,8 +981,10 @@ try {
       value: () => new Promise((resolve, reject) => window.__clipboardFixture.pending.push({ resolve, reject })),
     });
   });
-  await workbench.getByRole('button', { name: '复制引用' }).click();
-  await workbench.getByRole('button', { name: '复制引用' }).click();
+  const copyCitationButton = workbench.getByRole('button', { name: '复制引用' });
+  await copyCitationButton.focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__clipboardFixture.pending.length === 2);
   await page.evaluate(() => window.__clipboardFixture.pending[1].reject(new Error('latest clipboard request denied')));
   await workbench.getByText('复制失败', { exact: true }).waitFor({ state: 'visible' });
@@ -807,7 +1033,8 @@ try {
   assert.notEqual(Buffer.compare(newExports.compact.bytes, newExports.detailed.bytes), 0, 'compact and detailed exports contain different content');
 
   const thresholdChapter = chapterNavigation.getByRole('button', { name: /阈值/ });
-  await thresholdChapter.click();
+  await thresholdChapter.focus();
+  await page.keyboard.press('Enter');
   assert.equal(await thresholdChapter.getAttribute('aria-current'), 'page', 'clicked chapter becomes current');
   await page.keyboard.press('Tab');
   await page.keyboard.press('Shift+Tab');
@@ -917,46 +1144,30 @@ try {
   await allTypeFilter.click();
   await rawRecordButton.focus();
 
-  const assertNoPageOverflow = async (width) => {
-    await page.setViewportSize({ width, height: 900 });
-    const dimensions = await page.evaluate(() => ({
-      clientWidth: document.documentElement.clientWidth,
-      scrollWidth: document.documentElement.scrollWidth,
+  const viewportMetrics = {};
+  for (const width of [1440, 1024, 768, 375]) {
+    viewportMetrics[width] = await inspectViewport(page, width, {
+      screenshot: `search-workbench-${width}.png`,
+      requireChapterScroll: width <= 768,
+    });
+  }
+  const mobileDisclosureShadow = await rawRecordButton.locator('..').evaluate(
+    element => getComputedStyle(element).boxShadow,
+  );
+  assert.match(mobileDisclosureShadow, /rgb\(255, 255, 255\)/, 'mobile disclosure focus keeps its white inner ring');
+  assert.match(mobileDisclosureShadow, /rgb\(30, 58, 138\)/, 'mobile disclosure focus keeps its cobalt outer ring');
+  const accessibilityAudit = await inspectAccessibility(page);
+  const contrastAudit = await inspectContrast(page);
+  await rawRecordButton.focus();
+  const tabOrderEvidence = [];
+  for (let index = 0; index < 20; index += 1) {
+    await page.keyboard.press('Tab');
+    tabOrderEvidence.push(await page.evaluate(() => {
+      const active = document.activeElement;
+      return `${active?.tagName || ''}:${active?.getAttribute('aria-label') || active?.textContent?.trim().slice(0, 32) || active?.id || ''}`;
     }));
-    assert.ok(
-      dimensions.scrollWidth <= dimensions.clientWidth,
-      `${width}px viewport has no page-level horizontal overflow (${dimensions.scrollWidth} <= ${dimensions.clientWidth})`,
-    );
-    if (width === 375) {
-      const switchHeights = await page.locator('.result-view-switch button').evaluateAll(
-        buttons => buttons.map(button => button.getBoundingClientRect().height),
-      );
-      assert.ok(switchHeights.every(height => height >= 44), 'mobile result-view controls are at least 44px high');
-      const chapterHeights = await chapterButtons.evaluateAll(
-        buttons => buttons.map(button => button.getBoundingClientRect().height),
-      );
-      assert.ok(chapterHeights.every(height => height >= 44), 'mobile chapter controls are at least 44px high');
-      const filterHeights = await thresholdPanel.locator('.chapter-filter-group__buttons button').evaluateAll(
-        buttons => buttons.map(button => button.getBoundingClientRect().height),
-      );
-      assert.ok(filterHeights.every(height => height >= 44), 'mobile threshold filters are at least 44px high');
-      const workbenchDimensions = await workbench.evaluate(element => ({
-        clientWidth: element.clientWidth,
-        scrollWidth: element.scrollWidth,
-      }));
-      assert.ok(
-        workbenchDimensions.scrollWidth <= workbenchDimensions.clientWidth,
-        'mobile workbench contains horizontal scrolling within its chapter selector',
-      );
-      const mobileDisclosureShadow = await rawRecordButton.locator('..').evaluate(
-        element => getComputedStyle(element).boxShadow,
-      );
-      assert.match(mobileDisclosureShadow, /rgb\(255, 255, 255\)/, 'mobile disclosure focus keeps its white inner ring');
-      assert.match(mobileDisclosureShadow, /rgb\(30, 58, 138\)/, 'mobile disclosure focus keeps its cobalt outer ring');
-    }
-  };
-  await assertNoPageOverflow(1440);
-  await assertNoPageOverflow(375);
+  }
+  assert.ok(new Set(tabOrderEvidence).size >= 10, 'Tab order advances through the workbench without a focus trap');
   await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.waitForLoadState('networkidle');
@@ -984,7 +1195,8 @@ try {
   );
   assert.equal(await page.getByTestId('classic-search-results').count(), 0, 'classic result marker is absent in the new dossier');
   const sharedBeforeClassic = sharedCounts();
-  await classicButton.click();
+  await classicButton.focus();
+  await page.keyboard.press('Enter');
   const classicResults = page.getByTestId('classic-search-results');
   await classicResults.waitFor({ state: 'attached' });
   await page.getByText('CAS 141-78-6', { exact: true }).first().waitFor({ state: 'visible', timeout: 30_000 });
@@ -1012,7 +1224,8 @@ try {
   await pubchemFilter.click();
   await bookFilter.click();
 
-  await newButton.click();
+  await newButton.focus();
+  await page.keyboard.press('Enter');
   await workbench.waitFor();
   await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor({ state: 'visible' });
   assert.equal(await workbench.getByText('8857', { exact: true }).count(), 1, 'new dossier keeps PubChem identity when the classic filter is disabled');
@@ -1045,7 +1258,8 @@ try {
   };
   assert.equal(requestsBeforeSelection.compound, 0, 'second compound candidate is not prefetched');
   assert.equal(requestsBeforeSelection.fema, 0, 'second FEMA candidate is not prefetched');
-  await secondCandidate.click();
+  await secondCandidate.focus();
+  await page.keyboard.press('Enter');
   await workbench.getByText('CAS 18127-01-0', { exact: true }).waitFor({ state: 'visible' });
   const selectedDossierHeading = workbench.locator('.compound-identity-header h2');
   assert.equal(await selectedDossierHeading.evaluate(node => document.activeElement === node), true, 'candidate selection focuses the dossier heading');
@@ -1340,8 +1554,88 @@ try {
   await page.reload({ waitUntil: 'domcontentloaded' });
   assert.equal(await page.getByRole('button', { name: '新版档案' }).getAttribute('aria-pressed'), 'true', 'new dossier preference survives reload');
 
+  const finalQa = { queries: {}, regressions: {}, screenshots: [], viewportMetrics };
+  const finalInput = page.getByLabel('化合物名称或 CAS 号');
+  await finalInput.fill('141-78-6');
+  await page.getByTestId('search-results-workbench').getByText('CAS 141-78-6', { exact: true }).waitFor();
+  finalQa.queries.singleCasExact = { query: '141-78-6', matched: true };
+
+  const finalMatchMode = page.getByRole('group', { name: '匹配方式' });
+  await finalMatchMode.getByRole('button', { name: '模糊', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await finalInput.fill('ethyl acetate');
+  await page.getByTestId('search-results-workbench').waitFor();
+  await page.getByTestId('search-results-workbench').getByText(/CAS 141-78-6|请选择匹配实体/).first().waitFor();
+  finalQa.queries.singleEnglishFuzzy = { query: 'ethyl acetate', fuzzyPressed: true, rendered: true };
+
+  await page.getByRole('button', { name: '批量匹配' }).focus();
+  await page.keyboard.press('Enter');
+  const finalBulkMatchMode = page.getByRole('group', { name: '匹配方式' });
+  await finalBulkMatchMode.getByRole('button', { name: '精确', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  const finalBulkInput = page.getByLabel('请输入需要匹配的物质名单（每行一个记录）');
+  await finalBulkInput.fill('141-78-6\n64-17-5\nunknown');
+  const finalBatch = page.getByRole('region', { name: '批量审查结果' });
+  await finalBatch.waitFor({ state: 'visible' });
+  assert.deepEqual(
+    await finalBatch.locator('tbody tr').evaluateAll(rows => rows.map(row => row.dataset.status)),
+    ['exact', 'exact', 'unmatched'],
+    'final bulk mixed exact query preserves exact and unmatched states',
+  );
+  const finalTableScroller = finalBatch.locator('.batch-review__table-scroll');
+  await finalTableScroller.focus();
+  assert.equal(await finalTableScroller.evaluate(element => document.activeElement === element), true, 'batch table scroller is keyboard focusable');
+  const finalExactFilter = finalBatch.getByRole('button', { name: '精确', exact: true });
+  await finalExactFilter.focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await finalExactFilter.getAttribute('aria-pressed'), 'true', 'batch filters activate with Enter and expose selection semantically');
+  finalQa.queries.bulkMixedExact = { queryCount: 3, statuses: ['exact', 'exact', 'unmatched'] };
+  finalQa.batchMobile = await inspectViewport(page, 375, {
+    screenshot: 'search-workbench-batch-mobile.png',
+    requireTableScroll: true,
+  });
+  finalQa.screenshots.push('search-workbench-batch-mobile.png');
+
+  await page.goto(appRootUrl, { waitUntil: 'domcontentloaded' });
+  const homeHeading = page.getByRole('heading', { name: 'FlavorThresholdDB', level: 1 });
+  await homeHeading.waitFor();
+  const homeTitleMetrics = await homeHeading.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return {
+      left: rect.left,
+      right: rect.right,
+      viewportWidth: window.innerWidth,
+      documentClientWidth: document.documentElement.clientWidth,
+      documentScrollWidth: document.documentElement.scrollWidth,
+    };
+  });
+  assert.ok(homeTitleMetrics.left >= 0 && homeTitleMetrics.right <= homeTitleMetrics.viewportWidth, 'mobile home title stays inside the viewport');
+  assert.ok(homeTitleMetrics.documentScrollWidth <= homeTitleMetrics.documentClientWidth, 'mobile home route has no page-level horizontal overflow');
+  finalQa.regressions.home = { heading: true, title: homeTitleMetrics };
+
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.goto(`${appRootUrl}shimadzu-analysis/`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: '岛津气质数据一站式分析' }).waitFor();
+  await page.locator('.shimadzu-settings').scrollIntoViewIfNeeded();
+  await page.locator('.shimadzu-settings').waitFor({ state: 'visible' });
+  finalQa.regressions.shimadzu = { heading: true, settings: true };
+
+  await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('化合物名称或 CAS 号').fill('141-78-6');
+  await page.getByRole('button', { name: '经典版' }).focus();
+  await page.keyboard.press('Enter');
+  const classicRegression = page.getByTestId('classic-search-results');
+  await classicRegression.waitFor({ state: 'attached' });
+  assert.ok(await page.locator('[data-filter-key]').count() > 0, 'classic filters remain available');
+  const classicExportButton = page.locator('.search-toolbar-export .result-export-button');
+  await classicExportButton.waitFor({ state: 'visible' });
+  finalQa.regressions.classic = { layout: true, filters: true, export: true };
+  finalQa.screenshots.push(...[1440, 1024, 768, 375].map(width => `search-workbench-${width}.png`));
+
   const evidenceStateRetries = await verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin });
 
+  const duplicateKeyErrors = consoleErrors.filter(message => /unique "key" prop|same key|duplicate key/i.test(message));
+  assert.deepEqual(duplicateKeyErrors, [], 'PubChem and other rendered lists emit no duplicate-key diagnostics');
   assert.deepEqual(pageErrors, [], 'page errors');
   assert.deepEqual(consoleErrors, [], 'console errors');
   e2eStages.push('complete');
@@ -1374,6 +1668,11 @@ try {
     },
     selectedCandidateRequestEvidence,
     bulkLimitRequestEvidence,
+    accessibilityAudit,
+    contrastAudit,
+    tabOrderEvidence,
+    finalQa,
+    consoleDiagnostics: { pageErrors: pageErrors.length, consoleErrors: consoleErrors.length, duplicateKeyErrors: duplicateKeyErrors.length },
     evidenceStateRetries,
     batchReviewEvidence,
     e2eStages,

@@ -655,6 +655,7 @@ select:focus-visible,
 }
 
 .search-main {
+  --focus-ring: #1e3a8a;
   width: min(var(--workbench-max), calc(100% - 48px));
   margin: -16px auto 0;
 }
@@ -766,7 +767,7 @@ select:focus-visible,
 }
 
 .search-input::placeholder {
-  color: #94a3b8;
+  color: var(--color-slate-500);
 }
 
 .match-mode-control {
@@ -3784,6 +3785,31 @@ select:focus-visible,
 }
 
 @media (max-width: 560px) {
+  .search-view .science-mobile-contact {
+    width: 44px;
+    height: 44px;
+  }
+
+  .search-view .science-language button {
+    min-width: 44px;
+    height: 44px;
+  }
+
+  .search-view .search-mode-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .search-view .search-toolbar-export,
+  .search-view .result-export-button {
+    width: 100%;
+  }
+
+  .search-view .result-export-button,
+  .search-view .match-mode-control button {
+    min-height: 44px;
+  }
+
   .science-brand {
     font-size: 18px;
   }
