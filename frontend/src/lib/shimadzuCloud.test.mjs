@@ -22,6 +22,7 @@ test('sets result retention to seven days and records to ninety days', () => {
 test('migration enforces approval, RLS, private storage and cleanup', async () => {
   const sql = await readFile(new URL('../../../supabase/migrations/20260803070000_shimadzu_browser_analysis.sql', import.meta.url), 'utf8')
   const schedule = await readFile(new URL('../../../supabase/migrations/20260803073000_shimadzu_retention_schedule.sql', import.meta.url), 'utf8')
+  const bootstrap = await readFile(new URL('../../../supabase/migrations/20260803080000_shimadzu_admin_bootstrap.sql', import.meta.url), 'utf8')
   const edgeFunction = await readFile(new URL('../../../supabase/functions/shimadzu-retention-cleanup/index.ts', import.meta.url), 'utf8')
   for (const required of [
     'enable row level security', "approval_status = 'approved'", "'shimadzu-results'", 'cleanup_expired_shimadzu_data',
@@ -33,4 +34,8 @@ test('migration enforces approval, RLS, private storage and cleanup', async () =
   assert.match(schedule, /17 3 \* \* \*/)
   assert.match(edgeFunction, /storage\.from\('shimadzu-results'\)\.remove/)
   assert.match(edgeFunction, /SUPABASE_SERVICE_ROLE_KEY/)
+  assert.match(bootstrap, /claim_first_shimadzu_admin/)
+  assert.match(bootstrap, /administrator already initialized/)
+  assert.match(bootstrap, /digest\(coalesce\(bootstrap_code/)
+  assert.doesNotMatch(bootstrap, /9da6095aa8cc4a3f98b94a1bf4e936c6/)
 })

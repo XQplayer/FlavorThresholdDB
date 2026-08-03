@@ -241,6 +241,9 @@
 .shimadzu-approval.state-approved { color: var(--sz-success); background: var(--sz-success-soft); }
 .shimadzu-account-message { grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid var(--sz-line); color: var(--sz-warning) !important; }
 .shimadzu-approval-queue { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--sz-line); }
+.shimadzu-bootstrap { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--sz-line); display: grid; grid-template-columns: minmax(240px, 1fr) 260px auto; align-items: center; gap: 10px; }
+.shimadzu-bootstrap input { min-height: 38px; padding: 0 11px; border: 1px solid var(--sz-line-strong); border-radius: 9px; color: var(--sz-ink); background: var(--sz-surface-strong); font-size: 10px; }
+.shimadzu-bootstrap button { min-height: 38px; padding: 0 12px; border: 1px solid var(--sz-accent); border-radius: 9px; color: white; background: var(--sz-accent); font-size: 10px; font-weight: 700; cursor: pointer; }
 .shimadzu-approval-queue h3 { margin: 0 0 8px; font-size: 11px; }
 .shimadzu-approval-queue > div { min-height: 42px; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; }
 .shimadzu-approval-queue span { font-size: 10.5px; }
@@ -796,6 +799,7 @@
   .shimadzu-account { grid-template-columns: 1fr; }
   .shimadzu-auth-form { grid-column: auto; display: grid; }
   .shimadzu-auth-form input { width: 100%; }
+  .shimadzu-bootstrap { grid-template-columns: 1fr; }
   .shimadzu-approval,
   .shimadzu-signout { justify-self: start; }
   .shimadzu-method-principles { width: 100%; display: grid; grid-template-columns: 1fr; }
