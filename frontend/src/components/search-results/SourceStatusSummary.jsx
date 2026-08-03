@@ -22,9 +22,10 @@ export default function SourceStatusSummary({ sources, isEnglish = false, onRetr
         {entries.map(([name, source]) => {
           const status = source?.status ?? source?.state ?? 'not_requested';
           const label = STATUS_LABELS[status] || STATUS_LABELS.not_requested;
+          const sourceLabel = (isEnglish ? source?.labelEn : source?.labelZh) || name;
           return (
             <li key={name} data-status={STATUS_LABELS[status] ? status : 'not_requested'}>
-              <span>{name}</span>
+              <span>{sourceLabel}</span>
               <strong>{isEnglish ? label.en : label.zh}</strong>
               {status === 'failed' && onRetry && (
                 <button type="button" onClick={() => onRetry(name)}>

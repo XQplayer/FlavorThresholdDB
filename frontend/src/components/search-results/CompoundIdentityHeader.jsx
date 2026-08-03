@@ -1,9 +1,22 @@
 export default function CompoundIdentityHeader({ identity, coveredChapterCount = 0, isEnglish = false }) {
   if (!identity) return null;
 
+  const englishName = String(identity.englishName || '').trim();
+  const chineseName = String(identity.chineseName || '').trim();
   const preferredName = isEnglish
-    ? identity.englishName || identity.chineseName
-    : identity.chineseName || identity.englishName;
+    ? englishName || chineseName
+    : chineseName || englishName;
+  const normalizeName = value => value.trim().toLowerCase();
+  const seenNames = new Set([normalizeName(preferredName)]);
+  const aliases = [
+    { label: isEnglish ? 'English' : '英文名', value: englishName },
+    { label: isEnglish ? 'Chinese' : '中文名', value: chineseName },
+  ].filter(({ value }) => {
+    const normalized = normalizeName(value);
+    if (!normalized || seenNames.has(normalized)) return false;
+    seenNames.add(normalized);
+    return true;
+  });
   const identityStatus = identity.cas && identity.cid
     ? (isEnglish ? 'CAS and CID linked' : 'CAS 与 CID 已关联')
     : identity.cas || identity.cid
@@ -23,12 +36,9 @@ export default function CompoundIdentityHeader({ identity, coveredChapterCount =
         </span>
         <h2>{preferredName || (isEnglish ? 'Unnamed compound' : '未命名化合物')}</h2>
         <div className="compound-identity-header__aliases">
-          {identity.englishName && (
-            <span><strong>{isEnglish ? 'English' : '英文名'}</strong>{identity.englishName}</span>
-          )}
-          {identity.chineseName && (
-            <span><strong>{isEnglish ? 'Chinese' : '中文名'}</strong>{identity.chineseName}</span>
-          )}
+          {aliases.map(({ label, value }) => (
+            <span key={label}><strong>{label}</strong>{value}</span>
+          ))}
         </div>
       </div>
       <dl className="compound-identity-header__facts">

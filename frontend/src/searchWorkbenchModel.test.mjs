@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import * as searchWorkbenchModel from './searchWorkbenchModel.js';
 import {
   CHAPTERS,
   createDefaultChapterFilters,
@@ -29,6 +30,62 @@ const integrated = {
   fema: { flavor_profile: ['fruity'] },
   profile: { pubchem: { cid: 8857, molecular_formula: 'C4H8O2' } },
 };
+
+test('derives dossier source states from observed local and upstream data', () => {
+  assert.equal(typeof searchWorkbenchModel.deriveDossierSourceStates, 'function');
+  const states = searchWorkbenchModel.deriveDossierSourceStates({
+    loading: false,
+    matchedResults: [threshold],
+    currentCas: threshold.cas,
+    femaProfile: { found: false },
+    compoundProfile: {
+      pubchem: { found: true },
+      flavordb: { found: false },
+    },
+  });
+
+  assert.deepEqual(Object.fromEntries(Object.entries(states).map(([name, state]) => [name, state.status])), {
+    local_thresholds: 'ready',
+    fema: 'no_data',
+    pubchem: 'ready',
+    flavordb: 'no_data',
+  });
+  assert.equal(states.local_thresholds.labelZh, '本地阈值');
+  assert.equal(states.flavordb.labelEn, 'FlavorDB2');
+});
+
+test('keeps pending, failed, and indeterminate source states distinct', () => {
+  assert.equal(typeof searchWorkbenchModel.deriveDossierSourceStates, 'function');
+  const pending = searchWorkbenchModel.deriveDossierSourceStates({
+    loading: true,
+    matchedResults: [{ cas: threshold.cas, threshold_data: [] }],
+    currentCas: threshold.cas,
+  });
+  assert.deepEqual(Object.fromEntries(Object.entries(pending).map(([name, state]) => [name, state.status])), {
+    local_thresholds: 'loading',
+    fema: 'loading',
+    pubchem: 'loading',
+    flavordb: 'loading',
+  });
+
+  const failed = searchWorkbenchModel.deriveDossierSourceStates({
+    matchedResults: [{ cas: threshold.cas, threshold_data: [] }],
+    currentCas: threshold.cas,
+    femaProfile: { found: false, error: 'offline' },
+    compoundProfile: { loading: false, error: 'offline' },
+  });
+  assert.deepEqual(Object.fromEntries(Object.entries(failed).map(([name, state]) => [name, state.status])), {
+    local_thresholds: 'no_data',
+    fema: 'failed',
+    pubchem: 'failed',
+    flavordb: 'failed',
+  });
+
+  const notRequested = searchWorkbenchModel.deriveDossierSourceStates();
+  assert.equal(notRequested.fema.status, 'not_requested');
+  assert.equal(notRequested.pubchem.status, 'not_requested');
+  assert.equal(notRequested.flavordb.status, 'not_requested');
+});
 
 test('defines eight bilingual compound-dossier chapters', () => {
   assert.deepEqual(CHAPTERS.map(({ id }) => id), [

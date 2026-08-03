@@ -13,7 +13,7 @@ import BioactivityEvidence from './components/BioactivityEvidence';
 import StructureEvidence from './components/StructureEvidence';
 import ResultViewSwitch from './components/search-results/ResultViewSwitch';
 import SearchResultsWorkbench from './components/search-results/SearchResultsWorkbench';
-import { buildCompoundDossier } from './searchWorkbenchModel';
+import { buildCompoundDossier, deriveDossierSourceStates } from './searchWorkbenchModel';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
 import { loadResultView, saveResultView } from './resultViewPreference';
@@ -621,12 +621,23 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       });
   }, [queryMatchedResults, femaProfiles, compoundProfiles, includeFlavorDescriptions, includePubChem, includeFlavorDB]);
 
+  const dossierSourceStates = useMemo(() => {
+    const currentCas = queryMatchedResults.find(item => item.cas)?.cas ?? null;
+    return deriveDossierSourceStates({
+      loading,
+      matchedResults: queryMatchedResults,
+      currentCas,
+      femaProfile: currentCas ? femaProfiles[currentCas] : undefined,
+      compoundProfile: currentCas ? compoundProfiles[currentCas] : undefined,
+    });
+  }, [loading, queryMatchedResults, femaProfiles, compoundProfiles]);
+
   const compoundDossier = useMemo(() => buildCompoundDossier({
     matchedResults: queryMatchedResults,
     integratedResults: integratedCompoundResults,
     bookResults,
-    sourceStates: {},
-  }), [queryMatchedResults, integratedCompoundResults, bookResults]);
+    sourceStates: dossierSourceStates,
+  }), [queryMatchedResults, integratedCompoundResults, bookResults, dossierSourceStates]);
 
   useEffect(() => {
     if (!queryMatchedResults.length) return;

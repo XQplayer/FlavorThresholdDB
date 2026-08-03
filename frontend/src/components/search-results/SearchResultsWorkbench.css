@@ -32,11 +32,6 @@
   box-shadow: 0 0.125rem 0.4rem rgb(15 23 42 / 18%);
 }
 
-.result-view-switch button:focus-visible {
-  outline: 3px solid #38bdf8;
-  outline-offset: 2px;
-}
-
 .search-results-workbench {
   --workbench-ink: #102a43;
   --workbench-muted: #415a70;
@@ -406,13 +401,15 @@
   margin: 0;
 }
 
+.result-view-switch button:focus-visible,
 .chapter-navigation__button:focus-visible,
 .source-status-summary button:focus-visible,
 .evidence-record-disclosure > button:focus-visible {
   position: relative;
   z-index: 1;
-  outline: 3px solid #0ea5e9;
+  outline: 2px solid transparent;
   outline-offset: 2px;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 5px #1e3a8a;
 }
 
 @media (max-width: 800px) {

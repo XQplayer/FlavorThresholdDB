@@ -177,8 +177,30 @@ try {
   const identityCas = page.getByText('CAS 141-78-6', { exact: true });
   await identityCas.waitFor({ state: 'visible', timeout: 30_000 });
   assert.equal(await identityCas.count(), 1, 'new dossier renders the complete CAS identity exactly once');
-  assert.equal(await workbench.getByText('英文名', { exact: true }).count(), 1, 'English alias is labelled when present');
-  assert.equal(await workbench.getByText('中文名', { exact: true }).count(), 1, 'Chinese alias is labelled when present');
+  const identityNames = await workbench.locator('.compound-identity-header').evaluate((header) => {
+    const preferred = header.querySelector('h2')?.textContent?.trim() || '';
+    const aliases = [...header.querySelectorAll('.compound-identity-header__aliases span')].map((alias) => {
+      const label = alias.querySelector('strong')?.textContent?.trim() || '';
+      return { label, value: alias.textContent.slice(label.length).trim() };
+    });
+    return { preferred, aliases };
+  });
+  const normalizeIdentityName = value => value.trim().toLowerCase();
+  assert.ok(identityNames.aliases.length > 0, 'a distinct bilingual alias remains visible');
+  assert.ok(
+    identityNames.aliases.every(({ value }) => normalizeIdentityName(value) !== normalizeIdentityName(identityNames.preferred)),
+    'aliases do not repeat the preferred heading',
+  );
+  assert.equal(
+    new Set(identityNames.aliases.map(({ value }) => normalizeIdentityName(value))).size,
+    identityNames.aliases.length,
+    'normalized aliases are unique',
+  );
+  const sourceSummary = workbench.getByLabel('来源状态');
+  assert.equal(await sourceSummary.count(), 1, 'observed source states are connected to the dossier');
+  const localThresholdState = sourceSummary.getByRole('listitem').filter({ hasText: '本地阈值' });
+  assert.equal(await localThresholdState.count(), 1, 'local threshold source is listed');
+  assert.match(await localThresholdState.textContent(), /可用/, 'local threshold records report a ready state');
 
   const chapterNavigation = page.getByRole('navigation', { name: '档案章节' });
   const chapterButtons = chapterNavigation.getByRole('button');
@@ -186,6 +208,12 @@ try {
   const thresholdChapter = chapterNavigation.getByRole('button', { name: /阈值/ });
   await thresholdChapter.click();
   assert.equal(await thresholdChapter.getAttribute('aria-current'), 'page', 'clicked chapter becomes current');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await thresholdChapter.evaluate(element => element === document.activeElement), true, 'keyboard focus returns to the active chapter');
+  const focusBoxShadow = await thresholdChapter.evaluate(element => getComputedStyle(element).boxShadow);
+  assert.match(focusBoxShadow, /rgb\(255, 255, 255\)/, 'focus treatment includes a white inner ring');
+  assert.match(focusBoxShadow, /rgb\(30, 58, 138\)/, 'focus treatment includes a dark cobalt outer ring');
 
   const rawRecordButton = workbench.getByRole('button', { name: /原始记录/ }).first();
   await rawRecordButton.waitFor({ state: 'visible' });

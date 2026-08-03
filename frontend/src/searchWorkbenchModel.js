@@ -61,6 +61,50 @@ export function normalizeSourceStatus(state) {
   return { ...source, status: normalized };
 }
 
+const sourceState = (status, labelZh, labelEn) => ({ status, labelZh, labelEn });
+
+const compoundSourceStatus = (currentCas, compoundProfile, sourceName) => {
+  if (!currentCas) return 'not_requested';
+  if (!compoundProfile || compoundProfile.loading) return 'loading';
+  if (compoundProfile.error) return 'failed';
+  const source = compoundProfile[sourceName];
+  if (!source) return 'not_requested';
+  if (source.error) return 'failed';
+  const normalized = normalizeSourceStatus(source).status;
+  if (normalized !== 'not_requested') return normalized;
+  if (source.found === true) return 'ready';
+  if (source.found === false) return 'no_data';
+  return 'not_requested';
+};
+
+export function deriveDossierSourceStates({
+  loading = false,
+  matchedResults = [],
+  currentCas = null,
+  femaProfile,
+  compoundProfile,
+} = {}) {
+  const hasLocalThresholds = asArray(matchedResults)
+    .some((item) => asArray(item?.threshold_data).length > 0);
+  const localStatus = loading ? 'loading' : hasLocalThresholds ? 'ready' : 'no_data';
+  const femaStatus = !currentCas
+    ? 'not_requested'
+    : !femaProfile || femaProfile.loading
+      ? 'loading'
+      : femaProfile.error
+        ? 'failed'
+        : femaProfile.found === false
+          ? 'no_data'
+          : 'ready';
+
+  return {
+    local_thresholds: sourceState(localStatus, '本地阈值', 'Local thresholds'),
+    fema: sourceState(femaStatus, 'FEMA', 'FEMA'),
+    pubchem: sourceState(compoundSourceStatus(currentCas, compoundProfile, 'pubchem'), 'PubChem', 'PubChem'),
+    flavordb: sourceState(compoundSourceStatus(currentCas, compoundProfile, 'flavordb'), 'FlavorDB2', 'FlavorDB2'),
+  };
+}
+
 const normaliseText = (value) => String(value ?? '').trim().toLocaleLowerCase().replace(/\s+/g, ' ');
 const normaliseCas = (value) => String(value ?? '').trim();
 
