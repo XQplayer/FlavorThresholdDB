@@ -26,6 +26,31 @@ export const getStageProgress = job => {
 
 export const isActiveJob = job => ['queued', 'running'].includes(job?.status)
 
+export const getEnginePresentation = capabilities => {
+  if (!capabilities) {
+    return {
+      state: 'checking',
+      title: '正在连接分析引擎',
+      detail: '正在检测本机运行时与已部署 skill。',
+      chip: 'ENGINE CHECK',
+    }
+  }
+  if (capabilities.available) {
+    return {
+      state: 'ready',
+      title: '本地分析引擎已就绪',
+      detail: 'OAV 暂未启用，结果保留完整审计链。',
+      chip: 'ENGINE ONLINE',
+    }
+  }
+  return {
+    state: 'unavailable',
+    title: '当前部署未连接分析引擎',
+    detail: '可下载模板；正式分析请在本地工作台运行。',
+    chip: 'ENGINE LOCAL ONLY',
+  }
+}
+
 export const getMonitorStageIndex = (job, totalStages = 7) => {
   if (!job) return 0
   const active = job.stages?.findIndex(stage => stage.status === 'running') ?? -1
