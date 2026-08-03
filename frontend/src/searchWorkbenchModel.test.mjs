@@ -119,6 +119,25 @@ test('maps production-style string thresholds without losing comparator or range
   assert.equal(filterThresholdRecords(records, createDefaultChapterFilters().thresholds).length, 2);
 });
 
+test('only parses a string value after an independent threshold type marker', () => {
+  const source = 'Wise et al. (2007); Miyazawa et al. (2009a) d 0.017 - 0.020';
+  const [record] = buildCompoundDossier({
+    matchedResults: [{ cas: '123-45-6', medium: '空气', threshold_data: [source] }],
+  }).thresholds.records;
+  assert.equal(record.type, 'd');
+  assert.equal(record.value, 0.017);
+  assert.equal(record.originalText, source);
+});
+
+test('leaves author-led strings without a threshold type unparsed', () => {
+  const source = 'Hofmann et al. (1995) 0.000 02 - 0.000 08';
+  const [record] = buildCompoundDossier({
+    matchedResults: [{ cas: '123-45-7', medium: '空气', threshold_data: [source] }],
+  }).thresholds.records;
+  assert.equal(record.value, null);
+  assert.equal(record.originalText, source);
+});
+
 test('gives thresholds stable unique ids and prioritizes a source record key', () => {
   const duplicateStrings = {
     cas: '108-24-7',
@@ -204,6 +223,7 @@ test('aggregates all media for one CAS without mutating matched inputs', () => {
   assert.deepEqual(row.media, ['水', '空气']);
   assert.equal(row.coverage, 2);
   assert.equal(row.matches.length, 2);
+  assert.deepEqual(row.issues, []);
   assert.deepEqual(candidates, before);
 });
 

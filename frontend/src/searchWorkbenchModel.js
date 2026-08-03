@@ -90,12 +90,26 @@ const parseThreshold = (value) => {
 
 const parseStringThreshold = (raw) => {
   const text = String(raw ?? '');
-  const match = text.trim().match(/^(.+?\(\d{4}.*?\))\s*(?:([dr])\s+)?(.*)$/i);
-  const thresholdText = match ? match[3].trim() : text.trim();
+  const trimmed = text.trim();
+  const typeMatch = /(?:^|\s)([dr])\s+(.+)$/i.exec(trimmed);
+  const parseReliableValue = (thresholdText) => {
+    const parsed = parseThreshold(thresholdText);
+    const looksLikeYear = Number.isInteger(parsed.value) && parsed.value >= 1800 && parsed.value <= 2099;
+    return looksLikeYear ? { value: null, unit: null, parseStatus: 'unparsed' } : { ...parsed, parseStatus: 'parsed' };
+  };
+  if (typeMatch) {
+    const thresholdText = typeMatch[2].trim();
+    return {
+      source: trimmed.slice(0, typeMatch.index).trim() || null,
+      type: typeMatch[1].toLowerCase(),
+      ...parseReliableValue(thresholdText),
+    };
+  }
+  const startsWithThreshold = /^(?:[<>≤≥]\s*)?[+-]?(?:\d+(?:\.\d*)?|\.\d+)/.test(trimmed);
   return {
-    source: match?.[1]?.trim() ?? null,
-    type: match?.[2]?.toLowerCase() ?? null,
-    ...parseThreshold(thresholdText),
+    source: null,
+    type: null,
+    ...(startsWithThreshold ? parseReliableValue(trimmed) : { value: null, unit: null, parseStatus: 'unparsed' }),
   };
 };
 
@@ -148,6 +162,7 @@ const toThresholdRecords = (matchedResults, integratedResults) => {
         originalText,
         sourceRecordKey: entry?.source_record_key ?? entry?.sourceRecordKey ?? null,
         raw: entry,
+        ...(stringEntry ? { parseStatus: parsedString.parseStatus } : {}),
       };
       const signature = `${entityKey}|${thresholdSignature(record)}`;
       const origins = seenOrigins.get(signature) ?? new Set();
@@ -287,10 +302,10 @@ export function buildBatchReviewRows(rawInputs, matchedResults) {
       thresholdRecordCount: coverage.thresholdRecordCount,
       media: coverage.media,
       coverage: coverage.coverage,
-      issues: status === 'unmatched' ? ['no_match'] : [
+      issues: status === 'unmatched' ? ['no_match'] : status === 'candidate' ? [
         'name_match_not_cas',
         ...(ambiguous ? ['ambiguous_identity'] : []),
-      ],
+      ] : [],
       matches,
       raw: matches,
     };
