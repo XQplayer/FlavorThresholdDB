@@ -18,6 +18,7 @@ import {
   buildWorkbenchIntegratedResults,
   deriveDossierSourceStates,
   groupDossierInputsByEntity,
+  selectProfileRequestCas,
 } from './searchWorkbenchModel';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
@@ -134,6 +135,7 @@ export default function App() {
   const [draggedFilterKey, setDraggedFilterKey] = useState(null);
   const [exactMatch, setExactMatch] = useState(true); // Default to exact match
   const trackedSearchesRef = useRef(new Set());
+  const femaProfilesRef = useRef({});
   const compoundProfilesRef = useRef({});
 
   // Use deferred values for smooth typing
@@ -154,6 +156,11 @@ export default function App() {
   const [bookThresholds, setBookThresholds] = useState([]);
   const [femaProfiles, setFemaProfiles] = useState({});
   const [compoundProfiles, setCompoundProfiles] = useState({});
+  const [selectedWorkbenchCandidate, setSelectedWorkbenchCandidate] = useState({
+    scopeKey: '',
+    entityKey: null,
+    cas: null,
+  });
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const isEnglish = interfaceLanguage === 'en';
@@ -466,36 +473,63 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     [queryMatchedResults, selectedMedia]
   );
 
+  const workbenchCandidateCas = useMemo(
+    () => [...new Set(queryMatchedResults.map(item => item.cas).filter(Boolean))],
+    [queryMatchedResults],
+  );
+  const workbenchSelectionScopeKey = `${searchMode}:${(
+    searchMode === 'single' ? deferredSingleQuery : deferredBulkQuery
+  ).trim().toLowerCase()}:${workbenchCandidateCas.join('|')}`;
+  const selectedWorkbenchCas = selectedWorkbenchCandidate.scopeKey === workbenchSelectionScopeKey
+    && workbenchCandidateCas.includes(selectedWorkbenchCandidate.cas)
+    ? selectedWorkbenchCandidate.cas
+    : null;
+  const femaRequestCas = useMemo(() => selectProfileRequestCas({
+    matchedResults: queryMatchedResults,
+    searchMode,
+    selectedCas: selectedWorkbenchCas,
+    bulkLimit: 50,
+  }), [queryMatchedResults, searchMode, selectedWorkbenchCas]);
+  const compoundRequestCas = useMemo(() => selectProfileRequestCas({
+    matchedResults: queryMatchedResults,
+    searchMode,
+    selectedCas: selectedWorkbenchCas,
+    bulkLimit: 10,
+  }), [queryMatchedResults, searchMode, selectedWorkbenchCas]);
+
   useEffect(() => {
-    if (!queryMatchedResults.length) return;
+    const missingCas = femaRequestCas.filter(cas => femaProfilesRef.current[cas] === undefined);
+    if (!missingCas.length) return undefined;
 
-    const uniqueCas = [...new Set(queryMatchedResults.map(item => item.cas).filter(Boolean))].slice(0, 50);
-    const missingCas = uniqueCas.filter(cas => !femaProfiles[cas]);
-    if (!missingCas.length) return;
+    setFemaProfiles(previous => {
+      const next = { ...previous };
+      missingCas.forEach(cas => {
+        const loadingProfile = { loading: true };
+        next[cas] = loadingProfile;
+        femaProfilesRef.current[cas] = loadingProfile;
+      });
+      return next;
+    });
 
-    let cancelled = false;
     missingCas.forEach(cas => {
       fetch(`${FEMA_API_URL}/fema?cas=${encodeURIComponent(cas)}`)
         .then(res => res.json())
         .then(profile => {
-          if (cancelled) return;
+          femaProfilesRef.current[cas] = profile;
           setFemaProfiles(prev => ({ ...prev, [cas]: profile }));
         })
         .catch(() => {
-          if (cancelled) return;
-          setFemaProfiles(prev => ({ ...prev, [cas]: { found: false, error: 'FEMA proxy unavailable' } }));
+          const failedProfile = { found: false, error: 'FEMA proxy unavailable' };
+          femaProfilesRef.current[cas] = failedProfile;
+          setFemaProfiles(prev => ({ ...prev, [cas]: failedProfile }));
         });
     });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [queryMatchedResults, femaProfiles]);
+    return undefined;
+  }, [femaRequestCas]);
 
   useEffect(() => {
-    const limit = searchMode === 'single' ? 1 : 10;
-    const uniqueCas = [...new Set(queryMatchedResults.map(item => item.cas).filter(Boolean))].slice(0, limit);
-    const missingCas = uniqueCas.filter(cas => compoundProfilesRef.current[cas] === undefined);
+    const missingCas = compoundRequestCas.filter(cas => compoundProfilesRef.current[cas] === undefined);
     if (!missingCas.length) return undefined;
 
     setCompoundProfiles(prev => {
@@ -542,7 +576,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     };
     loadProfiles();
     return undefined;
-  }, [queryMatchedResults, searchMode]);
+  }, [compoundRequestCas]);
 
   const workbenchBookResults = useMemo(() => {
     if (!bookIndex.length) return [];
@@ -1592,6 +1626,11 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
             loading={loading}
             matchCount={queryMatchedResults.length}
             candidates={compoundDossierCandidates}
+            onCandidateSelect={({ entityKey, cas }) => setSelectedWorkbenchCandidate({
+              scopeKey: workbenchSelectionScopeKey,
+              entityKey,
+              cas,
+            })}
             isEnglish={isEnglish}
           />
         ) : (

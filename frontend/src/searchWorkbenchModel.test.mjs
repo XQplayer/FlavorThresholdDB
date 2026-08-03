@@ -102,6 +102,30 @@ test('builds unfiltered workbench integrated inputs from raw profile state', () 
   assert.deepEqual(entries[1].profile, {});
 });
 
+test('prioritizes a selected single-search CAS without expanding ambiguous candidates', () => {
+  assert.equal(typeof searchWorkbenchModel.selectProfileRequestCas, 'function');
+  const matches = [
+    { cas: '939-97-9' },
+    { cas: '939-97-9' },
+    { cas: '18127-01-0' },
+  ];
+  assert.deepEqual(searchWorkbenchModel.selectProfileRequestCas({
+    matchedResults: matches,
+    searchMode: 'single',
+  }), ['939-97-9']);
+  assert.deepEqual(searchWorkbenchModel.selectProfileRequestCas({
+    matchedResults: matches,
+    searchMode: 'single',
+    selectedCas: '18127-01-0',
+  }), ['18127-01-0']);
+  assert.deepEqual(searchWorkbenchModel.selectProfileRequestCas({
+    matchedResults: matches,
+    searchMode: 'bulk',
+    selectedCas: '18127-01-0',
+    bulkLimit: 2,
+  }), ['939-97-9', '18127-01-0']);
+});
+
 test('summarizes chapter status from records and source outcomes', () => {
   assert.equal(typeof searchWorkbenchModel.summarizeChapterStatus, 'function');
   const status = searchWorkbenchModel.summarizeChapterStatus;

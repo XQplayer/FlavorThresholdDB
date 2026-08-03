@@ -124,6 +124,7 @@ try {
   const consoleErrors = [];
   const pageErrors = [];
   const apiRequests = [];
+  let selectedCandidateRequestEvidence = null;
   page.on('console', message => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
@@ -138,28 +139,37 @@ try {
     contentType: 'application/json',
     body: '{}',
   }));
-  await page.route('**/fema?**', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({ found: false }),
-  }));
-  await page.route('**/compound?**', route => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({
+  await page.route('**/fema?**', route => {
+    const cas = new URL(route.request().url()).searchParams.get('cas');
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(cas === '18127-01-0'
+        ? { found: true, name: 'Selected Bourgeonal FEMA' }
+        : { found: false }),
+    });
+  });
+  await page.route('**/compound?**', route => {
+    const cas = new URL(route.request().url()).searchParams.get('cas');
+    const isSelectedCandidate = cas === '18127-01-0';
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
       pubchem: {
         found: true,
-        cid: 8857,
-        title: 'Ethyl acetate',
-        molecular_formula: 'C4H8O2',
+        cid: isSelectedCandidate ? 18127010 : 8857,
+        title: isSelectedCandidate ? 'Selected Bourgeonal' : 'Ethyl acetate',
+        molecular_formula: isSelectedCandidate ? 'C11H14O' : 'C4H8O2',
         smiles: 'CCOC(=O)C',
         inchi_key: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N',
-        url: 'https://pubchem.ncbi.nlm.nih.gov/compound/8857',
+        url: `https://pubchem.ncbi.nlm.nih.gov/compound/${isSelectedCandidate ? 18127010 : 8857}`,
       },
       pubchem_volatile: { found: false, status: 'no_data', properties: {} },
       flavordb: { found: false },
     }),
-  }));
+    });
+  });
 
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
   const input = page.getByLabel('化合物名称或 CAS 号');
@@ -321,11 +331,39 @@ try {
   const secondCandidate = workbench.getByRole('button', { name: /18127-01-0/ });
   assert.equal(await firstCandidate.count(), 1, 'first CAS candidate is listed');
   assert.equal(await secondCandidate.count(), 1, 'second CAS candidate is listed');
-  await firstCandidate.click();
-  await workbench.getByText('CAS 939-97-9', { exact: true }).waitFor({ state: 'visible' });
-  assert.equal(await workbench.getByText('CAS 18127-01-0', { exact: true }).count(), 0, 'selected dossier excludes the other entity identity');
+  await page.waitForLoadState('networkidle');
+  const requestCountFor = (pathname, cas) => apiRequests.filter(request => (
+    request.path === pathname && new URL(request.url).searchParams.get('cas') === cas
+  )).length;
+  const requestsBeforeSelection = {
+    compound: requestCountFor('/compound', '18127-01-0'),
+    fema: requestCountFor('/fema', '18127-01-0'),
+  };
+  assert.equal(requestsBeforeSelection.compound, 0, 'second compound candidate is not prefetched');
+  assert.equal(requestsBeforeSelection.fema, 0, 'second FEMA candidate is not prefetched');
+  await secondCandidate.click();
+  await workbench.getByText('CAS 18127-01-0', { exact: true }).waitFor({ state: 'visible' });
+  await workbench.getByText('18127010', { exact: true }).waitFor({ state: 'visible' });
+  await page.waitForFunction(({ origin }) => {
+    const entries = performance.getEntriesByType('resource').map(entry => entry.name);
+    return entries.some(url => url.startsWith(origin) && url.includes('/fema?cas=18127-01-0'));
+  }, { origin: proxyOrigin });
+  const requestsAfterSelection = {
+    compound: requestCountFor('/compound', '18127-01-0'),
+    fema: requestCountFor('/fema', '18127-01-0'),
+  };
+  assert.equal(requestsAfterSelection.compound, 1, 'selected compound candidate is fetched once');
+  assert.equal(requestsAfterSelection.fema, 1, 'selected FEMA candidate is fetched once');
+  selectedCandidateRequestEvidence = {
+    cas: '18127-01-0',
+    beforeSelection: requestsBeforeSelection,
+    afterSelection: requestsAfterSelection,
+  };
+  const selectedSourceSummary = workbench.getByLabel('来源状态');
+  assert.equal(await selectedSourceSummary.getByText('载入中', { exact: true }).count(), 0, 'selected candidate sources leave loading state');
+  assert.equal(await workbench.getByText('CAS 939-97-9', { exact: true }).count(), 0, 'selected dossier excludes the other entity identity');
   await workbench.getByRole('button', { name: /阈值/ }).click();
-  assert.equal(await workbench.getByText('18127-01-0', { exact: false }).count(), 0, 'selected threshold chapter excludes the other entity CAS');
+  assert.equal(await workbench.getByText('939-97-9', { exact: false }).count(), 0, 'selected threshold chapter excludes the other entity CAS');
 
   await input.fill('141-78-6');
   await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor({ state: 'visible' });
@@ -352,6 +390,7 @@ try {
       sharedRequests: sharedBeforeClassic,
       classicOnlyRequestCount: defaultNewClassicRequests.length,
     },
+    selectedCandidateRequestEvidence,
     firstClassicMountRequestCount: classicRequestsAfterMount.length,
   }, null, 2));
 } finally {

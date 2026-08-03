@@ -163,6 +163,21 @@ export function buildWorkbenchIntegratedResults({
   });
 }
 
+export function selectProfileRequestCas({
+  matchedResults = [],
+  searchMode = 'single',
+  selectedCas = null,
+  bulkLimit = 10,
+} = {}) {
+  const uniqueCas = [...new Set(asArray(matchedResults)
+    .map(item => normaliseCas(item?.cas))
+    .filter(Boolean))];
+  if (searchMode !== 'bulk') {
+    return [uniqueCas.includes(selectedCas) ? selectedCas : uniqueCas[0]].filter(Boolean);
+  }
+  return uniqueCas.slice(0, bulkLimit);
+}
+
 const bookRecordValues = (record, field) => [
   record?.[field],
   record?.entity?.[field],

@@ -15,7 +15,14 @@ const CHAPTER_SOURCE_KEYS = {
   citation: ['book'],
 };
 
-export default function SearchResultsWorkbench({ query, loading, matchCount = 0, candidates = [], isEnglish = false }) {
+export default function SearchResultsWorkbench({
+  query,
+  loading,
+  matchCount = 0,
+  candidates = [],
+  onCandidateSelect,
+  isEnglish = false,
+}) {
   const queryKey = String(query || '').trim().toLowerCase();
   const [candidateSelection, setCandidateSelection] = useState({ queryKey, entityKey: null });
   const selectedCandidate = candidates.length === 1
@@ -70,7 +77,10 @@ export default function SearchResultsWorkbench({ query, loading, matchCount = 0,
               <li key={candidate.entityKey}>
                 <button
                   type="button"
-                  onClick={() => setCandidateSelection({ queryKey, entityKey: candidate.entityKey })}
+                  onClick={() => {
+                    setCandidateSelection({ queryKey, entityKey: candidate.entityKey });
+                    onCandidateSelect?.({ entityKey: candidate.entityKey, cas: candidate.cas });
+                  }}
                 >
                   <strong>{preferredName}</strong>
                   {candidate.cas && <span>CAS {candidate.cas}</span>}
