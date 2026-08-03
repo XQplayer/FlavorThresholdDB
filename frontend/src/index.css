@@ -17,6 +17,16 @@ body {
   min-height: 100vh;
 }
 
+.shimadzu-route-loading {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  color: #435066;
+  background: #edf1f7;
+  font-size: 14px;
+}
+
 button,
 input,
 textarea {

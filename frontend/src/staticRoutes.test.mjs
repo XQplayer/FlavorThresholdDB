@@ -5,7 +5,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 
-test('static route generator creates an index entry for aroma-threshold', async () => {
+test('static route generator creates index entries for public application routes', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'flavorthresholddb-routes-'))
   const dist = path.join(root, 'dist')
   await mkdir(dist)
@@ -22,5 +22,8 @@ test('static route generator creates an index entry for aroma-threshold', async 
     await readFile(path.join(dist, 'aroma-threshold', 'index.html'), 'utf8'),
     '<!doctype html><title>FlavorThresholdDB</title>',
   )
+  assert.equal(
+    await readFile(path.join(dist, 'shimadzu-analysis', 'index.html'), 'utf8'),
+    '<!doctype html><title>FlavorThresholdDB</title>',
+  )
 })
-

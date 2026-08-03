@@ -30,6 +30,7 @@ frontend/dist/
 *.docx
 *.xlsx
 *.xls
+!resources/shimadzu/templates/*.xlsx
 data/
 Flavor Library _ FEMA.html
 Flavor Library _ FEMA_files/
