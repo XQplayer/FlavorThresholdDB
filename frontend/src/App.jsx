@@ -1,20 +1,46 @@
-import { lazy, Suspense, useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
+import { lazy, Suspense, useState, useEffect, useMemo, useRef, useDeferredValue, useCallback } from 'react';
 import { Search, FileSpreadsheet, List, FileText, Download, AlertCircle, Loader2, Info, ExternalLink, X, Copy, Check, ChevronDown, ChevronUp, FlaskConical, Mail, MessageCircle, Network, Database, ShieldCheck } from 'lucide-react';
 import './App.css';
 import SearchInsights from './components/SearchInsights';
 import PubChemStructureViewer from './components/PubChemStructureViewer';
 import FlavorDB2Sources from './components/FlavorDB2Sources';
 import PubChemVolatileProperties from './components/PubChemVolatileProperties';
-import OpenSpectraWorkbench from './components/spectra/OpenSpectraWorkbench';
-import NistWebbookPresence from './components/NistWebbookPresence';
 import BiochemicalRelationships from './components/BiochemicalRelationships';
 import BiologicalContext from './components/BiologicalContext';
 import BioactivityEvidence from './components/BioactivityEvidence';
 import StructureEvidence from './components/StructureEvidence';
+import ResultViewSwitch from './components/search-results/ResultViewSwitch';
+import SearchResultsWorkbench from './components/search-results/SearchResultsWorkbench';
+import {
+  buildCompoundDossier,
+  buildBatchReviewRows,
+  buildBatchSessionSignature,
+  buildCandidateScopeKey,
+  buildScientificComponentProps,
+  buildWorkbenchIntegratedResults,
+  deriveDossierSourceStates,
+  groupDossierInputsByEntity,
+  parseBatchReviewInputs,
+  selectProfileRequestCas,
+} from './searchWorkbenchModel';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
+import { loadResultView, saveResultView } from './resultViewPreference';
+import {
+  buildCsvExportContract,
+  buildEntityExportSourceStatuses,
+  beginCompoundProfileRequest,
+  beginFemaProfileRequest,
+  failCompoundProfileRequest,
+  failFemaProfileRequest,
+  getExportClassification,
+  retryFetchOptions,
+  withRetryGeneration,
+} from './searchSourceState';
 
 const ShimadzuAnalysisPage = lazy(() => import('./components/shimadzu/ShimadzuAnalysisPage'));
+const OpenSpectraWorkbench = lazy(() => import('./components/spectra/OpenSpectraWorkbench'));
+const NistWebbookPresence = lazy(() => import('./components/NistWebbookPresence'));
 import {
   getBookConflictQuality,
   getBookDisplayCas,
@@ -109,6 +135,9 @@ export default function App() {
   const [currentView, setCurrentView] = useState(getViewFromLocation);
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [coreSearchError, setCoreSearchError] = useState(null);
+  const [coreLoadNonce, setCoreLoadNonce] = useState(0);
+  const [resultView, setResultView] = useState(() => loadResultView());
   
   const [searchMode, setSearchMode] = useState('single'); // 'single' or 'bulk'
   const [singleQuery, setSingleQuery] = useState('');
@@ -124,7 +153,12 @@ export default function App() {
   const [draggedFilterKey, setDraggedFilterKey] = useState(null);
   const [exactMatch, setExactMatch] = useState(true); // Default to exact match
   const trackedSearchesRef = useRef(new Set());
+  const femaProfilesRef = useRef({});
   const compoundProfilesRef = useRef({});
+  const femaRequestGenerationRef = useRef({});
+  const compoundRequestGenerationRef = useRef({});
+  const coreLoadRequestRef = useRef(null);
+  const bookLoadRequestRef = useRef(null);
 
   // Use deferred values for smooth typing
   const deferredSingleQuery = useDeferredValue(singleQuery);
@@ -142,11 +176,38 @@ export default function App() {
   const [bookIndex, setBookIndex] = useState([]);
   const [bookEntities, setBookEntities] = useState([]);
   const [bookThresholds, setBookThresholds] = useState([]);
+  const [bookLoading, setBookLoading] = useState(true);
+  const [bookError, setBookError] = useState(null);
+  const [bookRetrying, setBookRetrying] = useState(false);
+  const [bookLoadNonce, setBookLoadNonce] = useState(0);
   const [femaProfiles, setFemaProfiles] = useState({});
   const [compoundProfiles, setCompoundProfiles] = useState({});
+  const [selectedWorkbenchCandidate, setSelectedWorkbenchCandidate] = useState({
+    scopeKey: '',
+    entityKey: null,
+    cas: null,
+  });
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const isEnglish = interfaceLanguage === 'en';
+
+  const resetWorkbenchCandidateSelection = () => setSelectedWorkbenchCandidate({
+    scopeKey: '',
+    entityKey: null,
+    cas: null,
+  });
+  const changeSearchMode = (nextMode) => {
+    if (nextMode !== searchMode) resetWorkbenchCandidateSelection();
+    setSearchMode(nextMode);
+  };
+  const changeMatchMode = (nextExactMatch) => {
+    if (nextExactMatch !== exactMatch) resetWorkbenchCandidateSelection();
+    setExactMatch(nextExactMatch);
+  };
+  const changeBulkQuery = (nextQuery) => {
+    resetWorkbenchCandidateSelection();
+    setBulkQuery(nextQuery);
+  };
 
   useEffect(() => {
     document.documentElement.lang = isEnglish ? 'en' : 'zh-CN';
@@ -181,6 +242,11 @@ export default function App() {
     setShowContact(false);
     window.history.pushState({ view: 'shimadzu' }, '', SHIMADZU_PATH);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const changeResultView = (view) => {
+    setResultView(view);
+    saveResultView(view);
   };
 
   const openDataSources = () => {
@@ -267,37 +333,91 @@ National Center for Biotechnology Information. (${accessYear}). PubChem. Retriev
 FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved from https://cosylab.iiitd.edu.in/flavordb2/. Accessed ${accessDateText}.`;
 
   useEffect(() => {
-    const normalize = (str) => {
-      return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    };
+    let cancelled = false;
+    if (coreLoadRequestRef.current?.nonce !== coreLoadNonce) {
+      coreLoadRequestRef.current = {
+        nonce: coreLoadNonce,
+        promise: fetch(
+          withRetryGeneration(`${import.meta.env.BASE_URL}aroma_data_merged.json`, coreLoadNonce),
+          retryFetchOptions(coreLoadNonce),
+        ).then(response => {
+        if (!response.ok) throw new Error(`Core search data failed (${response.status})`);
+        return response.json();
+        }),
+      };
+    }
+    coreLoadRequestRef.current.promise
+      .then(dataJson => {
+        if (!Array.isArray(dataJson)) throw new Error('Core search data is not an array');
+        if (!cancelled) setData(dataJson);
+      })
+      .catch(error => {
+        if (!cancelled) {
+          console.warn('Failed to load core search data', error);
+          setCoreSearchError(error.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
+    return () => { cancelled = true; };
+  }, [coreLoadNonce]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const normalize = str => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     Promise.all([
-      fetch(`${import.meta.env.BASE_URL}aroma_data_merged.json`).then(res => res.json()),
-      fetch(`${import.meta.env.BASE_URL}references.json`).then(res => res.json()),
-      fetch(`${import.meta.env.BASE_URL}references_lookup.json`).then(res => res.json()).catch(() => ({})),
-      fetch(`${import.meta.env.BASE_URL}book_flavor_chemistry_index.json?v=1.3.1`).then(res => res.json()).catch(() => ({ records: [] }))
-    ])
-      .then(([dataJson, refsJson, lookupJson, bookJson]) => {
-        setData(dataJson);
-        setRefsLookup(lookupJson);
+      fetch(`${import.meta.env.BASE_URL}references.json`).then(response => response.ok ? response.json() : {}),
+      fetch(`${import.meta.env.BASE_URL}references_lookup.json`).then(response => response.ok ? response.json() : {}).catch(() => ({})),
+    ]).then(([refsJson, lookupJson]) => {
+      if (cancelled) return;
+      setRefsLookup(lookupJson);
+      setNormRefsKeys(Object.keys(refsJson).map(k => ({
+        original: k,
+        normalized: normalize(k),
+        fullText: refsJson[k],
+      })));
+    }).catch(error => console.warn('Reference metadata unavailable', error));
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (bookLoadRequestRef.current?.nonce !== bookLoadNonce) {
+      bookLoadRequestRef.current = {
+        nonce: bookLoadNonce,
+        promise: fetch(
+          withRetryGeneration(`${import.meta.env.BASE_URL}book_flavor_chemistry_index.json?v=1.3.1`, bookLoadNonce),
+          retryFetchOptions(bookLoadNonce),
+        ).then(response => {
+        if (!response.ok) throw new Error(`Book evidence failed (${response.status})`);
+        return response.json();
+        }),
+      };
+    }
+    bookLoadRequestRef.current.promise
+      .then(bookJson => {
+        if (cancelled) return;
+        setBookError(null);
         setBookIndex(bookJson.records || []);
         setBookEntities(bookJson.entities || []);
         setBookThresholds(bookJson.thresholds || []);
-        
-        const normKeys = Object.keys(refsJson).map(k => ({
-          original: k,
-          normalized: normalize(k),
-          fullText: refsJson[k]
-        }));
-        setNormRefsKeys(normKeys);
-        
-        setLoading(false);
       })
-      .catch(err => {
-        console.error("Failed to load data", err);
-        setLoading(false);
+      .catch(error => {
+        if (!cancelled) {
+          console.warn('Book evidence unavailable', error);
+          setBookError(error.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setBookLoading(false);
+          setBookRetrying(false);
+        }
       });
-  }, []);
+    return () => { cancelled = true; };
+  }, [bookLoadNonce]);
 
   const matchReference = (shortCitation) => {
     if (!shortCitation) return null;
@@ -446,91 +566,137 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     }
   }, [data, deferredSingleQuery, deferredBulkQuery, searchMode, exactMatch]);
 
+  // Batch review intentionally keeps each non-empty source line verbatim and ignores blank lines.
+  const rawBatchInputs = useMemo(
+    () => parseBatchReviewInputs(deferredBulkQuery),
+    [deferredBulkQuery],
+  );
+  const batchSessionSignature = useMemo(
+    () => buildBatchSessionSignature({
+      mode: searchMode,
+      exactMatch,
+      rawInputs: rawBatchInputs,
+    }),
+    [searchMode, exactMatch, rawBatchInputs],
+  );
+
   const results = useMemo(
     () => queryMatchedResults.filter(item => selectedMedia.includes(item.medium)),
     [queryMatchedResults, selectedMedia]
   );
 
+  const workbenchCandidateCas = useMemo(
+    () => [...new Set(queryMatchedResults.map(item => item.cas).filter(Boolean))],
+    [queryMatchedResults],
+  );
+  const workbenchSelectionScopeKey = `${buildCandidateScopeKey({
+    query: searchMode === 'single' ? deferredSingleQuery : deferredBulkQuery,
+    mode: searchMode,
+    exactMatch,
+  })}:${workbenchCandidateCas.join('|')}`;
+  const selectedWorkbenchCas = selectedWorkbenchCandidate.scopeKey === workbenchSelectionScopeKey
+    && workbenchCandidateCas.includes(selectedWorkbenchCandidate.cas)
+    ? selectedWorkbenchCandidate.cas
+    : null;
+  const femaRequestCas = useMemo(() => selectProfileRequestCas({
+    matchedResults: queryMatchedResults,
+    searchMode,
+    selectedCas: selectedWorkbenchCas,
+    bulkLimit: 50,
+  }), [queryMatchedResults, searchMode, selectedWorkbenchCas]);
+  const compoundRequestCas = useMemo(() => selectProfileRequestCas({
+    matchedResults: queryMatchedResults,
+    searchMode,
+    selectedCas: selectedWorkbenchCas,
+    bulkLimit: 10,
+  }), [queryMatchedResults, searchMode, selectedWorkbenchCas]);
+
+  const loadFemaProfile = useCallback(async (cas, { retrying = false } = {}) => {
+    if (!cas || (!retrying && femaProfilesRef.current[cas] !== undefined)) return;
+    const generation = (femaRequestGenerationRef.current[cas] || 0) + 1;
+    femaRequestGenerationRef.current[cas] = generation;
+    const previous = femaProfilesRef.current[cas];
+    const loadingProfile = beginFemaProfileRequest(previous, { retrying });
+    femaProfilesRef.current[cas] = loadingProfile;
+    setFemaProfiles(current => ({ ...current, [cas]: loadingProfile }));
+    try {
+      const retryGeneration = retrying ? generation : 0;
+      const response = await fetch(
+        withRetryGeneration(`${FEMA_API_URL}/fema?cas=${encodeURIComponent(cas)}`, retryGeneration),
+        retryFetchOptions(retryGeneration),
+      );
+      if (!response.ok) throw new Error(`FEMA lookup failed (${response.status})`);
+      const profile = { ...(await response.json()), loading: false, retrying: false };
+      if (femaRequestGenerationRef.current[cas] !== generation) return;
+      femaProfilesRef.current[cas] = profile;
+      setFemaProfiles(current => ({ ...current, [cas]: profile }));
+    } catch (error) {
+      if (femaRequestGenerationRef.current[cas] !== generation) return;
+      const failedProfile = failFemaProfileRequest(previous, error);
+      femaProfilesRef.current[cas] = failedProfile;
+      setFemaProfiles(current => ({ ...current, [cas]: failedProfile }));
+    }
+  }, []);
+
+  const loadCompoundProfile = useCallback(async (cas, { retrying = false } = {}) => {
+    if (!cas || (!retrying && compoundProfilesRef.current[cas] !== undefined)) return;
+    const generation = (compoundRequestGenerationRef.current[cas] || 0) + 1;
+    compoundRequestGenerationRef.current[cas] = generation;
+    const previous = compoundProfilesRef.current[cas];
+    const loadingProfile = beginCompoundProfileRequest(previous, { retrying });
+    compoundProfilesRef.current[cas] = loadingProfile;
+    setCompoundProfiles(current => ({ ...current, [cas]: loadingProfile }));
+    try {
+      const retryGeneration = retrying ? generation : 0;
+      const response = await fetch(
+        withRetryGeneration(`${FEMA_API_URL}/compound?cas=${encodeURIComponent(cas)}`, retryGeneration),
+        retryFetchOptions(retryGeneration),
+      );
+      if (!response.ok) throw new Error(`Compound lookup failed (${response.status})`);
+      const profile = await response.json();
+      const smartClassification = await classifyCompoundBySmarts(profile.pubchem?.smiles);
+      const completedProfile = {
+        ...profile,
+        smart_classification: smartClassification,
+        loading: false,
+        retrying: false,
+      };
+      if (compoundRequestGenerationRef.current[cas] !== generation) return;
+      compoundProfilesRef.current[cas] = completedProfile;
+      setCompoundProfiles(current => ({ ...current, [cas]: completedProfile }));
+    } catch (error) {
+      if (compoundRequestGenerationRef.current[cas] !== generation) return;
+      const failedProfile = failCompoundProfileRequest(previous, error);
+      compoundProfilesRef.current[cas] = failedProfile;
+      setCompoundProfiles(current => ({ ...current, [cas]: failedProfile }));
+    }
+  }, []);
+
   useEffect(() => {
-    if (!queryMatchedResults.length) return;
-
-    const uniqueCas = [...new Set(queryMatchedResults.map(item => item.cas).filter(Boolean))].slice(0, 50);
-    const missingCas = uniqueCas.filter(cas => !femaProfiles[cas]);
-    if (!missingCas.length) return;
-
-    let cancelled = false;
-    missingCas.forEach(cas => {
-      fetch(`${FEMA_API_URL}/fema?cas=${encodeURIComponent(cas)}`)
-        .then(res => res.json())
-        .then(profile => {
-          if (cancelled) return;
-          setFemaProfiles(prev => ({ ...prev, [cas]: profile }));
-        })
-        .catch(() => {
-          if (cancelled) return;
-          setFemaProfiles(prev => ({ ...prev, [cas]: { found: false, error: 'FEMA proxy unavailable' } }));
-        });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [queryMatchedResults, femaProfiles]);
+    femaRequestCas.forEach(cas => { loadFemaProfile(cas); });
+  }, [femaRequestCas, loadFemaProfile]);
 
   useEffect(() => {
-    const limit = searchMode === 'single' ? 1 : 10;
-    const uniqueCas = [...new Set(queryMatchedResults.map(item => item.cas).filter(Boolean))].slice(0, limit);
-    const missingCas = uniqueCas.filter(cas => compoundProfilesRef.current[cas] === undefined);
-    if (!missingCas.length) return undefined;
-
-    setCompoundProfiles(prev => {
-      const next = { ...prev };
-      missingCas.forEach(cas => {
-        const loadingProfile = { loading: true };
-        next[cas] = loadingProfile;
-        compoundProfilesRef.current[cas] = loadingProfile;
-      });
-      return next;
-    });
-
     const loadProfiles = async () => {
-      for (const cas of missingCas) {
-        try {
-          const response = await fetch(`${FEMA_API_URL}/compound?cas=${encodeURIComponent(cas)}`);
-          if (!response.ok) throw new Error(`Compound lookup failed (${response.status})`);
-          const profile = await response.json();
-          const smartClassification = await classifyCompoundBySmarts(profile.pubchem?.smiles);
-          profile.smart_classification = smartClassification;
-          compoundProfilesRef.current[cas] = profile;
-          setCompoundProfiles(prev => ({ ...prev, [cas]: profile }));
-        } catch (error) {
-          const failedProfile = {
-            loading: false,
-            error: error.message,
-            pubchem: { found: false },
-            pubchem_volatile: {
-              found: false,
-              status: 'upstream_unavailable',
-              properties: {},
-              source: 'PubChem PUG View',
-              url: '',
-            },
-            flavordb: { found: false },
-          };
-          compoundProfilesRef.current[cas] = failedProfile;
-          setCompoundProfiles(prev => ({
-            ...prev,
-            [cas]: failedProfile,
-          }));
-        }
-      }
+      for (const cas of compoundRequestCas) await loadCompoundProfile(cas);
     };
     loadProfiles();
-    return undefined;
-  }, [queryMatchedResults, searchMode]);
+  }, [compoundRequestCas, loadCompoundProfile]);
 
-  const bookResults = useMemo(() => {
-    if (!includeBookResults) return [];
+  const retryWorkbenchSource = useCallback((sourceId, candidate) => {
+    const cas = candidate?.cas || candidate?.dossier?.identity?.cas;
+    if (sourceId === 'fema') return loadFemaProfile(cas, { retrying: true });
+    if (sourceId === 'pubchem' || sourceId === 'flavordb') {
+      return loadCompoundProfile(cas, { retrying: true });
+    }
+    if (sourceId === 'book') {
+      setBookRetrying(true);
+      setBookLoadNonce(value => value + 1);
+    }
+    return undefined;
+  }, [loadCompoundProfile, loadFemaProfile]);
+
+  const workbenchBookResults = useMemo(() => {
     if (!bookIndex.length) return [];
     const rawQueries = searchMode === 'single' ? [deferredSingleQuery] : deferredBulkQuery.split('\n');
     const hits = searchBookIndex({
@@ -542,7 +708,12 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       limit: 20,
     });
     return mergeBookHitsByEntity(hits);
-  }, [bookIndex, bookEntities, deferredSingleQuery, deferredBulkQuery, searchMode, includeBookResults, queryMatchedResults, exactMatch]);
+  }, [bookIndex, bookEntities, deferredSingleQuery, deferredBulkQuery, searchMode, queryMatchedResults, exactMatch]);
+
+  const bookResults = useMemo(
+    () => includeBookResults ? workbenchBookResults : [],
+    [includeBookResults, workbenchBookResults],
+  );
 
   const getFilterOrderIndex = (key) => {
     const index = filterOrder.indexOf(key);
@@ -610,6 +781,78 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
         return true;
       });
   }, [queryMatchedResults, femaProfiles, compoundProfiles, includeFlavorDescriptions, includePubChem, includeFlavorDB]);
+
+  const workbenchIntegratedResults = useMemo(() => buildWorkbenchIntegratedResults({
+    matchedResults: queryMatchedResults,
+    femaProfiles,
+    compoundProfiles,
+  }), [queryMatchedResults, femaProfiles, compoundProfiles]);
+
+  const compoundDossierCandidates = useMemo(() => {
+    const queryValues = searchMode === 'single'
+      ? [deferredSingleQuery]
+      : deferredBulkQuery.split('\n');
+    const normalizedQueries = new Set(queryValues.map(value => value.trim().toLowerCase()).filter(Boolean));
+    const groups = groupDossierInputsByEntity({
+      matchedResults: queryMatchedResults,
+      integratedResults: workbenchIntegratedResults,
+      bookResults: workbenchBookResults,
+    });
+    return groups.map(group => {
+      const mappedBookThresholds = [...new Map(
+        group.bookResults
+          .flatMap(hit => getThresholdsForBookHit(bookThresholds, hit))
+          .map(record => [
+            [record.record_id, ...(record.media || []), record.raw_text].join('|'),
+            record,
+          ]),
+      ).values()];
+      const sourceStates = deriveDossierSourceStates({
+        loading,
+        matchedResults: group.matchedResults,
+        currentCas: group.cas,
+        femaProfile: group.cas ? femaProfiles[group.cas] : undefined,
+        compoundProfile: group.cas ? compoundProfiles[group.cas] : undefined,
+        bookResults: group.bookResults,
+        bookLoading,
+        bookError,
+        bookRetrying,
+      });
+      return {
+        ...group,
+        matchReason: group.cas && normalizedQueries.has(group.cas.toLowerCase()) ? 'cas' : 'name',
+        dossier: buildCompoundDossier({
+          matchedResults: group.matchedResults,
+          integratedResults: group.integratedResults,
+          bookResults: group.bookResults,
+          bookThresholds: mappedBookThresholds,
+          sourceStates,
+        }),
+      };
+    });
+  }, [
+    searchMode,
+    deferredSingleQuery,
+    deferredBulkQuery,
+    queryMatchedResults,
+    workbenchIntegratedResults,
+    workbenchBookResults,
+    bookThresholds,
+    loading,
+    bookLoading,
+    bookError,
+    bookRetrying,
+    femaProfiles,
+    compoundProfiles,
+  ]);
+
+  const batchRows = useMemo(
+    () => buildBatchReviewRows(rawBatchInputs, queryMatchedResults, {
+      exactMatch,
+      dossierCandidates: compoundDossierCandidates,
+    }),
+    [rawBatchInputs, queryMatchedResults, exactMatch, compoundDossierCandidates],
+  );
 
   useEffect(() => {
     if (!queryMatchedResults.length) return;
@@ -981,15 +1224,59 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
   };
 
   const exportCSV = (exportMode) => {
-    if (!results.length) return;
+    const exportContract = buildCsvExportContract({
+      resultView,
+      queryMatchedResults,
+      classicResults: results,
+      selectedMedia,
+      selectedThresholdTypes,
+      includePubChem,
+      includeFlavorDB,
+      includeFlavorDescriptions,
+      includeBookResults,
+    });
+    const exportResults = exportContract.results;
+    if (!exportResults.length) return;
+    const exportMediumOrder = new Map(exportContract.media.map((medium, index) => [medium, index]));
+    const exportOrderedResults = exportResults
+      .map((item, index) => ({ item, index }))
+      .sort((a, b) => {
+        const mediumDelta = resultView === 'new'
+          ? (exportMediumOrder.get(a.item.medium) ?? exportContract.media.length)
+            - (exportMediumOrder.get(b.item.medium) ?? exportContract.media.length)
+          : getFilterOrderIndex(`medium:${a.item.medium}`) - getFilterOrderIndex(`medium:${b.item.medium}`);
+        return mediumDelta || a.index - b.index;
+      })
+      .map(({ item }) => item);
+    const getBookMatchesForItem = (item, fema, commonName) => {
+      if (!exportContract.includeBookResults || !bookIndex.length) return [];
+      return searchBookIndex({
+        records: bookIndex,
+        rawQueries: [item.cas, item.chinese_name, item.english_name, commonName, fema?.name].filter(Boolean),
+        matchedCompounds: [item],
+        bookEntities,
+        limit: 3,
+      });
+    };
+    const exportSourceStatuses = (item, entityBookResults) => buildEntityExportSourceStatuses({
+      item,
+      femaProfile: femaProfiles[item.cas],
+      compoundProfile: compoundProfiles[item.cas],
+      bookResults: entityBookResults,
+      bookLoading,
+      bookError,
+    });
+    const getExportThresholds = item => exportContract.thresholdTypes === null
+      ? (item.threshold_data || [])
+      : getFilteredThresholds(item);
     
     const headers = [
       '序号',
       'CAS号',
       '化合物中文名',
       '常用英文名',
-      ...(includeFlavorDB ? ['主要官能团', 'FlavorDB2 CID', 'FlavorDB2风味描述', 'FlavorDB2链接'] : []),
-      ...(includePubChem ? [
+      ...(exportContract.includeFlavorDB ? ['主要官能团', 'FlavorDB2 CID', 'FlavorDB2风味描述', 'FlavorDB2链接'] : []),
+      ...(exportContract.includePubChem ? [
         '主要化合物类别',
         'SMARTS命中',
         '分子式',
@@ -1008,8 +1295,9 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       '阈值类型(d/r)',
       '阈值数值',
       '阈值单位',
-      ...(includeFlavorDescriptions ? ['FEMA编号', 'FEMA风味描述', 'FEMA链接'] : []),
-      ...(includeBookResults ? ['书籍来源', '书籍页码片段', '书籍分类', '书籍命中文本'] : [])
+      ...(exportContract.includeFlavorDescriptions ? ['FEMA编号', 'FEMA风味描述', 'FEMA链接'] : []),
+      ...(exportContract.includeBookResults ? ['书籍来源', '书籍页码片段', '书籍分类', '书籍命中文本'] : []),
+      '来源状态'
     ];
     const rows = [headers.join(',')];
     const formatCommonEnglishName = (value) => {
@@ -1045,10 +1333,12 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     };
 
     if (exportMode === 'compact') {
-      const selectedMediaInOrder = filterOrder
-        .filter(key => key.startsWith('medium:'))
-        .map(key => key.replace('medium:', ''))
-        .filter(medium => selectedMedia.includes(medium));
+      const selectedMediaInOrder = resultView === 'new'
+        ? exportContract.media
+        : filterOrder
+            .filter(key => key.startsWith('medium:'))
+            .map(key => key.replace('medium:', ''))
+            .filter(medium => exportContract.media.includes(medium));
       const compactHeaders = [
         '序号',
         'CAS号',
@@ -1062,12 +1352,13 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           `${medium}-阈值类型(d/r)`,
           `${medium}-阈值数值`,
           `${medium}-阈值单位`
-        ])
+        ]),
+        '来源状态'
       ];
       const compactRows = [compactHeaders.map(csvCell).join(',')];
       const compounds = new Map();
 
-      orderedResults.forEach(item => {
+      exportOrderedResults.forEach(item => {
         if (!compounds.has(item.cas)) compounds.set(item.cas, { item, media: new Map() });
         compounds.get(item.cas).media.set(item.medium, item);
       });
@@ -1076,11 +1367,12 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
         const fema = femaProfiles[item.cas] || {};
         const profile = compoundProfiles[item.cas] || {};
         const pubchem = profile.pubchem || {};
-        const primaryClass = profile.smart_classification || { zh: '其他类', en: 'Others' };
+        const exportClassification = getExportClassification(profile, isEnglish);
         const commonEnglishNameText = formatCommonEnglishName(fema.name || item.english_name);
+        const entityBookResults = getBookMatchesForItem(item, fema, commonEnglishNameText);
         const thresholdCells = selectedMediaInOrder.flatMap(medium => {
           const mediumItem = media.get(medium);
-          const firstThreshold = mediumItem ? getFilteredThresholds(mediumItem)[0] : '';
+          const firstThreshold = mediumItem ? getExportThresholds(mediumItem)[0] : '';
           const parsed = firstThreshold
             ? parseThresholdStr(firstThreshold)
             : { author: '', type: '', value: '' };
@@ -1097,10 +1389,11 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           csvCasCell(item.cas),
           csvCell(item.chinese_name),
           csvCell(commonEnglishNameText),
-          csvCell(isEnglish ? primaryClass.en : primaryClass.zh),
+          csvCell(exportClassification.label),
           csvCell(pubchem.molecular_formula),
           csvCell(splitDescriptorValues(fema.flavor_profile).join('; ')),
-          ...thresholdCells
+          ...thresholdCells,
+          csvCell(exportSourceStatuses(item, entityBookResults))
         ].join(','));
       });
 
@@ -1118,29 +1411,18 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       return categories.length ? [...new Set(categories)].join('; ') : '书籍片段';
     };
 
-    const getBookMatchesForItem = (item, fema, commonName) => {
-      if (!includeBookResults || !bookIndex.length) return [];
-      return searchBookIndex({
-        records: bookIndex,
-        rawQueries: [item.cas, item.chinese_name, item.english_name, commonName, fema?.name].filter(Boolean),
-        matchedCompounds: [item],
-        bookEntities,
-        limit: 3,
-      });
-    };
-    
     let detailedRowIndex = 0;
-    orderedResults.forEach(item => {
+    exportOrderedResults.forEach(item => {
       const fema = femaProfiles[item.cas] || {};
       const profile = compoundProfiles[item.cas] || {};
       const pubchem = profile.pubchem || {};
       const flavordb = profile.flavordb || {};
       const commonEnglishNameText = formatCommonEnglishName(fema.name || item.english_name);
       const bookMatches = getBookMatchesForItem(item, fema, commonEnglishNameText);
-      const filteredThresholds = getFilteredThresholds(item);
+      const filteredThresholds = getExportThresholds(item);
       const thresholdRecords = filteredThresholds.length ? filteredThresholds : [''];
       const functionalGroups = flavordb.functional_groups || [];
-      const primaryClass = profile.smart_classification || { zh: '其他类', en: 'Others' };
+      const exportClassification = getExportClassification(profile, isEnglish);
 
       thresholdRecords.forEach(threshold => {
         const parsed = threshold
@@ -1152,7 +1434,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
         csvCasCell(item.cas),
         csvCell(item.chinese_name),
         csvCell(commonEnglishNameText),
-        ...(includeFlavorDB ? [
+        ...(exportContract.includeFlavorDB ? [
           csvCell(functionalGroups.join('; ')),
           csvCell(flavordb.cid),
           csvCell([
@@ -1162,9 +1444,9 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           ].join('; ')),
           csvCell(flavordb.url)
         ] : []),
-        ...(includePubChem ? [
-          csvCell(isEnglish ? primaryClass.en : primaryClass.zh),
-          csvCell((primaryClass.matches || []).map(match => isEnglish ? match.en : match.zh).join('; ')),
+        ...(exportContract.includePubChem ? [
+          csvCell(exportClassification.label),
+          csvCell(exportClassification.matches.join('; ')),
           csvCell(pubchem.molecular_formula),
           csvCell(pubchem.molecular_weight),
           csvCell(pubchem.iupac_name),
@@ -1181,17 +1463,18 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
         csvCell(parsed.type),
         csvCell(parsed.value),
         csvCell(threshold ? getThresholdUnit(item.medium) : ''),
-        ...(includeFlavorDescriptions ? [
+        ...(exportContract.includeFlavorDescriptions ? [
           csvCell(fema.fema_number),
           csvCell(fema.flavor_profile),
           csvCell(fema.url)
         ] : []),
-        ...(includeBookResults ? [
+        ...(exportContract.includeBookResults ? [
           csvCell(bookMatches.length ? '酒类风味化学' : ''),
           csvCell(bookMatches.map(hit => `第 ${hit.page} 页 / 片段 ${hit.chunk}`).join('\n')),
           csvCell([...new Set(bookMatches.map(hit => classifyBookHit(hit.text)))].join('; ')),
           csvCell(bookMatches.map(hit => `[第 ${hit.page} 页 / 片段 ${hit.chunk}] ${hit.text}`).join('\n\n'))
-        ] : [])
+        ] : []),
+        csvCell(exportSourceStatuses(item, bookMatches))
         ].join(','));
       });
     });
@@ -1332,6 +1615,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
             <SearchInsights
               isEnglish={isEnglish}
               onSelect={item => {
+                resetWorkbenchCandidateSelection();
                 setSearchMode('single');
                 setExactMatch(true);
                 setSingleQuery(item.cas);
@@ -1387,7 +1671,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           <div className="search-mode-toolbar">
             <div className="search-mode-tabs flex flex-wrap gap-4">
               <button 
-                onClick={() => setSearchMode('single')}
+                onClick={() => changeSearchMode('single')}
                 aria-pressed={searchMode === 'single'}
                 className={searchMode === 'single' ? 'active' : ''}
               >
@@ -1395,7 +1679,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                 {ui.singleMode}
               </button>
               <button 
-                onClick={() => setSearchMode('bulk')}
+                onClick={() => changeSearchMode('bulk')}
                 aria-pressed={searchMode === 'bulk'}
                 className={searchMode === 'bulk' ? 'active' : ''}
               >
@@ -1449,7 +1733,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                   value={singleQuery}
                   onChange={(e) => setSingleQuery(e.target.value)}
                 />
-                <MatchModeControl exactMatch={exactMatch} onChange={setExactMatch} isEnglish={isEnglish} compact />
+                <MatchModeControl exactMatch={exactMatch} onChange={changeMatchMode} isEnglish={isEnglish} compact />
                 </div>
                 <p className="search-field-help">{ui.liveSearchHelp}</p>
               </div>
@@ -1461,7 +1745,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                     {ui.bulkLabel}
                   </label>
                   <div className="bulk-field-actions">
-                    <MatchModeControl exactMatch={exactMatch} onChange={setExactMatch} isEnglish={isEnglish} />
+                    <MatchModeControl exactMatch={exactMatch} onChange={changeMatchMode} isEnglish={isEnglish} />
                   </div>
                 </div>
                 <textarea
@@ -1469,7 +1753,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                   className="bulk-search-input"
                   placeholder={ui.bulkPlaceholder}
                   value={bulkQuery}
-                  onChange={(e) => setBulkQuery(e.target.value)}
+                  onChange={(e) => changeBulkQuery(e.target.value)}
                 ></textarea>
                 <p className="mt-3 text-sm text-slate-500 flex items-center">
                   <AlertCircle className="w-4 h-4 mr-1 opacity-70" />
@@ -1480,6 +1764,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           </div>
 
           {/* Medium Filter Controls */}
+          {resultView === 'classic' && (
           <div className="filter-disclosure">
             <div id="advanced-filters" className="advanced-filters legacy-filter-list" role="group" aria-label={isEnglish ? 'Detection medium filter' : '检测介质过滤'}>
               {[
@@ -1513,8 +1798,69 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
               ))}
             </div>
           </div>
+          )}
         </div>
 
+        <ResultViewSwitch value={resultView} onChange={changeResultView} isEnglish={isEnglish} />
+
+        {coreSearchError ? (
+          <section className="core-search-error" aria-live="polite" data-testid="core-search-error">
+            <AlertCircle aria-hidden="true" />
+            <div>
+              <h2>{isEnglish ? 'Search is temporarily unavailable' : '暂时无法完成检索'}</h2>
+              <p>
+                {isEnglish
+                  ? 'The local identity database could not be loaded. Your input and view choices have been preserved.'
+                  : '本地身份数据库载入失败；已保留当前输入与新版/经典版选择。'}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoading(true);
+                  setCoreSearchError(null);
+                  setCoreLoadNonce(value => value + 1);
+                }}
+                disabled={loading}
+              >
+                {loading
+                  ? (isEnglish ? 'Retrying…' : '重试中…')
+                  : (isEnglish ? 'Retry local database' : '重试本地数据库')}
+              </button>
+            </div>
+          </section>
+        ) : resultView === 'new' ? (
+          <SearchResultsWorkbench
+            key={searchMode === 'bulk' ? batchSessionSignature : 'single'}
+            query={searchMode === 'single' ? singleQuery : bulkQuery}
+            mode={searchMode}
+            rawBatchInputs={rawBatchInputs}
+            batchRows={batchRows}
+            loading={loading}
+            matchCount={queryMatchedResults.length}
+            candidates={compoundDossierCandidates}
+            onCandidateSelect={({ entityKey, cas }) => setSelectedWorkbenchCandidate({
+              scopeKey: workbenchSelectionScopeKey,
+              entityKey,
+              cas,
+            })}
+            candidateScopeKey={workbenchSelectionScopeKey}
+            onRetrySource={retryWorkbenchSource}
+            apiUrl={FEMA_API_URL}
+            citationText={citationExampleText}
+            onExportCompact={() => exportCSV('compact')}
+            onExportDetailed={() => exportCSV('detailed')}
+            includeFlavorDescriptions={includeFlavorDescriptions}
+            exportEnabledSourceKeys={[
+              'local_thresholds',
+              ...(includeFlavorDescriptions ? ['fema'] : []),
+              ...(includePubChem ? ['pubchem'] : []),
+              ...(includeFlavorDB ? ['flavordb'] : []),
+              ...(includeBookResults ? ['book'] : []),
+            ]}
+            isEnglish={isEnglish}
+          />
+        ) : (
+        <div data-testid="classic-search-results" style={{ display: 'contents' }}>
         {/* Results Section */}
         {!loading && (singleQuery.trim() || bulkQuery.trim()) && (
           <section className="search-summary-strip" aria-label={isEnglish ? 'Search summary' : '检索摘要'}>
@@ -1704,9 +2050,11 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                   includeFlavorDescriptions && selectedFlavorSources.includes('FEMA') ? fema : {},
                   includeFlavorDB && selectedFlavorSources.includes('FlavorDB') ? flavordb : {}
                 );
-                const commonName = formatDisplayCommonEnglishName(
-                  (includeFlavorDescriptions && fema.name) || pubchem.title || flavordb.common_name || item.english_name
-                );
+                const scientificProps = buildScientificComponentProps({
+                  rawProfile: { item, fema, profile },
+                  includeFlavorDescriptions,
+                });
+                const commonName = scientificProps.name;
                 const primaryCompoundClass = profile.smart_classification || {
                   key: 'others',
                   zh: '其他类',
@@ -1851,44 +2199,46 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                       />
                     )}
 
-                    {pubchem.found && (
-                      <OpenSpectraWorkbench
-                        apiUrl={FEMA_API_URL}
-                        cas={item.cas}
-                        inchikey={pubchem.inchi_key}
-                        smiles={pubchem.smiles}
-                        compoundName={commonName || item.english_name}
-                        isEnglish={isEnglish}
-                      />
-                    )}
+                    <Suspense fallback={<p className="integrated-empty">{isEnglish ? 'Loading spectrum tools…' : '正在载入谱图工具…'}</p>}>
+                      {pubchem.found && (
+                        <OpenSpectraWorkbench
+                          apiUrl={FEMA_API_URL}
+                          cas={scientificProps.cas}
+                          inchikey={scientificProps.inchikey}
+                          smiles={scientificProps.smiles}
+                          compoundName={scientificProps.name}
+                          isEnglish={isEnglish}
+                        />
+                      )}
 
-                    <NistWebbookPresence apiUrl={FEMA_API_URL} cas={item.cas} isEnglish={isEnglish} />
+                      <NistWebbookPresence apiUrl={FEMA_API_URL} cas={scientificProps.cas} isEnglish={isEnglish} />
+                    </Suspense>
 
                     <BiochemicalRelationships
                       apiUrl={FEMA_API_URL}
-                      cas={item.cas}
-                      inchikey={pubchem.inchi_key}
-                      compoundName={commonName || item.english_name}
+                      cas={scientificProps.cas}
+                      inchikey={scientificProps.inchikey}
+                      compoundName={scientificProps.name}
                       isEnglish={isEnglish}
                     />
 
                     <BiologicalContext
                       apiUrl={FEMA_API_URL}
-                      cas={item.cas}
-                      inchikey={pubchem.inchi_key}
-                      compoundName={commonName || item.english_name}
+                      cas={scientificProps.cas}
+                      inchikey={scientificProps.inchikey}
+                      compoundName={scientificProps.name}
                       isEnglish={isEnglish}
                     />
 
                     <BioactivityEvidence
                       apiUrl={FEMA_API_URL}
-                      cid={pubchem.cid}
-                      inchikey={pubchem.inchi_key}
-                      smiles={pubchem.smiles}
+                      cid={scientificProps.cid}
+                      inchikey={scientificProps.inchikey}
+                      smiles={scientificProps.smiles}
                       isEnglish={isEnglish}
                     />
 
-                    <StructureEvidence apiUrl={FEMA_API_URL} cas={item.cas} inchikey={pubchem.inchi_key} compoundName={commonName || item.english_name} isEnglish={isEnglish} />
+                    <StructureEvidence apiUrl={FEMA_API_URL} cas={scientificProps.cas} inchikey={scientificProps.inchikey} compoundName={scientificProps.name} isEnglish={isEnglish} />
 
                     <footer className="integrated-source-links">
                       <div><strong>{isEnglish ? 'Sources and original records' : '来源与原始记录'}</strong><span>{isEnglish ? 'Open the source page to verify the record.' : '可跳转原网页核验数据。'}</span></div>
@@ -2314,6 +2664,9 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
               })}
             </div>
           </div>
+        )}
+
+        </div>
         )}
 
       </main>

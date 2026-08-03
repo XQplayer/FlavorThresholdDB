@@ -35,6 +35,8 @@ const FALLBACK_CLASS = {
   method: 'SMARTS',
 };
 
+const unavailableFallback = reason => ({ ...FALLBACK_CLASS, reliable: false, reason });
+
 let rdkitPromise;
 const resultCache = new Map();
 
@@ -64,13 +66,13 @@ const hasSmartsMatch = (rdkit, molecule, smarts) => {
 
 export const classifyCompoundBySmarts = async (smiles) => {
   const normalized = (smiles || '').trim();
-  if (!normalized) return FALLBACK_CLASS;
+  if (!normalized) return unavailableFallback('missing_smiles');
   if (resultCache.has(normalized)) return resultCache.get(normalized);
 
   try {
     const rdkit = await loadRDKit();
     const molecule = rdkit.get_mol(normalized);
-    if (!molecule) return FALLBACK_CLASS;
+    if (!molecule) return unavailableFallback('invalid_smiles');
     try {
       const matches = SMARTS_CLASSES.filter(definition =>
         definition.patterns.some(smarts => hasSmartsMatch(rdkit, molecule, smarts))
@@ -82,6 +84,7 @@ export const classifyCompoundBySmarts = async (smiles) => {
         en: primary.en,
         matches: matches.map(({ key, zh, en }) => ({ key, zh, en })),
         method: 'SMARTS',
+        reliable: true,
       };
       resultCache.set(normalized, result);
       return result;
@@ -90,7 +93,7 @@ export const classifyCompoundBySmarts = async (smiles) => {
     }
   } catch (error) {
     console.warn('SMARTS classification unavailable:', error);
-    return FALLBACK_CLASS;
+    return unavailableFallback('classification_unavailable');
   }
 };
 

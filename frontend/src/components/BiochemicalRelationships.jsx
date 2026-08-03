@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { normalizeBiochemicalGraph, summarizeBiochemicalSources } from '../lib/biochemicalRelationships';
+import { summarizeScientificSourceStatus } from '../searchWorkbenchModel';
 
 const STATUS_LABELS = {
   ok: ['可用', 'Available'], no_data: ['无记录', 'No data'], candidate: ['待核验', 'Candidate'],
@@ -8,25 +9,45 @@ const STATUS_LABELS = {
   not_requested: ['未请求', 'Not requested'], unknown: ['状态未知', 'Unknown'],
 };
 
-export default function BiochemicalRelationships({ apiUrl, cas, inchikey, compoundName, isEnglish }) {
+export default function BiochemicalRelationships({ apiUrl, cas, inchikey, compoundName, isEnglish, onStatusChange }) {
   const [payload, setPayload] = useState({ loading: true });
+  const [retryNonce, setRetryNonce] = useState(0);
+  const generationRef = useRef(0);
+  const requestKeyRef = useRef(null);
+  const requestKey = JSON.stringify([cas || null, inchikey || null, compoundName || null]);
+  const canRequest = Boolean(cas || inchikey || compoundName);
   useEffect(() => {
-    if (!cas && !inchikey && !compoundName) return;
+    if (!canRequest) return;
+    const generation = generationRef.current + 1; generationRef.current = generation;
     const controller = new AbortController();
+    const sameIdentity = requestKeyRef.current === requestKey; requestKeyRef.current = requestKey;
+    setPayload(previous => sameIdentity ? { ...previous, loading: true } : { loading: true });
     const query = new URLSearchParams();
     if (inchikey) query.set('inchikey', inchikey);
     if (cas) query.set('cas', cas);
     if (compoundName) query.append('name', compoundName);
     fetch(`${apiUrl}/biochemistry/resolve?${query}`, { signal: controller.signal })
       .then(async response => ({ ok: response.ok, data: await response.json() }))
-      .then(({ ok, data }) => setPayload({ ...data, loading: false, requestFailed: !ok }))
-      .catch(error => { if (error.name !== 'AbortError') setPayload({ loading: false, requestFailed: true }); });
+      .then(({ ok, data }) => { if (generationRef.current === generation) setPayload(previous => ({ ...previous, ...data, loading: false, requestFailed: !ok })); })
+      .catch(error => { if (error.name !== 'AbortError' && generationRef.current === generation) setPayload(previous => ({ ...previous, loading: false, requestFailed: true })); });
     return () => controller.abort();
-  }, [apiUrl, cas, inchikey, compoundName]);
+  }, [apiUrl, canRequest, cas, inchikey, compoundName, requestKey, retryNonce]);
   const graph = useMemo(() => normalizeBiochemicalGraph(payload), [payload]);
   const sourceStates = useMemo(() => summarizeBiochemicalSources(payload.sources), [payload.sources]);
+  useEffect(() => {
+    const hasCandidate = Boolean(graph.chebi) || sourceStates.some(source => ['candidate', 'blocked_unverified_identity'].includes(source.status));
+    onStatusChange?.(summarizeScientificSourceStatus({
+      canRequest,
+      loading: payload.loading,
+      requestFailed: payload.requestFailed,
+      hasData: sourceStates.some(source => source.status === 'ok'),
+      hasCandidate,
+      verified: graph.verified,
+      sourceStatuses: sourceStates.map(source => source.status),
+    }));
+  }, [canRequest, graph.chebi, graph.verified, onStatusChange, payload.loading, payload.requestFailed, sourceStates]);
   if (!cas && !inchikey && !compoundName) return null;
-  const unavailable = payload.requestFailed || !graph.chebi;
+  const unavailable = !graph.chebi;
   return <section className="biochemical-relationships" aria-label={isEnglish ? 'Biochemical relationships' : '生化关系证据'}>
     <header>
       <div><span>ChEBI · Rhea · UniProt</span><h4>{isEnglish ? 'Biochemical relationship evidence' : '生化关系证据'}</h4></div>
@@ -41,7 +62,8 @@ export default function BiochemicalRelationships({ apiUrl, cas, inchikey, compou
     {sourceStates.some(source => source.status === 'partial_failure') && <p className="biochemical-partial-warning" role="status">
       {isEnglish ? 'Some UniProt requests failed; verified results from available reactions remain visible.' : '部分 UniProt 请求失败；其他反应中已核验的结果仍保留显示。'}
     </p>}
-    {payload.loading ? <p>{isEnglish ? 'Resolving stable identifiers…' : '正在解析稳定标识符…'}</p> : unavailable ? <p>{isEnglish ? 'Biochemical sources are temporarily unavailable or returned no matched entity.' : '生化来源暂时不可用，或未返回匹配实体。'}</p> : !graph.verified ? <p>{isEnglish ? 'A name-only ChEBI candidate was found. Automatic reaction expansion is blocked until identity is verified.' : '仅找到名称候选；在化合物身份核验前，不自动扩展反应关系。'}</p> : <div className="biochemical-graph">
+    {!payload.loading && (payload.requestFailed || sourceStates.some(source => ['partial_failure', 'upstream_unavailable', 'invalid_response'].includes(source.status))) && <button type="button" onClick={() => { setPayload(previous => ({ ...previous, loading: true })); setRetryNonce(value => value + 1); }}>{isEnglish ? 'Retry biochemical sources' : '重试生化来源'}</button>}
+    {payload.loading && !graph.chebi ? <p>{isEnglish ? 'Resolving stable identifiers…' : '正在解析稳定标识符…'}</p> : unavailable ? <p>{isEnglish ? 'Biochemical sources are temporarily unavailable or returned no matched entity.' : '生化来源暂时不可用，或未返回匹配实体。'}</p> : !graph.verified ? <p>{isEnglish ? 'A name-only ChEBI candidate was found. Automatic reaction expansion is blocked until identity is verified.' : '仅找到名称候选；在化合物身份核验前，不自动扩展反应关系。'}</p> : <div className="biochemical-graph">
       <div className="biochemical-entity"><strong>{graph.chebi.name || graph.chebi.chebi_id}</strong><span>{graph.chebi.formula || ''}</span><small>{isEnglish ? 'Identity evidence' : '身份依据'}：{graph.chebi.identity_match?.type}</small></div>
       <div className="biochemical-reaction-list">
         {graph.reactions.length ? graph.reactions.map(reaction => <details key={reaction.rhea_id}>

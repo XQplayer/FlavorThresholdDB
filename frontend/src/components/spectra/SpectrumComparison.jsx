@@ -51,6 +51,7 @@ export default function SpectrumComparison({ slots, comparison, tolerance, toler
       {comparison && <div className="comparison-export-actions"><button type="button" disabled={!exportAllowed} onClick={() => exportComparison('json')}>JSON</button><button type="button" disabled={!exportAllowed} onClick={() => exportComparison('csv')}>CSV</button><button type="button" disabled={!exportAllowed} onClick={() => exportComparison('svg')}>SVG</button><button type="button" disabled={!exportAllowed || pngState.busy} onClick={exportPng}>PNG</button></div>}
     </div>
     {comparison && !exportAllowed && <p className="comparison-warning">{isEnglish ? 'Export is disabled until both spectrum licenses are reviewed as redistributable.' : '两条谱图均完成可再分发许可核验后，才开放比较结果导出。'}</p>}
+    {comparison?.error && <p className="comparison-warning" role="alert">{comparison.phase === 'detail' ? (isEnglish ? 'Spectrum load failed' : '谱图载入失败') : (isEnglish ? 'Comparison failed' : '比较失败')}: {comparison.error}</p>}
     {pngState.error && <p className="comparison-warning">{isEnglish ? 'PNG export failed' : 'PNG 导出失败'}: {pngState.error}</p>}
     <div className="comparison-slot-label">A · {slots.a?.source || '—'} · {slots.a?.spectrum_id || (isEnglish ? 'Select spectrum' : '请选择谱图')}</div>
     {slots.a && slots.b && <MirrorSpectrumPlot spectrumA={slots.a} spectrumB={slots.b} comparison={comparison} />}

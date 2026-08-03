@@ -1,0 +1,68 @@
+name: PR Quality Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-quality-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Tests, lint, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Search workbench tests
+        working-directory: frontend
+        run: pnpm run test:search-workbench
+
+      - name: Book search tests
+        working-directory: frontend
+        run: pnpm run test:book-search
+
+      - name: Static route tests
+        working-directory: frontend
+        run: pnpm run test:static-routes
+
+      - name: Shimadzu regression tests
+        working-directory: frontend
+        run: pnpm run test:shimadzu
+
+      - name: Lint
+        working-directory: frontend
+        run: pnpm run lint
+
+      - name: Production build
+        working-directory: frontend
+        env:
+          VITE_FEMA_API_URL: ${{ vars.FEMA_API_URL }}
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: pnpm run build
