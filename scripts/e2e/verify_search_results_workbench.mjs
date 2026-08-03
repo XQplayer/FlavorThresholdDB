@@ -356,6 +356,7 @@ const successfulCompound = {
     },
     pubchem_volatile: { found: false, status: 'no_data', properties: {} },
     flavordb: { found: true, cid: 8857, flavor_profile: ['fruity'] },
+    flavordb2_entities: { found: false, entities: [] },
   };
   const evidence = {};
   const expectedFixtureFailures = [];
