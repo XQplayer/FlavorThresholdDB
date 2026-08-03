@@ -14,6 +14,7 @@ import SearchResultsWorkbench from './components/search-results/SearchResultsWor
 import {
   buildCompoundDossier,
   buildBatchReviewRows,
+  buildBatchSessionSignature,
   buildScientificComponentProps,
   buildWorkbenchIntegratedResults,
   deriveDossierSourceStates,
@@ -167,6 +168,24 @@ export default function App() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
 
   const isEnglish = interfaceLanguage === 'en';
+
+  const resetWorkbenchCandidateSelection = () => setSelectedWorkbenchCandidate({
+    scopeKey: '',
+    entityKey: null,
+    cas: null,
+  });
+  const changeSearchMode = (nextMode) => {
+    if (nextMode !== searchMode) resetWorkbenchCandidateSelection();
+    setSearchMode(nextMode);
+  };
+  const changeMatchMode = (nextExactMatch) => {
+    if (nextExactMatch !== exactMatch) resetWorkbenchCandidateSelection();
+    setExactMatch(nextExactMatch);
+  };
+  const changeBulkQuery = (nextQuery) => {
+    resetWorkbenchCandidateSelection();
+    setBulkQuery(nextQuery);
+  };
 
   useEffect(() => {
     document.documentElement.lang = isEnglish ? 'en' : 'zh-CN';
@@ -476,6 +495,14 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     () => parseBatchReviewInputs(deferredBulkQuery),
     [deferredBulkQuery],
   );
+  const batchSessionSignature = useMemo(
+    () => buildBatchSessionSignature({
+      mode: searchMode,
+      exactMatch,
+      rawInputs: rawBatchInputs,
+    }),
+    [searchMode, exactMatch, rawBatchInputs],
+  );
 
   const results = useMemo(
     () => queryMatchedResults.filter(item => selectedMedia.includes(item.medium)),
@@ -486,7 +513,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     () => [...new Set(queryMatchedResults.map(item => item.cas).filter(Boolean))],
     [queryMatchedResults],
   );
-  const workbenchSelectionScopeKey = `${searchMode}:${(
+  const workbenchSelectionScopeKey = `${searchMode}:${exactMatch ? 'exact' : 'fuzzy'}:${(
     searchMode === 'single' ? deferredSingleQuery : deferredBulkQuery
   ).trim().toLowerCase()}:${workbenchCandidateCas.join('|')}`;
   const selectedWorkbenchCas = selectedWorkbenchCandidate.scopeKey === workbenchSelectionScopeKey
@@ -1460,6 +1487,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
             <SearchInsights
               isEnglish={isEnglish}
               onSelect={item => {
+                resetWorkbenchCandidateSelection();
                 setSearchMode('single');
                 setExactMatch(true);
                 setSingleQuery(item.cas);
@@ -1515,7 +1543,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           <div className="search-mode-toolbar">
             <div className="search-mode-tabs flex flex-wrap gap-4">
               <button 
-                onClick={() => setSearchMode('single')}
+                onClick={() => changeSearchMode('single')}
                 aria-pressed={searchMode === 'single'}
                 className={searchMode === 'single' ? 'active' : ''}
               >
@@ -1523,7 +1551,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                 {ui.singleMode}
               </button>
               <button 
-                onClick={() => setSearchMode('bulk')}
+                onClick={() => changeSearchMode('bulk')}
                 aria-pressed={searchMode === 'bulk'}
                 className={searchMode === 'bulk' ? 'active' : ''}
               >
@@ -1577,7 +1605,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                   value={singleQuery}
                   onChange={(e) => setSingleQuery(e.target.value)}
                 />
-                <MatchModeControl exactMatch={exactMatch} onChange={setExactMatch} isEnglish={isEnglish} compact />
+                <MatchModeControl exactMatch={exactMatch} onChange={changeMatchMode} isEnglish={isEnglish} compact />
                 </div>
                 <p className="search-field-help">{ui.liveSearchHelp}</p>
               </div>
@@ -1589,7 +1617,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                     {ui.bulkLabel}
                   </label>
                   <div className="bulk-field-actions">
-                    <MatchModeControl exactMatch={exactMatch} onChange={setExactMatch} isEnglish={isEnglish} />
+                    <MatchModeControl exactMatch={exactMatch} onChange={changeMatchMode} isEnglish={isEnglish} />
                   </div>
                 </div>
                 <textarea
@@ -1597,7 +1625,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                   className="bulk-search-input"
                   placeholder={ui.bulkPlaceholder}
                   value={bulkQuery}
-                  onChange={(e) => setBulkQuery(e.target.value)}
+                  onChange={(e) => changeBulkQuery(e.target.value)}
                 ></textarea>
                 <p className="mt-3 text-sm text-slate-500 flex items-center">
                   <AlertCircle className="w-4 h-4 mr-1 opacity-70" />
@@ -1649,7 +1677,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
 
         {resultView === 'new' ? (
           <SearchResultsWorkbench
-            key={searchMode === 'bulk' ? `bulk:${rawBatchInputs.join('\u001f')}` : 'single'}
+            key={searchMode === 'bulk' ? batchSessionSignature : 'single'}
             query={searchMode === 'single' ? singleQuery : bulkQuery}
             mode={searchMode}
             rawBatchInputs={rawBatchInputs}

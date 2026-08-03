@@ -897,7 +897,45 @@ try {
   e2eStages.push('batch-ambiguous');
 
   const matchModeGroup = page.getByRole('group', { name: '匹配方式' });
-  await matchModeGroup.getByRole('button', { name: '模糊', exact: true }).click();
+  const exactModeButton = matchModeGroup.getByRole('button', { name: '精确', exact: true });
+  const fuzzyModeButton = matchModeGroup.getByRole('button', { name: '模糊', exact: true });
+  await bulkInput.fill('ethyl acetate');
+  const exactEthylAcetateRow = batchReview.locator('tbody tr').filter({ hasText: 'ethyl acetate' });
+  await exactEthylAcetateRow.waitFor({ state: 'visible' });
+  await exactEthylAcetateRow.getByRole('button', { name: '查看档案' }).click();
+  await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor({ state: 'visible' });
+  await page.waitForFunction(() => document.activeElement?.textContent?.includes('返回批量结果'));
+
+  await fuzzyModeButton.click();
+  await batchReview.waitFor({ state: 'visible' });
+  await batchReview.locator('tbody tr').filter({ hasText: 'ethyl acetate' }).waitFor({ state: 'visible' });
+  assert.equal(await workbench.locator('.compound-identity-header').count(), 0, 'fuzzy mode starts a fresh batch review instead of reviving the exact dossier');
+  assert.equal(await fuzzyModeButton.getAttribute('aria-pressed'), 'true', 'fuzzy mode exposes its active state');
+  assert.equal(await fuzzyModeButton.evaluate(element => document.activeElement === element), true, 'focus remains on the fuzzy mode control after the batch session reset');
+
+  await exactModeButton.click();
+  await batchReview.waitFor({ state: 'visible' });
+  const resetExactEthylAcetateRow = batchReview.locator('tbody tr').filter({ hasText: 'ethyl acetate' });
+  await resetExactEthylAcetateRow.waitFor({ state: 'visible' });
+  assert.equal(await workbench.locator('.compound-identity-header').count(), 0, 'returning to exact mode stays in review until the user chooses a dossier again');
+  assert.equal(await exactModeButton.getAttribute('aria-pressed'), 'true', 'exact mode exposes its active state after the round trip');
+  assert.equal(await exactModeButton.evaluate(element => document.activeElement === element), true, 'focus remains on the exact mode control after the batch session reset');
+  await resetExactEthylAcetateRow.getByRole('button', { name: '查看档案' }).click();
+  await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor({ state: 'visible' });
+  await page.waitForFunction(() => document.activeElement?.textContent?.includes('返回批量结果'));
+  batchReviewEvidence.matchModeRoundTrip = {
+    input: 'ethyl acetate',
+    exactOpened: true,
+    fuzzyReturnedToReview: true,
+    exactReturnedToReview: true,
+    reopenedOnlyAfterClick: true,
+    dossierFocus: '返回批量结果',
+  };
+  e2eStages.push('batch-match-mode-reset');
+  await workbench.getByRole('button', { name: '返回批量结果' }).click();
+  await batchReview.waitFor({ state: 'visible' });
+
+  await fuzzyModeButton.click();
   await bulkInput.fill('ethyl acet');
   const fuzzyAmbiguousRow = batchReview.locator('tbody tr').filter({ hasText: 'ethyl acet' });
   await fuzzyAmbiguousRow.waitFor({ state: 'visible' });
@@ -905,7 +943,7 @@ try {
   assert.equal(await fuzzyAmbiguousRow.getByRole('button', { name: '选择候选 / 待处理' }).isDisabled(), true, 'fuzzy multi-entity candidate cannot open an arbitrary dossier');
   batchReviewEvidence.fuzzy = { input: 'ethyl acet', status: 'candidate', ambiguousActionDisabled: true };
   e2eStages.push('batch-fuzzy-ambiguous');
-  await matchModeGroup.getByRole('button', { name: '精确', exact: true }).click();
+  await exactModeButton.click();
 
   const compoundLimitInputs = [
     '103-84-4',

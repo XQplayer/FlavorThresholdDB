@@ -787,6 +787,35 @@ test('parses batch text by preserving non-empty raw lines and intentionally igno
   );
 });
 
+test('batch session signature includes search and match modes without input delimiter collisions', () => {
+  const exact = searchWorkbenchModel.buildBatchSessionSignature({
+    mode: 'bulk',
+    exactMatch: true,
+    rawInputs: ['ethyl acetate'],
+  });
+  const fuzzy = searchWorkbenchModel.buildBatchSessionSignature({
+    mode: 'bulk',
+    exactMatch: false,
+    rawInputs: ['ethyl acetate'],
+  });
+
+  assert.notEqual(exact, fuzzy);
+  assert.notEqual(exact, searchWorkbenchModel.buildBatchSessionSignature({
+    mode: 'single',
+    exactMatch: true,
+    rawInputs: ['ethyl acetate'],
+  }));
+  assert.equal(exact, searchWorkbenchModel.buildBatchSessionSignature({
+    mode: 'bulk',
+    exactMatch: true,
+    rawInputs: ['ethyl acetate'],
+  }));
+  assert.notEqual(
+    searchWorkbenchModel.buildBatchSessionSignature({ mode: 'bulk', exactMatch: true, rawInputs: ['a\u001fb'] }),
+    searchWorkbenchModel.buildBatchSessionSignature({ mode: 'bulk', exactMatch: true, rawInputs: ['a', 'b'] }),
+  );
+});
+
 test('aggregates all media for one CAS without mutating matched inputs', () => {
   const airThreshold = {
     ...threshold,

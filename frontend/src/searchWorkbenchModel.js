@@ -37,6 +37,18 @@ export const createDefaultChapterFilters = () => ({
 
 const asArray = (value) => Array.isArray(value) ? value : value == null ? [] : [value];
 
+export function buildBatchSessionSignature({
+  mode = 'bulk',
+  exactMatch = true,
+  rawInputs = [],
+} = {}) {
+  return JSON.stringify([
+    mode,
+    exactMatch ? 'exact' : 'fuzzy',
+    asArray(rawInputs).map(value => String(value)),
+  ]);
+}
+
 const sourceStateValue = (state) => {
   if (state && typeof state === 'object') return state.state ?? state.kind ?? state.status ?? state.phase;
   return state;
