@@ -21,7 +21,7 @@ const freezeFilters = (value) => {
 
 export const DEFAULT_CHAPTER_FILTERS = freezeFilters({
   sensory: { sources: ['FEMA', 'FlavorDB'] },
-  thresholds: { media: ['空气', '水', '其他介质'], types: ['d', 'r'], includeBooks: true },
+  thresholds: { media: ['空气', '水', '其他介质'], types: [], includeBooks: true },
   spectra: { sources: ['PubChem'], includeExperimental: true },
 });
 
@@ -80,34 +80,87 @@ const chapter = (records = []) => ({ records });
 const parseThreshold = (value) => {
   if (typeof value === 'number') return { value, unit: null };
   const text = String(value ?? '').trim();
-  const match = text.match(/^([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*(.*)$/);
+  const match = text.replace(/,/g, '').match(/[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:\s*[eE][+-]?\d+)?/);
   if (!match) return { value: null, unit: text || null };
-  return { value: Number(match[1]), unit: match[2].trim() || null };
+  const valueText = match[0].replace(/\s+/g, '');
+  const remainder = text.slice((match.index ?? 0) + match[0].length);
+  const unitMatch = remainder.match(/^\s*([A-Za-zµμ]+(?:\s*\/\s*[A-Za-z0-9^]+)?)/);
+  return { value: Number(valueText), unit: unitMatch?.[1]?.replace(/\s+/g, '') ?? null };
 };
 
-const thresholdSources = (matchedResults, integratedResults) => {
-  const matched = asArray(matchedResults).filter(Boolean);
-  if (matched.length) return matched;
-  return asArray(integratedResults).map(getItem).filter(Boolean);
+const parseStringThreshold = (raw) => {
+  const text = String(raw ?? '');
+  const match = text.trim().match(/^(.+?\(\d{4}.*?\))\s*(?:([dr])\s+)?(.*)$/i);
+  const thresholdText = match ? match[3].trim() : text.trim();
+  return {
+    source: match?.[1]?.trim() ?? null,
+    type: match?.[2]?.toLowerCase() ?? null,
+    ...parseThreshold(thresholdText),
+  };
 };
 
-const toThresholdRecords = (matchedResults, integratedResults) => thresholdSources(matchedResults, integratedResults)
-  .flatMap((item) => asArray(item.threshold_data).map((entry) => {
-    const parsed = parseThreshold(entry?.threshold ?? entry?.value);
-    const thresholdType = entry?.type ?? entry?.threshold_type ?? item.threshold_type ?? null;
-    return {
-      cas: item.cas ?? entry?.cas ?? null,
-      medium: item.medium ?? entry?.medium ?? null,
-      type: thresholdType,
-      thresholdType,
-      value: parsed.value,
-      unit: entry?.unit ?? parsed.unit,
-      source: entry?.reference ?? entry?.source ?? item.reference ?? null,
-      originalText: entry?.original_text ?? entry?.originalText ?? entry?.threshold ?? null,
-      sourceRecordKey: entry?.source_record_key ?? entry?.sourceRecordKey ?? null,
-      raw: entry,
-    };
-  }));
+const entityKeyFor = (item) => {
+  const cas = normaliseCas(item?.cas);
+  if (cas) return `cas:${cas}`;
+  if (item?.cid != null) return `cid:${item.cid}`;
+  return `name:${normaliseText(item?.english_name ?? item?.chinese_name)}`;
+};
+
+const thresholdSources = (matchedResults, integratedResults) => [
+  ...asArray(matchedResults).filter(Boolean).map((item) => ({ item, origin: 'matched' })),
+  ...asArray(integratedResults).map(getItem).filter(Boolean).map((item) => ({ item, origin: 'integrated' })),
+];
+
+const thresholdSignature = (record) => [
+  record.cas ?? '',
+  record.medium ?? '',
+  record.type ?? '',
+  record.value ?? '',
+  record.unit ?? '',
+  record.source ?? '',
+  normaliseText(record.originalText),
+  record.sourceRecordKey ?? '',
+].join('|');
+
+const toThresholdRecords = (matchedResults, integratedResults) => {
+  const seenOrigins = new Map();
+  const occurrences = new Map();
+  return thresholdSources(matchedResults, integratedResults).flatMap(({ item, origin }) => {
+    const entityKey = entityKeyFor(item);
+    return asArray(item.threshold_data).flatMap((entry) => {
+      const stringEntry = typeof entry === 'string';
+      const parsedString = stringEntry ? parseStringThreshold(entry) : null;
+      const parsed = stringEntry ? parsedString : parseThreshold(entry?.threshold ?? entry?.value);
+      const thresholdType = stringEntry
+        ? parsedString.type
+        : entry?.type ?? entry?.threshold_type ?? item.threshold_type ?? null;
+      const originalText = stringEntry
+        ? entry
+        : entry?.original_text ?? entry?.originalText ?? entry?.threshold ?? null;
+      const record = {
+        cas: item.cas ?? entry?.cas ?? null,
+        medium: item.medium ?? entry?.medium ?? null,
+        type: thresholdType,
+        thresholdType,
+        value: parsed.value,
+        unit: entry?.unit ?? parsed.unit,
+        source: entry?.reference ?? entry?.source ?? parsedString?.source ?? item.reference ?? null,
+        originalText,
+        sourceRecordKey: entry?.source_record_key ?? entry?.sourceRecordKey ?? null,
+        raw: entry,
+      };
+      const signature = `${entityKey}|${thresholdSignature(record)}`;
+      const origins = seenOrigins.get(signature) ?? new Set();
+      if (origins.size > 0 && !origins.has(origin)) return [];
+      origins.add(origin);
+      seenOrigins.set(signature, origins);
+      const idBase = record.sourceRecordKey ?? `${record.cas ?? entityKey}|${record.medium ?? ''}|${normaliseText(originalText)}`;
+      const occurrence = occurrences.get(idBase) ?? 0;
+      occurrences.set(idBase, occurrence + 1);
+      return [{ ...record, id: record.sourceRecordKey && occurrence === 0 ? record.sourceRecordKey : `${idBase}:${occurrence}` }];
+    });
+  });
+};
 
 const toSensoryRecords = (integratedResults) => asArray(integratedResults).flatMap((entry) => {
   const fema = entry?.fema ?? {};
@@ -178,7 +231,7 @@ export function filterThresholdRecords(records, filters = {}) {
   const includeBooks = filters.includeBooks ?? true;
   return asArray(records).filter((record) => {
     if (media && !media.has(record.medium)) return false;
-    if (types && !types.has(record.thresholdType ?? record.type)) return false;
+    if (types?.size && !types.has(record.thresholdType ?? record.type)) return false;
     const isBook = record.sourceKind === 'book' || record.isBook === true || record.source === 'book';
     return includeBooks || !isBook;
   });
@@ -193,12 +246,18 @@ const matchedNames = (item) => [
   item?.commonName,
 ].map(normaliseText).filter(Boolean);
 
-const coverageFor = (item) => {
-  const thresholdCount = asArray(item?.threshold_data).length;
+const coverageFor = (items) => {
+  const matches = asArray(items).filter(Boolean);
+  const recordsByItem = matches.map((item) => ({ item, count: asArray(item.threshold_data).length }));
+  const media = [...new Set(recordsByItem
+    .filter(({ count }) => count > 0)
+    .map(({ item }) => item.medium)
+    .filter(Boolean))];
+  const thresholdRecordCount = recordsByItem.reduce((total, { count }) => total + count, 0);
   return {
-    matched: Boolean(item),
-    thresholdRecords: thresholdCount,
-    hasThresholds: thresholdCount > 0,
+    thresholdRecordCount,
+    media,
+    coverage: media.length,
   };
 };
 
@@ -211,19 +270,29 @@ export function buildBatchReviewRows(rawInputs, matchedResults) {
     const occurrence = occurrences.get(inputKey) ?? 0;
     occurrences.set(inputKey, occurrence + 1);
     const cas = normaliseCas(originalInput);
-    const exact = candidates.find((item) => normaliseCas(item.cas) === cas && cas !== '');
+    const exactMatches = candidates.filter((item) => normaliseCas(item.cas) === cas && cas !== '');
     const normalizedName = normaliseText(originalInput);
-    const candidate = exact ?? candidates.find((item) => matchedNames(item).includes(normalizedName) && normalizedName !== '');
-    const status = exact ? 'exact' : candidate ? 'candidate' : 'unmatched';
+    const nameMatches = candidates.filter((item) => matchedNames(item).includes(normalizedName) && normalizedName !== '');
+    const candidateCas = [...new Set(nameMatches.map((item) => normaliseCas(item.cas)).filter(Boolean))];
+    const ambiguous = exactMatches.length === 0 && candidateCas.length > 1;
+    const matches = exactMatches.length > 0 ? exactMatches : nameMatches;
+    const status = exactMatches.length > 0 ? 'exact' : matches.length > 0 ? 'candidate' : 'unmatched';
+    const coverage = coverageFor(matches);
     return {
       id: `${inputKey}:${occurrence}`,
       originalInput,
       normalizedName,
-      cas: candidate?.cas ?? (/^\d{2,7}-\d{2}-\d$/.test(cas) ? cas : null),
+      cas: ambiguous ? null : matches[0]?.cas ?? (/^\d{2,7}-\d{2}-\d$/.test(cas) ? cas : null),
       status,
-      coverage: coverageFor(candidate),
-      issues: status === 'unmatched' ? ['no_match'] : status === 'candidate' ? ['name_match_not_cas'] : [],
-      raw: candidate ?? null,
+      thresholdRecordCount: coverage.thresholdRecordCount,
+      media: coverage.media,
+      coverage: coverage.coverage,
+      issues: status === 'unmatched' ? ['no_match'] : [
+        'name_match_not_cas',
+        ...(ambiguous ? ['ambiguous_identity'] : []),
+      ],
+      matches,
+      raw: matches,
     };
   });
 }

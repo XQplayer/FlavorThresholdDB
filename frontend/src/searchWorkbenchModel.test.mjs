@@ -81,6 +81,7 @@ test('builds identity and preserves parsed threshold provenance', () => {
     source: 'Van Gemert (2011)',
     originalText: '0.005 mg/L',
     sourceRecordKey: 'book:p12:r3',
+    id: 'book:p12:r3',
     raw: threshold.threshold_data[0],
   }]);
   assert.deepEqual(dossier.sourceStates, {
@@ -96,6 +97,54 @@ test('maps thresholds and identity from integrated-only results', () => {
   assert.equal(dossier.identity.molecularFormula, 'C4H8O2');
   assert.equal(dossier.thresholds.records.length, 1);
   assert.equal(dossier.thresholds.records[0].type, 'd');
+});
+
+test('maps production-style string thresholds without losing comparator or range text', () => {
+  const productionRecord = {
+    cas: '108-24-7',
+    medium: '空气',
+    threshold_data: [
+      'Hellman & Small (1973,1974) d < 0.6',
+      'Schieberle & Grosch (1988) 0.002 - 0.0108',
+    ],
+  };
+  const records = buildCompoundDossier({ matchedResults: [productionRecord] }).thresholds.records;
+  assert.equal(records[0].type, 'd');
+  assert.equal(records[0].value, 0.6);
+  assert.equal(records[0].raw, productionRecord.threshold_data[0]);
+  assert.equal(records[0].originalText, productionRecord.threshold_data[0]);
+  assert.equal(records[1].type, null);
+  assert.equal(records[1].raw, productionRecord.threshold_data[1]);
+  assert.equal(records[1].originalText, productionRecord.threshold_data[1]);
+  assert.equal(filterThresholdRecords(records, createDefaultChapterFilters().thresholds).length, 2);
+});
+
+test('gives thresholds stable unique ids and prioritizes a source record key', () => {
+  const duplicateStrings = {
+    cas: '108-24-7',
+    medium: '空气',
+    threshold_data: ['Hellman & Small (1973,1974) d < 0.6', 'Hellman & Small (1973,1974) d < 0.6'],
+  };
+  const keyed = buildCompoundDossier({ matchedResults: [threshold] }).thresholds.records[0];
+  const first = buildCompoundDossier({ matchedResults: [duplicateStrings] }).thresholds.records;
+  const second = buildCompoundDossier({ matchedResults: [duplicateStrings] }).thresholds.records;
+  assert.equal(keyed.id, 'book:p12:r3');
+  assert.equal(new Set(first.map(({ id }) => id)).size, 2);
+  assert.deepEqual(first.map(({ id }) => id), second.map(({ id }) => id));
+});
+
+test('merges matched and integrated threshold records by entity and deduplicates identical records', () => {
+  const noThresholdMatch = { ...threshold, threshold_data: [] };
+  const fromIntegrated = buildCompoundDossier({
+    matchedResults: [noThresholdMatch],
+    integratedResults: [integrated],
+  }).thresholds.records;
+  const deduplicated = buildCompoundDossier({
+    matchedResults: [threshold],
+    integratedResults: [integrated],
+  }).thresholds.records;
+  assert.equal(fromIntegrated.length, 1);
+  assert.equal(deduplicated.length, 1);
 });
 
 test('filters threshold records without mutating source records', () => {
@@ -139,6 +188,35 @@ test('builds occurrence-aware batch review rows for exact candidate and unmatche
   ]);
   assert.equal(rows[2].normalizedName, 'ethyl acetate');
   assert.ok('cas' in rows[2] && 'coverage' in rows[2] && Array.isArray(rows[2].issues));
+});
+
+test('aggregates all media for one CAS without mutating matched inputs', () => {
+  const airThreshold = {
+    ...threshold,
+    medium: '空气',
+    threshold_data: [{ threshold: '0.6 mg/m3', type: 'd' }],
+  };
+  const candidates = [threshold, airThreshold];
+  const before = structuredClone(candidates);
+  const [row] = buildBatchReviewRows(['141-78-6'], candidates);
+  assert.equal(row.status, 'exact');
+  assert.equal(row.thresholdRecordCount, 2);
+  assert.deepEqual(row.media, ['水', '空气']);
+  assert.equal(row.coverage, 2);
+  assert.equal(row.matches.length, 2);
+  assert.deepEqual(candidates, before);
+});
+
+test('keeps a multi-CAS name match ambiguous instead of choosing the first identity', () => {
+  const candidates = [
+    { cas: '111-11-1', english_name: 'Shared name', medium: '水', threshold_data: ['A (2001) d 1'] },
+    { cas: '222-22-2', english_name: 'Shared name', medium: '空气', threshold_data: ['B (2002) d 2'] },
+  ];
+  const [row] = buildBatchReviewRows(['shared name'], candidates);
+  assert.equal(row.status, 'candidate');
+  assert.equal(row.cas, null);
+  assert.ok(row.issues.includes('ambiguous_identity'));
+  assert.equal(row.matches.length, 2);
 });
 
 test('sorts batch review priority deterministically without changing inputs', () => {
