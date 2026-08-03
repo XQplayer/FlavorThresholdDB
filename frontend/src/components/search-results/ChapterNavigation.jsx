@@ -13,7 +13,9 @@ export default function ChapterNavigation({ chapters, activeId, onChange, isEngl
       <div className="chapter-navigation__list">
         {chapters.map((chapter) => {
           const label = isEnglish ? chapter.en : chapter.zh;
-          const status = STATUS_LABELS[chapter.status] || STATUS_LABELS.not_requested;
+          const status = chapter.hasExternalState === false
+            ? null
+            : STATUS_LABELS[chapter.status] || STATUS_LABELS.not_requested;
           return (
             <button
               type="button"
@@ -23,10 +25,12 @@ export default function ChapterNavigation({ chapters, activeId, onChange, isEngl
               onClick={() => onChange(chapter.id)}
             >
               <span>{label}</span>
-              <span className="chapter-navigation__meta">
-                <span>{chapter.count}</span>
-                <span>{isEnglish ? status.en : status.zh}</span>
-              </span>
+              {chapter.hasExternalState !== false && (
+                <span className="chapter-navigation__meta">
+                  <span>{chapter.count}</span>
+                  <span>{isEnglish ? status.en : status.zh}</span>
+                </span>
+              )}
             </button>
           );
         })}

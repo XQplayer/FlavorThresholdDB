@@ -300,6 +300,24 @@ try {
   const chapterNavigation = page.getByRole('navigation', { name: '档案章节' });
   const chapterButtons = chapterNavigation.getByRole('button');
   assert.equal(await chapterButtons.count(), 8, 'new dossier exposes eight chapter buttons');
+  const delegatedChapterButtons = [
+    chapterNavigation.getByRole('button', { name: /光谱/ }),
+    chapterNavigation.getByRole('button', { name: /生化关系/ }),
+    chapterNavigation.getByRole('button', { name: /活性与靶点/ }),
+    chapterNavigation.getByRole('button', { name: /蛋白结构/ }),
+  ];
+  for (const button of delegatedChapterButtons) {
+    assert.equal(
+      await button.locator('.chapter-navigation__meta').count(),
+      0,
+      'delegated chapter navigation does not show a synthetic count or request status',
+    );
+  }
+  const assertNoDelegatedPanelMeta = async (chapterName) => {
+    const panelHeader = workbench.locator('.chapter-panel__header');
+    assert.equal(await panelHeader.locator('.chapter-panel__status').count(), 0, `${chapterName} omits the delegated outer status`);
+    assert.equal(await panelHeader.locator('.chapter-panel__count').count(), 0, `${chapterName} omits the delegated outer count`);
+  };
   const heavyRequests = () => apiRequests.filter(request => classicEndpointPrefixes.some(prefix => request.path.startsWith(prefix)));
   await page.waitForLoadState('networkidle');
   assert.equal(await page.getByTestId('spectrum-workbench').count(), 0, 'overview does not mount the spectrum workbench');
@@ -310,6 +328,7 @@ try {
   await page.getByTestId('spectrum-workbench').waitFor({ state: 'visible', timeout: 30_000 });
   await workbench.getByText('MassBank · MB-FIXTURE-1', { exact: true }).waitFor({ state: 'visible' });
   await workbench.getByRole('link', { name: 'EI 质谱' }).waitFor({ state: 'visible' });
+  await assertNoDelegatedPanelMeta('spectra');
   assert.ok(apiRequests.some(request => request.path === '/spectra/search'), 'spectra request starts only after entering the spectra chapter');
   assert.ok(apiRequests.some(request => request.path === '/nist-webbook'), 'NIST presence request starts only in the spectra chapter');
   assert.equal(apiRequests.filter(request => request.path === '/biochemistry/resolve').length, 0, 'spectra does not mount biochemistry');
@@ -321,6 +340,7 @@ try {
   assert.equal(await page.getByTestId('spectrum-workbench').count(), 0, 'leaving spectra unmounts the spectrum workbench');
   await workbench.getByText('RHEA:10020', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
   await workbench.getByText('ATF2', { exact: true }).waitFor({ state: 'visible' });
+  await assertNoDelegatedPanelMeta('biochemistry');
   assert.equal(await workbench.locator('.bioactivity-evidence').count(), 0, 'biochemistry does not mount bioactivity');
   assert.equal(await workbench.locator('.structure-evidence').count(), 0, 'biochemistry does not mount protein structures');
 
@@ -330,6 +350,7 @@ try {
   await workbench.getByText('Fixture cell viability assay', { exact: true }).waitFor({ state: 'visible' });
   await workbench.getByRole('tab', { name: /ChEMBL/ }).click();
   await workbench.getByText('Fixture ChEMBL target', { exact: true }).waitFor({ state: 'visible' });
+  await assertNoDelegatedPanelMeta('bioactivity');
   assert.equal(await workbench.locator('.biochemical-relationships').count(), 0, 'bioactivity does not mount biochemistry');
   assert.equal(await workbench.locator('.biological-context').count(), 0, 'bioactivity does not mount biological context');
 
@@ -337,6 +358,7 @@ try {
   await structuresChapter.click();
   await workbench.getByText('PDB 1ABC', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
   await workbench.getByText('AF-P12345-F1', { exact: true }).waitFor({ state: 'visible' });
+  await assertNoDelegatedPanelMeta('protein structures');
   assert.equal(await workbench.locator('.bioactivity-evidence').count(), 0, 'protein structures do not mount bioactivity');
   assert.equal(await workbench.locator('.biochemical-relationships').count(), 0, 'protein structures do not mount biochemistry');
 

@@ -14,6 +14,7 @@ export default function ChapterPanel({
   title,
   count = 0,
   status = 'not_requested',
+  hasExternalState = true,
   sourceStates,
   filters,
   children,
@@ -27,14 +28,18 @@ export default function ChapterPanel({
     <section className="chapter-panel" aria-labelledby={headingId}>
       <header className="chapter-panel__header">
         <div>
-          <span className="chapter-panel__status" data-status={status}>
-            {isEnglish ? statusLabel.en : statusLabel.zh}
-          </span>
+          {hasExternalState && status != null && (
+            <span className="chapter-panel__status" data-status={status}>
+              {isEnglish ? statusLabel.en : statusLabel.zh}
+            </span>
+          )}
           <h3 id={headingId}>{title}</h3>
         </div>
-        <span className="chapter-panel__count">
-          {isEnglish ? `${count} records` : `${count} 条记录`}
-        </span>
+        {hasExternalState && count != null && (
+          <span className="chapter-panel__count">
+            {isEnglish ? `${count} records` : `${count} 条记录`}
+          </span>
+        )}
       </header>
       <SourceStatusSummary sources={sourceStates} isEnglish={isEnglish} onRetry={onRetry} />
       {filters && <div className="chapter-panel__filters">{filters}</div>}

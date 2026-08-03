@@ -26,6 +26,8 @@ const CHAPTER_SOURCE_KEYS = {
   citation: ['book'],
 };
 
+const DELEGATED_CHAPTER_IDS = new Set(['spectra', 'biochemistry', 'bioactivity', 'structures']);
+
 export default function SearchResultsWorkbench({
   query,
   loading,
@@ -60,11 +62,19 @@ export default function SearchResultsWorkbench({
     ? filterSelection.values
     : defaultChapterFilters;
   const chapters = useMemo(() => CHAPTERS.map((chapter) => {
+    if (DELEGATED_CHAPTER_IDS.has(chapter.id)) {
+      return { ...chapter, count: null, status: null, hasExternalState: false };
+    }
     const count = dossier?.[chapter.id]?.records?.length || 0;
     const sourceStates = (CHAPTER_SOURCE_KEYS[chapter.id] || [])
       .map(key => dossier?.sourceStates?.[key])
       .filter(Boolean);
-    return { ...chapter, count, status: summarizeChapterStatus({ recordCount: count, sourceStates }) };
+    return {
+      ...chapter,
+      count,
+      status: summarizeChapterStatus({ recordCount: count, sourceStates }),
+      hasExternalState: true,
+    };
   }), [dossier]);
 
   useEffect(() => {
@@ -177,6 +187,7 @@ export default function SearchResultsWorkbench({
             title={isEnglish ? activeChapter.en : activeChapter.zh}
             count={activeChapter.count}
             status={activeChapter.status}
+            hasExternalState={activeChapter.hasExternalState}
             sourceStates={panelSourceStates}
             isEnglish={isEnglish}
           >
