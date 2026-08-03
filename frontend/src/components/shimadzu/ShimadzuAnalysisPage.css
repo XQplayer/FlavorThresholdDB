@@ -677,6 +677,7 @@
 .shimadzu-job-identity { min-width: 0; display: flex; align-items: center; gap: 12px; }
 .shimadzu-job-badge { min-height: 28px; padding: 0 9px; border-radius: 8px; display: inline-flex; align-items: center; color: var(--sz-accent-deep); background: var(--sz-accent-soft); font-size: 9px; font-weight: 760; white-space: nowrap; }
 .shimadzu-job-badge.complete { color: var(--sz-success); background: var(--sz-success-soft); }
+.shimadzu-job-badge.saving { color: var(--sz-accent-deep); background: var(--sz-accent-soft); }
 .shimadzu-job-badge.failed { color: var(--sz-danger); background: var(--sz-danger-soft); }
 .shimadzu-job-identity h2 { margin: 0; overflow: hidden; color: var(--sz-ink); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .shimadzu-job-identity code { display: block; margin-top: 4px; overflow: hidden; color: var(--sz-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
@@ -705,6 +706,8 @@
 }
 .shimadzu-job-actions .primary { border-color: var(--sz-accent); color: var(--sz-surface); background: var(--sz-accent); }
 .shimadzu-job-actions svg { width: 14px; height: 14px; }
+.shimadzu-saving { min-height: 42px; padding: 0 12px; display: inline-flex; align-items: center; gap: 7px; color: var(--sz-accent-deep); font-size: 10px; font-weight: 700; }
+.shimadzu-saving svg { width: 14px; height: 14px; }
 
 .shimadzu-stage-detail { padding: 26px; }
 .shimadzu-stage-detail ol { margin: 22px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); list-style: none; }
