@@ -15,6 +15,7 @@ import {
   buildCompoundDossier,
   buildBatchReviewRows,
   buildBatchSessionSignature,
+  buildCandidateScopeKey,
   buildScientificComponentProps,
   buildWorkbenchIntegratedResults,
   deriveDossierSourceStates,
@@ -30,6 +31,9 @@ import {
   beginFemaProfileRequest,
   failCompoundProfileRequest,
   failFemaProfileRequest,
+  getExportClassification,
+  retryFetchOptions,
+  withRetryGeneration,
 } from './searchSourceState';
 
 const ShimadzuAnalysisPage = lazy(() => import('./components/shimadzu/ShimadzuAnalysisPage'));
@@ -331,7 +335,10 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     if (coreLoadRequestRef.current?.nonce !== coreLoadNonce) {
       coreLoadRequestRef.current = {
         nonce: coreLoadNonce,
-        promise: fetch(`${import.meta.env.BASE_URL}aroma_data_merged.json`).then(response => {
+        promise: fetch(
+          withRetryGeneration(`${import.meta.env.BASE_URL}aroma_data_merged.json`, coreLoadNonce),
+          retryFetchOptions(coreLoadNonce),
+        ).then(response => {
         if (!response.ok) throw new Error(`Core search data failed (${response.status})`);
         return response.json();
         }),
@@ -378,7 +385,10 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     if (bookLoadRequestRef.current?.nonce !== bookLoadNonce) {
       bookLoadRequestRef.current = {
         nonce: bookLoadNonce,
-        promise: fetch(`${import.meta.env.BASE_URL}book_flavor_chemistry_index.json?v=1.3.1`).then(response => {
+        promise: fetch(
+          withRetryGeneration(`${import.meta.env.BASE_URL}book_flavor_chemistry_index.json?v=1.3.1`, bookLoadNonce),
+          retryFetchOptions(bookLoadNonce),
+        ).then(response => {
         if (!response.ok) throw new Error(`Book evidence failed (${response.status})`);
         return response.json();
         }),
@@ -577,9 +587,11 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     () => [...new Set(queryMatchedResults.map(item => item.cas).filter(Boolean))],
     [queryMatchedResults],
   );
-  const workbenchSelectionScopeKey = `${searchMode}:${exactMatch ? 'exact' : 'fuzzy'}:${(
-    searchMode === 'single' ? deferredSingleQuery : deferredBulkQuery
-  ).trim().toLowerCase()}:${workbenchCandidateCas.join('|')}`;
+  const workbenchSelectionScopeKey = `${buildCandidateScopeKey({
+    query: searchMode === 'single' ? deferredSingleQuery : deferredBulkQuery,
+    mode: searchMode,
+    exactMatch,
+  })}:${workbenchCandidateCas.join('|')}`;
   const selectedWorkbenchCas = selectedWorkbenchCandidate.scopeKey === workbenchSelectionScopeKey
     && workbenchCandidateCas.includes(selectedWorkbenchCandidate.cas)
     ? selectedWorkbenchCandidate.cas
@@ -606,7 +618,11 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     femaProfilesRef.current[cas] = loadingProfile;
     setFemaProfiles(current => ({ ...current, [cas]: loadingProfile }));
     try {
-      const response = await fetch(`${FEMA_API_URL}/fema?cas=${encodeURIComponent(cas)}`);
+      const retryGeneration = retrying ? generation : 0;
+      const response = await fetch(
+        withRetryGeneration(`${FEMA_API_URL}/fema?cas=${encodeURIComponent(cas)}`, retryGeneration),
+        retryFetchOptions(retryGeneration),
+      );
       if (!response.ok) throw new Error(`FEMA lookup failed (${response.status})`);
       const profile = { ...(await response.json()), loading: false, retrying: false };
       if (femaRequestGenerationRef.current[cas] !== generation) return;
@@ -629,7 +645,11 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     compoundProfilesRef.current[cas] = loadingProfile;
     setCompoundProfiles(current => ({ ...current, [cas]: loadingProfile }));
     try {
-      const response = await fetch(`${FEMA_API_URL}/compound?cas=${encodeURIComponent(cas)}`);
+      const retryGeneration = retrying ? generation : 0;
+      const response = await fetch(
+        withRetryGeneration(`${FEMA_API_URL}/compound?cas=${encodeURIComponent(cas)}`, retryGeneration),
+        retryFetchOptions(retryGeneration),
+      );
       if (!response.ok) throw new Error(`Compound lookup failed (${response.status})`);
       const profile = await response.json();
       const smartClassification = await classifyCompoundBySmarts(profile.pubchem?.smiles);
@@ -1297,7 +1317,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
         const fema = femaProfiles[item.cas] || {};
         const profile = compoundProfiles[item.cas] || {};
         const pubchem = profile.pubchem || {};
-        const primaryClass = profile.smart_classification || { zh: '其他类', en: 'Others' };
+        const exportClassification = getExportClassification(profile, isEnglish);
         const commonEnglishNameText = formatCommonEnglishName(fema.name || item.english_name);
         const thresholdCells = selectedMediaInOrder.flatMap(medium => {
           const mediumItem = media.get(medium);
@@ -1318,7 +1338,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           csvCasCell(item.cas),
           csvCell(item.chinese_name),
           csvCell(commonEnglishNameText),
-          csvCell(isEnglish ? primaryClass.en : primaryClass.zh),
+          csvCell(exportClassification.label),
           csvCell(pubchem.molecular_formula),
           csvCell(splitDescriptorValues(fema.flavor_profile).join('; ')),
           ...thresholdCells
@@ -1361,7 +1381,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       const filteredThresholds = getFilteredThresholds(item);
       const thresholdRecords = filteredThresholds.length ? filteredThresholds : [''];
       const functionalGroups = flavordb.functional_groups || [];
-      const primaryClass = profile.smart_classification || { zh: '其他类', en: 'Others' };
+      const exportClassification = getExportClassification(profile, isEnglish);
 
       thresholdRecords.forEach(threshold => {
         const parsed = threshold
@@ -1384,8 +1404,8 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           csvCell(flavordb.url)
         ] : []),
         ...(includePubChem ? [
-          csvCell(isEnglish ? primaryClass.en : primaryClass.zh),
-          csvCell((primaryClass.matches || []).map(match => isEnglish ? match.en : match.zh).join('; ')),
+          csvCell(exportClassification.label),
+          csvCell(exportClassification.matches.join('; ')),
           csvCell(pubchem.molecular_formula),
           csvCell(pubchem.molecular_weight),
           csvCell(pubchem.iupac_name),
@@ -1781,12 +1801,20 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
               entityKey,
               cas,
             })}
+            candidateScopeKey={workbenchSelectionScopeKey}
             onRetrySource={retryWorkbenchSource}
             apiUrl={FEMA_API_URL}
             citationText={citationExampleText}
             onExportCompact={() => exportCSV('compact')}
             onExportDetailed={() => exportCSV('detailed')}
             includeFlavorDescriptions={includeFlavorDescriptions}
+            exportEnabledSourceKeys={[
+              'local_thresholds',
+              ...(includeFlavorDescriptions ? ['fema'] : []),
+              ...(includePubChem ? ['pubchem'] : []),
+              ...(includeFlavorDB ? ['flavordb'] : []),
+              ...(includeBookResults ? ['book'] : []),
+            ]}
             isEnglish={isEnglish}
           />
         ) : (

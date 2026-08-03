@@ -1,5 +1,6 @@
 export default function CompoundIdentityHeader({
   identity,
+  headingRef,
   coveredChapterCount = 0,
   totalChapterCount = 0,
   isEnglish = false,
@@ -39,7 +40,7 @@ export default function CompoundIdentityHeader({
         <span className="compound-identity-header__eyebrow">
           {isEnglish ? 'Compound identity' : '化合物身份'}
         </span>
-        <h2>{preferredName || (isEnglish ? 'Unnamed compound' : '未命名化合物')}</h2>
+        <h2 ref={headingRef} tabIndex={-1}>{preferredName || (isEnglish ? 'Unnamed compound' : '未命名化合物')}</h2>
         <div className="compound-identity-header__aliases">
           {aliases.map(({ label, value }) => (
             <span key={label}><strong>{label}</strong>{value}</span>

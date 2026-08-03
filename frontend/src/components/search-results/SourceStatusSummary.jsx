@@ -13,11 +13,37 @@ const toEntries = (sources) => Array.isArray(sources)
 
 export default function SourceStatusSummary({ sources, isEnglish = false, onRetry }) {
   const entries = toEntries(sources).filter(([name]) => name);
+  const itemRefs = useRef(new Map());
+  const retryRefs = useRef(new Map());
+  const pendingRetryRef = useRef(null);
+  const [announcement, setAnnouncement] = useState('');
+
+  useEffect(() => {
+    const pending = pendingRetryRef.current;
+    if (!pending) return;
+    const entry = entries.find(([name]) => name === pending.name);
+    if (!entry) return;
+    const [, source] = entry;
+    if (source?.retrying) {
+      pending.sawRetrying = true;
+      return;
+    }
+    if (!pending.sawRetrying) return;
+    const status = source?.status ?? source?.state ?? 'not_requested';
+    const sourceLabel = (isEnglish ? source?.labelEn : source?.labelZh) || pending.name;
+    const label = STATUS_LABELS[status] || STATUS_LABELS.not_requested;
+    const target = status === 'failed' ? retryRefs.current.get(pending.name) : itemRefs.current.get(pending.name);
+    target?.focus();
+    setAnnouncement(`${sourceLabel}: ${isEnglish ? label.en : label.zh}`);
+    pendingRetryRef.current = null;
+  }, [sources, entries, isEnglish]);
+
   if (!entries.length) return null;
 
   return (
     <div className="source-status-summary" aria-label={isEnglish ? 'Source status' : '来源状态'} aria-live="polite">
       <span className="source-status-summary__label">{isEnglish ? 'Sources' : '来源'}</span>
+      <span className="source-status-summary__announcement" role="status" aria-live="polite">{announcement}</span>
       <ul>
         {entries.map(([name, source]) => {
           const status = source?.status ?? source?.state ?? 'not_requested';
@@ -27,11 +53,19 @@ export default function SourceStatusSummary({ sources, isEnglish = false, onRetr
             ? source.failedChildren
             : [];
           return (
-            <li key={name} data-status={STATUS_LABELS[status] ? status : 'not_requested'}>
+            <li key={name} ref={node => node ? itemRefs.current.set(name, node) : itemRefs.current.delete(name)} tabIndex={-1} data-status={STATUS_LABELS[status] ? status : 'not_requested'}>
               <span>{sourceLabel}</span>
               <strong>{isEnglish ? label.en : label.zh}</strong>
               {status === 'failed' && onRetry && (
-                <button type="button" onClick={() => onRetry(name)} disabled={source?.retrying}>
+                <button
+                  ref={node => node ? retryRefs.current.set(name, node) : retryRefs.current.delete(name)}
+                  type="button"
+                  onClick={() => {
+                    pendingRetryRef.current = { name, sawRetrying: false };
+                    onRetry(name);
+                  }}
+                  disabled={source?.retrying}
+                >
                   {source?.retrying
                     ? (isEnglish ? 'Retrying…' : '重试中…')
                     : (isEnglish ? 'Retry' : '重试')}
@@ -56,3 +90,4 @@ export default function SourceStatusSummary({ sources, isEnglish = false, onRetr
     </div>
   );
 }
+import { useEffect, useRef, useState } from 'react';

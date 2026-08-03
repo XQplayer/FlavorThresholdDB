@@ -11,12 +11,22 @@ const locatorText = (raw, isEnglish) => {
   return [raw?.book_title || (isEnglish ? 'Wine Flavor Chemistry' : '酒类风味化学'), pageText, blockText].filter(Boolean);
 };
 
-export default function CitationExportChapter({ citationExampleText, records = [], onExportCompact, onExportDetailed, sourceStates = {}, isEnglish = false }) {
+export default function CitationExportChapter({
+  citationExampleText,
+  records = [],
+  onExportCompact,
+  onExportDetailed,
+  sourceStates = {},
+  exportEnabledSourceKeys = [],
+  isEnglish = false,
+}) {
   const [copyState, setCopyState] = useState('idle');
   const copyTimerRef = useRef(null);
   const copyRequestTokenRef = useRef(0);
   const mountedRef = useRef(false);
-  const unavailableSources = Object.values(sourceStates).filter(source => ['failed', 'loading'].includes(source?.status));
+  const enabledSources = new Set(exportEnabledSourceKeys);
+  const unavailableSources = Object.entries(sourceStates)
+    .filter(([sourceId, source]) => enabledSources.has(sourceId) && ['failed', 'loading', 'partial'].includes(source?.status));
 
   useEffect(() => {
     mountedRef.current = true;
@@ -73,8 +83,8 @@ export default function CitationExportChapter({ citationExampleText, records = [
         {unavailableSources.length > 0 && (
           <p className="citation-export-chapter__source-warning" aria-live="polite">
             {isEnglish
-              ? 'Exports keep currently available evidence. Failed or loading sources are not represented as zero.'
-              : '导出会保留当前可用证据；失败或载入中的来源不会被表示为 0。'}
+              ? 'Exports keep currently available evidence. Unavailable, partial, or loading sources are not represented as zero.'
+              : '导出会保留当前可用证据；未完整可用或载入中的来源不会被表示为 0。'}
           </p>
         )}
       </section>

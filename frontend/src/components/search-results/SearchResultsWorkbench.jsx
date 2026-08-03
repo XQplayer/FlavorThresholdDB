@@ -52,6 +52,7 @@ export default function SearchResultsWorkbench({
   loading,
   matchCount = 0,
   candidates = [],
+  candidateScopeKey,
   onCandidateSelect,
   onRetrySource,
   apiUrl,
@@ -59,14 +60,18 @@ export default function SearchResultsWorkbench({
   onExportCompact,
   onExportDetailed,
   includeFlavorDescriptions = true,
+  exportEnabledSourceKeys = [],
   isEnglish = false,
 }) {
   const queryKey = String(query || '').trim().toLowerCase();
-  const [candidateSelection, setCandidateSelection] = useState({ queryKey, entityKey: null });
+  const selectionScopeKey = candidateScopeKey || `${mode}:${queryKey}`;
+  const [candidateSelection, setCandidateSelection] = useState({ scopeKey: selectionScopeKey, entityKey: null });
   const [batchState, setBatchState] = useState(createDefaultBatchState);
   const batchBackButtonRef = useRef(null);
   const batchRowAnchorRef = useRef(null);
   const pendingBatchReturnRef = useRef(null);
+  const pendingCandidateFocusRef = useRef(false);
+  const dossierHeadingRef = useRef(null);
   const batchAnimationFrameIds = useRef(new Set());
   const scheduleBatchAnimationFrame = useCallback((callback) => {
     const id = requestAnimationFrame(() => {
@@ -89,7 +94,7 @@ export default function SearchResultsWorkbench({
     ? (linkedBatchCandidates.length === 1 ? linkedBatchCandidates[0] : null)
     : candidates.length === 1
       ? candidates[0]
-      : candidateSelection.queryKey === queryKey
+      : candidateSelection.scopeKey === selectionScopeKey
         ? candidates.find(candidate => candidate.entityKey === candidateSelection.entityKey)
         : null;
   const dossier = selectedCandidate?.dossier;
@@ -125,10 +130,16 @@ export default function SearchResultsWorkbench({
   useEffect(() => {
     // Query ownership is part of the selection; changing it must not revive a stale candidate.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCandidateSelection(current => current.queryKey === queryKey
+    setCandidateSelection(current => current.scopeKey === selectionScopeKey
       ? current
-      : { queryKey, entityKey: null });
-  }, [queryKey]);
+      : { scopeKey: selectionScopeKey, entityKey: null });
+  }, [selectionScopeKey]);
+
+  useEffect(() => {
+    if (!pendingCandidateFocusRef.current || mode !== 'single' || !entityKey) return;
+    pendingCandidateFocusRef.current = false;
+    scheduleBatchAnimationFrame(() => dossierHeadingRef.current?.focus({ preventScroll: true }));
+  }, [entityKey, mode, scheduleBatchAnimationFrame]);
 
   useEffect(() => {
     // Entity-scoped navigation and filters reset together after identity changes.
@@ -174,7 +185,7 @@ export default function SearchResultsWorkbench({
   useEffect(() => () => {
     batchAnimationFrameIds.current.forEach(id => cancelAnimationFrame(id));
     batchAnimationFrameIds.current.clear();
-  }, [queryKey]);
+  }, [selectionScopeKey]);
 
   if (mode === 'bulk' && hasQuery && !loading && !selectedCandidate) {
     return (
@@ -235,7 +246,8 @@ export default function SearchResultsWorkbench({
                 <button
                   type="button"
                   onClick={() => {
-                    setCandidateSelection({ queryKey, entityKey: candidate.entityKey });
+                    pendingCandidateFocusRef.current = true;
+                    setCandidateSelection({ scopeKey: selectionScopeKey, entityKey: candidate.entityKey });
                     onCandidateSelect?.({ entityKey: candidate.entityKey, cas: candidate.cas });
                   }}
                 >
@@ -297,6 +309,7 @@ export default function SearchResultsWorkbench({
         </p>
         <CompoundIdentityHeader
           identity={dossier.identity}
+          headingRef={dossierHeadingRef}
           coveredChapterCount={coveredChapterCount}
           totalChapterCount={CHAPTERS.length}
           isEnglish={isEnglish}
@@ -323,6 +336,7 @@ export default function SearchResultsWorkbench({
                 identity={dossier.identity}
                 chapters={chapters}
                 sourceStates={dossier.sourceStates}
+                exportEnabledSourceKeys={exportEnabledSourceKeys}
                 isEnglish={isEnglish}
               />
             ) : activeChapter.id === 'sensory' ? (

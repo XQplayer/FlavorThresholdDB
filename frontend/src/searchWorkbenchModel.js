@@ -37,6 +37,10 @@ export const createDefaultChapterFilters = () => ({
 
 const asArray = (value) => Array.isArray(value) ? value : value == null ? [] : [value];
 
+export function buildCandidateScopeKey({ query = '', mode = 'single', exactMatch = true } = {}) {
+  return `${mode}:${exactMatch ? 'exact' : 'fuzzy'}:${String(query).trim().toLocaleLowerCase()}`;
+}
+
 export function buildBatchSessionSignature({
   mode = 'bulk',
   exactMatch = true,

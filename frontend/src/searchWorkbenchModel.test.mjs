@@ -12,6 +12,7 @@ import {
   buildBatchReviewRows,
   parseBatchReviewInputs,
   sortBatchRows,
+  buildCandidateScopeKey,
 } from './searchWorkbenchModel.js';
 
 const threshold = {
@@ -39,6 +40,15 @@ const integrated = {
     inchi_key: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N',
   } },
 };
+
+test('candidate scope changes with normalized query, search mode, and match mode', () => {
+  assert.equal(buildCandidateScopeKey({ query: '  对叔丁基苯甲醛 ', mode: 'single', exactMatch: true }), 'single:exact:对叔丁基苯甲醛');
+  assert.equal(buildCandidateScopeKey({ query: '对叔丁基苯甲醛', mode: 'single', exactMatch: false }), 'single:fuzzy:对叔丁基苯甲醛');
+  assert.notEqual(
+    buildCandidateScopeKey({ query: 'same', mode: 'single', exactMatch: true }),
+    buildCandidateScopeKey({ query: 'same', mode: 'bulk', exactMatch: true }),
+  );
+});
 
 test('groups dossier inputs by stable entity key without cross-contaminating evidence', () => {
   assert.equal(typeof searchWorkbenchModel.groupDossierInputsByEntity, 'function');

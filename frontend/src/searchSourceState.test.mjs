@@ -5,6 +5,9 @@ import {
   beginFemaProfileRequest,
   failCompoundProfileRequest,
   failFemaProfileRequest,
+  getExportClassification,
+  retryFetchOptions,
+  withRetryGeneration,
 } from './searchSourceState.js';
 
 test('marks a FEMA retry without discarding the failed profile context', () => {
@@ -56,4 +59,29 @@ test('initial compound failure marks both shared-endpoint sources as failed', ()
   const failure = failCompoundProfileRequest(undefined, new Error('offline'));
   assert.equal(failure.pubchem.error, 'offline');
   assert.equal(failure.flavordb.error, 'offline');
+});
+
+test('retry requests bypass browser caches without changing initial request semantics', () => {
+  assert.equal(withRetryGeneration('http://127.0.0.1:8787/fema?cas=141-78-6', 0), 'http://127.0.0.1:8787/fema?cas=141-78-6');
+  assert.equal(withRetryGeneration('/book.json?v=1', 2), '/book.json?v=1&_retry=2');
+  assert.equal(retryFetchOptions(0), undefined);
+  assert.deepEqual(retryFetchOptions(2), { cache: 'no-store' });
+});
+
+test('exports classification only when SMARTS produced a reliable result', () => {
+  assert.deepEqual(getExportClassification(undefined, false), { label: '', matches: [] });
+  assert.deepEqual(getExportClassification({ loading: true }, false), { label: '', matches: [] });
+  assert.deepEqual(getExportClassification({
+    error: 'offline',
+    smart_classification: { key: 'others', zh: '其他类', en: 'Others', reliable: false },
+  }, false), { label: '', matches: [] });
+  assert.deepEqual(getExportClassification({
+    smart_classification: { key: 'others', zh: '其他类', en: 'Others', reliable: true, matches: [] },
+  }, true), { label: 'Others', matches: [] });
+  assert.deepEqual(getExportClassification({
+    smart_classification: {
+      key: 'esters', zh: '酯类', en: 'Esters', reliable: true,
+      matches: [{ zh: '酯类', en: 'Esters' }],
+    },
+  }, false), { label: '酯类', matches: ['酯类'] });
 });
