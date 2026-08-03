@@ -49,3 +49,15 @@ test('sanitizes and bounds worksheet names', () => {
   assert.equal(safeSheetName('A/B:C*D?E[F]'), 'A_B_C_D_E_F_')
   assert.equal(safeSheetName('x'.repeat(40)).length, 31)
 })
+
+test('infers legacy sample group and approved octanol name', () => {
+  const workbook = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['样品名称', '矩阵名称', '样品形态', '液体样品添加量（mL）', '固体样品添加量（g）', '内标 CAS', '内标添加浓度（μg/mL）', '内标添加量（μL）', '体系液相体积（mL）'],
+    ['CT1-1', 'CT', '液体', 5, 'NA', '123-96-6', '100μg/mL', '10μL', 5],
+  ]), '样品与内标信息')
+  const bytes = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' })
+  const [sample] = readSampleConfiguration(bytes).samples
+  assert.equal(sample.sampleGroup, 'CT1')
+  assert.equal(sample.internalStandardName, '2-Octanol')
+})

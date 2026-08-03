@@ -5,6 +5,8 @@ const valueOf = (row, headers, ...names) => {
   for (const name of names) if (headers.has(name)) return row[headers.get(name)]
   return ''
 }
+const inferGroup = sampleName => clean(sampleName).match(/^(.*?)(?:[-_]?)([123])$/)?.[1] || clean(sampleName)
+const standardName = cas => cas === '123-96-6' ? '2-Octanol' : cas === '589-62-8' ? '4-Octanol' : 'Internal Standard'
 
 export function safeSheetName(value) {
   const cleaned = clean(value).replace(/[\\/:*?\[\]]/g, '_').slice(0, 31)
@@ -44,14 +46,14 @@ export function readSampleConfiguration(bytes) {
     const systemCell = valueOf(row, headers, '体系液相体积', '体系液相体积（mL）')
     samples.push({
       sampleName,
-      sampleGroup: clean(valueOf(row, headers, '样品分组')),
+      sampleGroup: clean(valueOf(row, headers, '样品分组')) || inferGroup(sampleName),
       matrixName: clean(valueOf(row, headers, '矩阵名称')) || '浓度矩阵',
       sampleType: clean(valueOf(row, headers, '样品类型', '样品类别')),
       sampleForm,
       liquidAmountMl,
       solidAmountG,
       internalStandardCas,
-      internalStandardName: clean(valueOf(row, headers, '内标名称')),
+      internalStandardName: clean(valueOf(row, headers, '内标名称')) || standardName(internalStandardCas),
       stockUgMl: valueOf(row, headers, '内标添加浓度（μg/mL）', '内标储备液浓度'),
       spikeUl: valueOf(row, headers, '内标添加量（μL）', '内标添加量'),
       systemMl: clean(systemCell) ? systemCell : (sampleForm === '液体' ? liquidAmountMl : systemCell),
