@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
+import { lazy, Suspense, useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import { Search, FileSpreadsheet, List, FileText, Download, AlertCircle, Loader2, Info, ExternalLink, X, Copy, Check, ChevronDown, ChevronUp, FlaskConical, Mail, MessageCircle, Network, Database, ShieldCheck } from 'lucide-react';
 import './App.css';
 import SearchInsights from './components/SearchInsights';
@@ -13,6 +13,8 @@ import BioactivityEvidence from './components/BioactivityEvidence';
 import StructureEvidence from './components/StructureEvidence';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
+
+const ShimadzuAnalysisPage = lazy(() => import('./components/shimadzu/ShimadzuAnalysisPage'));
 import {
   getBookConflictQuality,
   getBookDisplayCas,
@@ -29,12 +31,14 @@ import {
 const FEMA_API_URL = (import.meta.env.VITE_FEMA_API_URL || 'http://127.0.0.1:8787').replace(/\/$/, '');
 const APP_BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, '');
 const SEARCH_PATH = `${APP_BASE_PATH}/aroma-threshold/`;
+const SHIMADZU_PATH = `${APP_BASE_PATH}/shimadzu-analysis/`;
 
-const getViewFromLocation = () => (
-  window.location.pathname.replace(/\/+$/, '').endsWith('/aroma-threshold') || window.location.hash === '#search'
-    ? 'search'
-    : 'home'
-);
+const getViewFromLocation = () => {
+  const path = window.location.pathname.replace(/\/+$/, '');
+  if (path.endsWith('/shimadzu-analysis')) return 'shimadzu';
+  if (path.endsWith('/aroma-threshold') || window.location.hash === '#search') return 'search';
+  return 'home';
+};
 
 const parseThresholdStr = (str) => {
   const match = str.match(/^(.+?\(\d{4}.*?\))\s*(?:([dr])\s+)?(.*)$/);
@@ -169,6 +173,13 @@ export default function App() {
     setCurrentView('home');
     setShowCitationExample(false);
     window.history.pushState({ view: 'home' }, '', `${APP_BASE_PATH}/`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const openShimadzuView = () => {
+    setCurrentView('shimadzu');
+    setShowContact(false);
+    window.history.pushState({ view: 'shimadzu' }, '', SHIMADZU_PATH);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -1195,7 +1206,17 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
   const summaryFlavorDb = summaryIntegrated.profile?.flavordb || {};
 
   return (
-    <div className={`app-shell ${currentView === 'home' ? 'home-view' : 'search-view'}`}>
+    <div className={`app-shell ${currentView === 'home' ? 'home-view' : currentView === 'search' ? 'search-view' : 'shimadzu-view'}`}>
+      {currentView === 'shimadzu' && (
+        <Suspense fallback={<div className="shimadzu-route-loading" role="status">正在加载岛津分析工作台…</div>}>
+          <ShimadzuAnalysisPage
+            onHome={openHomeView}
+            onThresholds={openSearchView}
+            isEnglish={isEnglish}
+            setInterfaceLanguage={setInterfaceLanguage}
+          />
+        </Suspense>
+      )}
       {currentView === 'home' && (
       <section className="science-hero">
         <div className="hero-inner">
@@ -1209,6 +1230,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
             <div className="science-nav-links">
               <a href="#top" className={!showCitationExample && !showContact ? 'active' : ''} onClick={() => setShowCitationExample(false)}>{isEnglish ? 'Home' : '首页'}</a>
               <button type="button" onClick={openSearchView}>FlavorThresholdDB</button>
+              <button type="button" onClick={openShimadzuView}>{isEnglish ? 'Shimadzu GC-MS' : '岛津气质分析'}</button>
               <button type="button" className={showCitationExample && !showContact ? 'active' : ''} onClick={openDataSources}>
                 {isEnglish ? 'Sources' : '数据来源'}
               </button>
@@ -1341,6 +1363,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           <div className="science-nav-links">
             <button type="button" onClick={openHomeView}>{isEnglish ? 'Home' : '首页'}</button>
             <button type="button" className={showContact ? '' : 'active'} onClick={openSearchView}>FlavorThresholdDB</button>
+            <button type="button" onClick={openShimadzuView}>{isEnglish ? 'Shimadzu GC-MS' : '岛津气质分析'}</button>
             <button type="button" onClick={openDataSources}>{isEnglish ? 'Sources' : '数据来源'}</button>
             <button type="button" className={`science-contact-link ${showContact ? 'active' : ''}`} onClick={() => setShowContact(true)}>{isEnglish ? 'Contact' : '联系我们'}</button>
           </div>
