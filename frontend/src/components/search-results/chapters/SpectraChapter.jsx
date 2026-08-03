@@ -1,9 +1,14 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 
 const OpenSpectraWorkbench = lazy(() => import('../../spectra/OpenSpectraWorkbench'));
 const NistWebbookPresence = lazy(() => import('../../NistWebbookPresence'));
 
-export default function SpectraChapter({ apiUrl, cas, inchikey, smiles, name, isEnglish = false }) {
+function LoadedStatus({ onStatusChange }) {
+  useEffect(() => { onStatusChange?.('available'); }, [onStatusChange]);
+  return null;
+}
+
+export default function SpectraChapter({ apiUrl, cas, inchikey, smiles, name, isEnglish = false, onStatusChange }) {
   return (
     <div className="spectra-chapter" data-testid="spectrum-workbench">
       <p className="scientific-chapter-note">
@@ -12,6 +17,7 @@ export default function SpectraChapter({ apiUrl, cas, inchikey, smiles, name, is
           : '谱图匹配与原站可用性均为证据记录；实验条件请回到原始来源核验。'}
       </p>
       <Suspense fallback={<p>{isEnglish ? 'Loading spectrum tools…' : '正在载入谱图工具…'}</p>}>
+        <LoadedStatus onStatusChange={onStatusChange} />
         <OpenSpectraWorkbench
           apiUrl={apiUrl}
           cas={cas}

@@ -411,8 +411,9 @@ test('builds identity and preserves parsed threshold provenance', () => {
     medium: '水',
     type: 'd',
     thresholdType: 'd',
-    value: 0.005,
-    unit: 'mg/L',
+      value: 0.005,
+      unit: 'mg/L',
+      originalUnit: 'mg/L',
     source: 'Van Gemert (2011)',
     originalText: '0.005 mg/L',
     sourceRecordKey: 'book:p12:r3',
@@ -901,11 +902,25 @@ test('keeps a multi-CAS name match ambiguous instead of choosing the first ident
     { cas: '222-22-2', english_name: 'Shared name', medium: '空气', threshold_data: ['B (2002) d 2'] },
   ];
   const [row] = buildBatchReviewRows(['shared name'], candidates);
-  assert.equal(row.status, 'candidate');
+  assert.equal(row.status, 'conflict');
   assert.equal(row.cas, null);
   assert.equal(row.candidateEntityKey, null);
   assert.ok(row.issues.includes('ambiguous_identity'));
   assert.equal(row.matches.length, 2);
+});
+
+test('assigns classic medium units while preserving raw threshold evidence', () => {
+  const productionData = JSON.parse(readFileSync(
+    new URL('../public/aroma_data_merged.json', import.meta.url),
+    'utf8',
+  )).filter(item => item.cas === '141-78-6');
+  const records = buildCompoundDossier({ matchedResults: productionData }).thresholds.records;
+  const air = records.find(record => record.originalText.includes('Jung (1936)') && record.type === 'd');
+  const water = records.find(record => record.originalText.includes('Hansen et al. (1992)'));
+  assert.equal(air.unit, 'mg/m3');
+  assert.equal(water.unit, 'mg/kg');
+  assert.equal(air.originalUnit, null);
+  assert.equal(air.raw, air.originalText);
 });
 
 test('uses actual matched names for fuzzy batch candidates while exact mode keeps full matches', () => {
@@ -919,7 +934,7 @@ test('uses actual matched names for fuzzy batch candidates while exact mode keep
   assert.equal(exactRow.status, 'unmatched');
 
   const [fuzzyRow] = buildBatchReviewRows(['ethyl acet'], candidates, { exactMatch: false });
-  assert.equal(fuzzyRow.status, 'candidate');
+  assert.equal(fuzzyRow.status, 'conflict');
   assert.equal(fuzzyRow.matches.length, 2);
   assert.equal(fuzzyRow.candidateEntityKey, null);
   assert.equal(fuzzyRow.standardName, null);
@@ -934,7 +949,7 @@ test('treats a CAS identity and a no-CAS normalized-name identity as ambiguous',
   ];
   const [row] = buildBatchReviewRows(['shared identity'], candidates);
 
-  assert.equal(row.status, 'candidate');
+  assert.equal(row.status, 'conflict');
   assert.equal(row.candidateEntityKey, null);
   assert.equal(row.standardName, null);
   assert.equal(row.cas, null);

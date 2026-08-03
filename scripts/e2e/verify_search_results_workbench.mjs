@@ -985,13 +985,14 @@ try {
   for (const button of delegatedChapterButtons) {
     assert.equal(
       await button.locator('.chapter-navigation__meta').count(),
-      0,
-      'delegated chapter navigation does not show a synthetic count or request status',
+      1,
+      'lazy scientific chapter navigation exposes its request state',
     );
+    assert.match(await button.textContent(), /未加载/, 'unvisited scientific chapter starts idle');
   }
-  const assertNoDelegatedPanelMeta = async (chapterName) => {
+  const assertDelegatedPanelMeta = async (chapterName) => {
     const panelHeader = workbench.locator('.chapter-panel__header');
-    assert.equal(await panelHeader.locator('.chapter-panel__status').count(), 0, `${chapterName} omits the delegated outer status`);
+    assert.equal(await panelHeader.locator('.chapter-panel__status').count(), 1, `${chapterName} exposes the delegated request status`);
     assert.equal(await panelHeader.locator('.chapter-panel__count').count(), 0, `${chapterName} omits the delegated outer count`);
   };
   const heavyRequests = () => apiRequests.filter(request => classicEndpointPrefixes.some(prefix => request.path.startsWith(prefix)));
@@ -1004,7 +1005,7 @@ try {
   await page.getByTestId('spectrum-workbench').waitFor({ state: 'visible', timeout: 30_000 });
   await workbench.getByText('MassBank · MB-FIXTURE-1', { exact: true }).waitFor({ state: 'visible' });
   await workbench.getByRole('link', { name: 'EI 质谱' }).waitFor({ state: 'visible' });
-  await assertNoDelegatedPanelMeta('spectra');
+  await assertDelegatedPanelMeta('spectra');
   assert.ok(apiRequests.some(request => request.path === '/spectra/search'), 'spectra request starts only after entering the spectra chapter');
   assert.ok(apiRequests.some(request => request.path === '/nist-webbook'), 'NIST presence request starts only in the spectra chapter');
   assert.equal(apiRequests.filter(request => request.path === '/biochemistry/resolve').length, 0, 'spectra does not mount biochemistry');
@@ -1030,7 +1031,7 @@ try {
   assert.equal(await page.getByTestId('spectrum-workbench').count(), 0, 'leaving spectra unmounts the spectrum workbench');
   await workbench.getByText('RHEA:10020', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
   await workbench.getByText('ATF2', { exact: true }).waitFor({ state: 'visible' });
-  await assertNoDelegatedPanelMeta('biochemistry');
+  await assertDelegatedPanelMeta('biochemistry');
   assert.equal(await workbench.locator('.bioactivity-evidence').count(), 0, 'biochemistry does not mount bioactivity');
   assert.equal(await workbench.locator('.structure-evidence').count(), 0, 'biochemistry does not mount protein structures');
 
@@ -1040,7 +1041,7 @@ try {
   await workbench.getByText('Fixture cell viability assay', { exact: true }).waitFor({ state: 'visible' });
   await workbench.getByRole('tab', { name: /ChEMBL/ }).click();
   await workbench.getByText('Fixture ChEMBL target', { exact: true }).waitFor({ state: 'visible' });
-  await assertNoDelegatedPanelMeta('bioactivity');
+  await assertDelegatedPanelMeta('bioactivity');
   assert.equal(await workbench.locator('.biochemical-relationships').count(), 0, 'bioactivity does not mount biochemistry');
   assert.equal(await workbench.locator('.biological-context').count(), 0, 'bioactivity does not mount biological context');
 
@@ -1048,7 +1049,7 @@ try {
   await structuresChapter.click();
   await workbench.getByText('PDB 1ABC', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
   await workbench.getByText('AF-P12345-F1', { exact: true }).waitFor({ state: 'visible' });
-  await assertNoDelegatedPanelMeta('protein structures');
+  await assertDelegatedPanelMeta('protein structures');
   assert.equal(await workbench.locator('.bioactivity-evidence').count(), 0, 'protein structures do not mount bioactivity');
   assert.equal(await workbench.locator('.biochemical-relationships').count(), 0, 'protein structures do not mount biochemistry');
 
@@ -1514,9 +1515,15 @@ try {
   await bulkInput.fill('对叔丁基苯甲醛');
   const ambiguousBatchRow = batchReview.locator('tbody tr').filter({ hasText: '对叔丁基苯甲醛' });
   await ambiguousBatchRow.waitFor({ state: 'visible' });
-  assert.equal(await ambiguousBatchRow.getAttribute('data-status'), 'candidate', 'same-name multi-CAS input remains a candidate');
-  assert.equal(await ambiguousBatchRow.getByRole('button', { name: '选择候选 / 待处理' }).isDisabled(), true, 'ambiguous candidate cannot open an arbitrary first dossier');
-  assert.equal(await batchReview.getByRole('button', { name: '查看档案' }).count(), 0, 'ambiguous candidate has no direct dossier action');
+  assert.equal(await ambiguousBatchRow.getAttribute('data-status'), 'conflict', 'same-name multi-CAS input is explicitly marked as a conflict');
+  const ambiguousChoices = ambiguousBatchRow.locator('.batch-review__candidate-choice');
+  assert.ok(await ambiguousChoices.count() >= 2, 'conflict exposes each distinct CAS candidate');
+  await ambiguousChoices.first().click();
+  assert.equal(await ambiguousBatchRow.getByRole('button', { name: '查看档案' }).count(), 1, 'explicit candidate selection enables dossier opening');
+  await ambiguousBatchRow.getByRole('button', { name: '查看档案' }).click();
+  await workbench.locator('.compound-identity-header').waitFor({ state: 'visible' });
+  await workbench.getByRole('button', { name: '返回批量结果' }).click();
+  await batchReview.waitFor({ state: 'visible' });
   e2eStages.push('batch-ambiguous');
 
   const matchModeGroup = page.getByRole('group', { name: '匹配方式' });
@@ -1562,9 +1569,10 @@ try {
   await bulkInput.fill('ethyl acet');
   const fuzzyAmbiguousRow = batchReview.locator('tbody tr').filter({ hasText: 'ethyl acet' });
   await fuzzyAmbiguousRow.waitFor({ state: 'visible' });
-  assert.equal(await fuzzyAmbiguousRow.getAttribute('data-status'), 'candidate', 'partial real-name input becomes a fuzzy candidate');
-  assert.equal(await fuzzyAmbiguousRow.getByRole('button', { name: '选择候选 / 待处理' }).isDisabled(), true, 'fuzzy multi-entity candidate cannot open an arbitrary dossier');
-  batchReviewEvidence.fuzzy = { input: 'ethyl acet', status: 'candidate', ambiguousActionDisabled: true };
+  assert.equal(await fuzzyAmbiguousRow.getAttribute('data-status'), 'conflict', 'partial real-name multi-CAS input becomes a conflict');
+  const fuzzyChoices = fuzzyAmbiguousRow.locator('.batch-review__candidate-choice');
+  assert.ok(await fuzzyChoices.count() >= 2, 'fuzzy conflict exposes candidate choices');
+  batchReviewEvidence.fuzzy = { input: 'ethyl acet', status: 'conflict', candidateCount: await fuzzyChoices.count() };
   e2eStages.push('batch-fuzzy-ambiguous');
   await exactModeButton.click();
 

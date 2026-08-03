@@ -392,6 +392,11 @@ const thresholdSignature = (record) => [
   record.sourceRecordKey ?? '',
 ].join('|');
 
+const inferredThresholdUnit = (medium) => {
+  const text = normaliseText(medium);
+  return text.includes('空气') || text === 'air' ? 'mg/m3' : 'mg/kg';
+};
+
 const foreignCasReferences = (entry, currentCas) => [
   ...String(entry ?? '').matchAll(/(?<!\d)(\d{2,7}-\d{2}-\d)(?!\d)/g),
 ].map(match => match[1]).filter(cas => cas !== normaliseCas(currentCas));
@@ -460,7 +465,8 @@ const toThresholdEvidence = (matchedResults, integratedResults) => {
         type: thresholdType,
         thresholdType,
         value: parsed.value,
-        unit: parsed.value == null ? null : entry?.unit ?? parsed.unit,
+        unit: parsed.value == null ? null : entry?.unit ?? parsed.unit ?? inferredThresholdUnit(item.medium ?? entry?.medium),
+        originalUnit: entry?.unit ?? parsed.unit ?? null,
         source: entry?.reference ?? entry?.source ?? parsedString?.source ?? item.reference ?? null,
         originalText,
         sourceRecordKey: entry?.source_record_key ?? entry?.sourceRecordKey ?? null,
@@ -738,7 +744,7 @@ export function buildBatchReviewRows(rawInputs, matchedResults, {
     const linkedDossierCandidates = candidateEntityKey
       ? asArray(dossierCandidates).filter(candidate => candidate?.entityKey === candidateEntityKey)
       : [];
-    const status = exactMatches.length > 0 ? 'exact' : matches.length > 0 ? 'candidate' : 'unmatched';
+    const status = exactMatches.length > 0 ? 'exact' : ambiguous ? 'conflict' : matches.length > 0 ? 'candidate' : 'unmatched';
     const coverage = coverageFor(matches);
     return {
       id: `${inputKey}:${occurrence}`,
@@ -759,7 +765,7 @@ export function buildBatchReviewRows(rawInputs, matchedResults, {
       chapterCoverageCount: linkedDossierCandidates.length === 1
         ? dossierChapterCoverage(linkedDossierCandidates[0])
         : 0,
-      issues: status === 'unmatched' ? ['no_match'] : status === 'candidate' ? [
+      issues: status === 'unmatched' ? ['no_match'] : ['candidate', 'conflict'].includes(status) ? [
         'name_match_not_cas',
         ...(ambiguous ? ['ambiguous_identity'] : []),
       ] : [],
@@ -773,7 +779,7 @@ const compareValues = (left, right) => String(left ?? '').localeCompare(String(r
 
 export function sortBatchRows(rows, { key = 'reviewPriority', direction = 'asc' } = {}) {
   const multiplier = direction === 'desc' ? -1 : 1;
-  const priority = { unmatched: 0, candidate: 1, exact: 2 };
+  const priority = { unmatched: 0, conflict: 1, candidate: 2, exact: 3 };
   return asArray(rows).map((row, index) => ({ row, index })).sort((left, right) => {
     const compared = key === 'reviewPriority'
       ? (priority[left.row.status] ?? 99) - (priority[right.row.status] ?? 99)

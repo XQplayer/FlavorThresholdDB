@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { normalizeStructureEvidence } from '../lib/structureEvidence';
 
-export default function StructureEvidence({ apiUrl, cas, inchikey, compoundName, isEnglish }) {
+export default function StructureEvidence({ apiUrl, cas, inchikey, compoundName, isEnglish, onStatusChange }) {
   const [payload, setPayload] = useState({ loading: true });
   useEffect(() => {
     if (!cas && !inchikey && !compoundName) return;
@@ -11,6 +11,9 @@ export default function StructureEvidence({ apiUrl, cas, inchikey, compoundName,
     return () => controller.abort();
   }, [apiUrl, cas, inchikey, compoundName]);
   const data = useMemo(() => normalizeStructureEvidence(payload), [payload]);
+  useEffect(() => {
+    onStatusChange?.(payload.loading ? 'loading' : payload.requestFailed ? 'failed' : 'available');
+  }, [onStatusChange, payload.loading, payload.requestFailed]);
   if (!cas && !inchikey && !compoundName) return null;
   return <section className="structure-evidence" aria-label={isEnglish ? 'Protein structure evidence' : '蛋白结构证据'}>
     <header><div><span>RCSB PDB · AlphaFold DB · GPCRdb</span><h4>{isEnglish ? 'Protein structure evidence' : '实验与预测蛋白结构'}</h4></div>{!payload.loading && <b>{data.experimental.length} PDB · {data.predicted.length} AlphaFold · {data.gpcrs.length} GPCR</b>}</header>

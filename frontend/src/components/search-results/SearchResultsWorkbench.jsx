@@ -91,7 +91,11 @@ export default function SearchResultsWorkbench({
     ))
     : [];
   const selectedCandidate = mode === 'bulk'
-    ? (linkedBatchCandidates.length === 1 ? linkedBatchCandidates[0] : null)
+    ? (!selectedBatchRow ? null : linkedBatchCandidates.length === 1
+      ? linkedBatchCandidates[0]
+      : candidateSelection.scopeKey === selectionScopeKey
+        ? candidates.find(candidate => candidate.entityKey === candidateSelection.entityKey)
+        : null)
     : candidates.length === 1
       ? candidates[0]
       : candidateSelection.scopeKey === selectionScopeKey
@@ -100,6 +104,13 @@ export default function SearchResultsWorkbench({
   const dossier = selectedCandidate?.dossier;
   const entityKey = selectedCandidate?.entityKey ?? null;
   const [chapterSelection, setChapterSelection] = useState({ entityKey, id: 'overview' });
+  const [scientificStatuses, setScientificStatuses] = useState({ entityKey, values: {} });
+  const scientificStatusHandlers = useMemo(() => Object.fromEntries(
+    [...DELEGATED_CHAPTER_IDS].map(id => [id, status => setScientificStatuses(current => ({
+      entityKey,
+      values: { ...(current.entityKey === entityKey ? current.values : {}), [id]: status },
+    }))]),
+  ), [entityKey]);
   const [filterSelection, setFilterSelection] = useState({
     entityKey,
     values: createDefaultChapterFilters(),
@@ -113,7 +124,7 @@ export default function SearchResultsWorkbench({
     : defaultChapterFilters;
   const chapters = useMemo(() => CHAPTERS.map((chapter) => {
     if (DELEGATED_CHAPTER_IDS.has(chapter.id)) {
-      return { ...chapter, count: null, status: null, statusOwner: 'child' };
+      return { ...chapter, count: null, status: scientificStatuses.entityKey === entityKey ? scientificStatuses.values[chapter.id] || 'idle' : 'idle', statusOwner: 'workbench' };
     }
     const count = dossier?.[chapter.id]?.records?.length || 0;
     const sourceStates = (CHAPTER_SOURCE_KEYS[chapter.id] || [])
@@ -125,7 +136,7 @@ export default function SearchResultsWorkbench({
       status: summarizeChapterStatus({ recordCount: count, sourceStates }),
       statusOwner: 'workbench',
     };
-  }), [dossier]);
+  }), [dossier, entityKey, scientificStatuses]);
 
   useEffect(() => {
     // Query ownership is part of the selection; changing it must not revive a stale candidate.
@@ -150,6 +161,7 @@ export default function SearchResultsWorkbench({
     setFilterSelection(current => current.entityKey === entityKey
       ? current
       : { entityKey, values: createDefaultChapterFilters() });
+    setScientificStatuses(current => current.entityKey === entityKey ? current : { entityKey, values: {} });
   }, [entityKey]);
 
   useEffect(() => {
@@ -196,13 +208,14 @@ export default function SearchResultsWorkbench({
           candidates={candidates}
           state={batchState}
           onStateChange={setBatchState}
-          onOpen={(rowId, actionElement) => {
+          onOpen={(rowId, actionElement, chosenCandidate) => {
             const row = batchRows.find(candidateRow => candidateRow.id === rowId);
-            const rowCandidates = row?.candidateEntityKey
+            const rowCandidates = chosenCandidate ? [chosenCandidate] : row?.candidateEntityKey
               ? candidates.filter(candidate => candidate.entityKey === row.candidateEntityKey)
               : [];
             if (rowCandidates.length !== 1) return;
             const candidate = rowCandidates[0];
+            setCandidateSelection({ scopeKey: selectionScopeKey, entityKey: candidate.entityKey });
             batchRowAnchorRef.current = {
               rowId,
               anchorTop: actionElement?.closest('[data-row-id]')?.getBoundingClientRect().top ?? null,
@@ -318,7 +331,10 @@ export default function SearchResultsWorkbench({
           <ChapterNavigation
             chapters={chapters}
             activeId={activeChapter.id}
-            onChange={(id) => setChapterSelection({ entityKey, id })}
+            onChange={(id) => {
+              setChapterSelection({ entityKey, id });
+              if (DELEGATED_CHAPTER_IDS.has(id)) setScientificStatuses(current => ({ entityKey, values: { ...(current.entityKey === entityKey ? current.values : {}), [id]: 'loading' } }));
+            }}
             isEnglish={isEnglish}
           />
           <ChapterPanel
@@ -353,13 +369,13 @@ export default function SearchResultsWorkbench({
                 isEnglish={isEnglish}
               />
             ) : activeChapter.id === 'spectra' ? (
-              <SpectraChapter {...scientificProps} />
+              <SpectraChapter {...scientificProps} onStatusChange={scientificStatusHandlers.spectra} />
             ) : activeChapter.id === 'biochemistry' ? (
-              <BiochemistryChapter {...scientificProps} />
+              <BiochemistryChapter {...scientificProps} onStatusChange={scientificStatusHandlers.biochemistry} />
             ) : activeChapter.id === 'bioactivity' ? (
-              <BioactivityChapter {...scientificProps} />
+              <BioactivityChapter {...scientificProps} onStatusChange={scientificStatusHandlers.bioactivity} />
             ) : activeChapter.id === 'structures' ? (
-              <ProteinStructuresChapter {...scientificProps} />
+              <ProteinStructuresChapter {...scientificProps} onStatusChange={scientificStatusHandlers.structures} />
             ) : activeChapter.id === 'citation' ? (
               <CitationExportChapter
                 citationExampleText={citationText}

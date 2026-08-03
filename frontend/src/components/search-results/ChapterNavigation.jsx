@@ -1,4 +1,6 @@
 const STATUS_LABELS = {
+  idle: { zh: '未加载', en: 'Idle' },
+  available: { zh: '可用', en: 'Available' },
   ready: { zh: '有数据', en: 'Ready' },
   no_data: { zh: '暂无数据', en: 'No data' },
   loading: { zh: '载入中', en: 'Loading' },
@@ -13,9 +15,7 @@ export default function ChapterNavigation({ chapters, activeId, onChange, isEngl
       <div className="chapter-navigation__list">
         {chapters.map((chapter) => {
           const label = isEnglish ? chapter.en : chapter.zh;
-          const status = chapter.statusOwner === 'child'
-            ? null
-            : STATUS_LABELS[chapter.status] || STATUS_LABELS.not_requested;
+          const status = STATUS_LABELS[chapter.status] || STATUS_LABELS.not_requested;
           return (
             <button
               type="button"
@@ -25,9 +25,9 @@ export default function ChapterNavigation({ chapters, activeId, onChange, isEngl
               onClick={() => onChange(chapter.id)}
             >
               <span>{label}</span>
-              {chapter.statusOwner !== 'child' && (
+              {(
                 <span className="chapter-navigation__meta">
-                  <span>{chapter.count}</span>
+                  {chapter.count != null && <span>{chapter.count}</span>}
                   <span>{isEnglish ? status.en : status.zh}</span>
                 </span>
               )}

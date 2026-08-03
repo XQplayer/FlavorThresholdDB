@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { sortBatchRows } from '../../searchWorkbenchModel';
 
 const PAGE_SIZE = 25;
@@ -7,6 +7,7 @@ const STATUS_OPTIONS = [
   { value: 'all', zh: '全部', en: 'All' },
   { value: 'exact', zh: '精确', en: 'Exact' },
   { value: 'candidate', zh: '候选', en: 'Candidate' },
+  { value: 'conflict', zh: '冲突', en: 'Conflict' },
   { value: 'unmatched', zh: '未匹配', en: 'Unmatched' },
 ];
 
@@ -25,6 +26,7 @@ const SORT_OPTIONS = [
 const STATUS_LABELS = {
   exact: { zh: '精确', en: 'Exact' },
   candidate: { zh: '候选', en: 'Candidate' },
+  conflict: { zh: '冲突', en: 'Conflict' },
   unmatched: { zh: '未匹配', en: 'Unmatched' },
 };
 
@@ -60,6 +62,7 @@ export default function BatchReviewTable({
   onOpen,
   isEnglish = false,
 }) {
+  const [conflictSelections, setConflictSelections] = useState({});
   const updateState = partial => onStateChange({ ...state, ...partial });
   const filteredRows = useMemo(() => rows.filter((row) => {
     if (state.status !== 'all' && row.status !== state.status) return false;
@@ -165,7 +168,15 @@ export default function BatchReviewTable({
             </thead>
             <tbody>
               {visibleRows.map(row => {
-                const candidate = findUniqueCandidate(row, candidates);
+                const conflictCandidates = row.status === 'conflict'
+                  ? candidates.filter(candidate => row.matches.some(match => (
+                    candidate.entityKey === `cas:${match.cas}` || candidate.cas === match.cas
+                  )))
+                  : [];
+                const selectedConflictCandidate = conflictCandidates.find(candidate => (
+                  candidate.entityKey === conflictSelections[row.id]
+                ));
+                const candidate = selectedConflictCandidate || findUniqueCandidate(row, candidates);
                 return (
                   <tr key={row.id} data-row-id={row.id} data-status={row.status}>
                     <th scope="row">{row.originalInput}</th>
@@ -184,14 +195,24 @@ export default function BatchReviewTable({
                           type="button"
                           className="batch-review__open"
                           data-batch-action-row-id={row.id}
-                          onClick={event => onOpen(row.id, event.currentTarget)}
+                          onClick={event => onOpen(row.id, event.currentTarget, candidate)}
                         >
                           {isEnglish ? 'View dossier' : '查看档案'}
                         </button>
-                      ) : row.issues.includes('ambiguous_identity') ? (
-                        <button type="button" className="batch-review__pending" disabled>
-                          {isEnglish ? 'Choose candidate / pending' : '选择候选 / 待处理'}
-                        </button>
+                      ) : row.status === 'conflict' ? (
+                        <div className="batch-review__candidate-actions" role="group" aria-label={isEnglish ? 'Choose candidate' : '选择候选实体'}>
+                          {conflictCandidates.map(option => (
+                            <button
+                              key={option.entityKey}
+                              type="button"
+                              className="batch-review__candidate-choice"
+                              aria-pressed={conflictSelections[row.id] === option.entityKey}
+                              onClick={() => setConflictSelections(current => ({ ...current, [row.id]: option.entityKey }))}
+                            >
+                              {option.englishName || option.chineseName || option.cas} {option.cas ? `(${option.cas})` : ''}
+                            </button>
+                          ))}
+                        </div>
                       ) : (
                         <span className="batch-review__pending-text">{isEnglish ? 'Pending' : '待处理'}</span>
                       )}

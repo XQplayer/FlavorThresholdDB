@@ -3929,7 +3929,13 @@ select:focus-visible,
   }
 
   .filter-chip {
-    min-height: 42px;
+    min-height: 44px;
+  }
+
+  [data-testid='classic-search-results'] button,
+  [data-testid='classic-search-results'] summary,
+  .advanced-filters .filter-chip {
+    min-height: 44px;
   }
 }
 

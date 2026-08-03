@@ -8,7 +8,7 @@ const STATUS_LABELS = {
   not_requested: ['未请求', 'Not requested'], unknown: ['状态未知', 'Unknown'],
 };
 
-export default function BiochemicalRelationships({ apiUrl, cas, inchikey, compoundName, isEnglish }) {
+export default function BiochemicalRelationships({ apiUrl, cas, inchikey, compoundName, isEnglish, onStatusChange }) {
   const [payload, setPayload] = useState({ loading: true });
   useEffect(() => {
     if (!cas && !inchikey && !compoundName) return;
@@ -25,6 +25,11 @@ export default function BiochemicalRelationships({ apiUrl, cas, inchikey, compou
   }, [apiUrl, cas, inchikey, compoundName]);
   const graph = useMemo(() => normalizeBiochemicalGraph(payload), [payload]);
   const sourceStates = useMemo(() => summarizeBiochemicalSources(payload.sources), [payload.sources]);
+  useEffect(() => {
+    const hasFailure = payload.requestFailed || sourceStates.some(source => ['partial_failure', 'upstream_unavailable', 'invalid_response'].includes(source.status));
+    const hasAvailable = sourceStates.some(source => source.status === 'ok');
+    onStatusChange?.(payload.loading ? 'loading' : hasFailure && hasAvailable ? 'partial' : hasFailure ? 'failed' : 'available');
+  }, [onStatusChange, payload.loading, payload.requestFailed, sourceStates]);
   if (!cas && !inchikey && !compoundName) return null;
   const unavailable = payload.requestFailed || !graph.chebi;
   return <section className="biochemical-relationships" aria-label={isEnglish ? 'Biochemical relationships' : '生化关系证据'}>

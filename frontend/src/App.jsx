@@ -1222,7 +1222,25 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
   };
 
   const exportCSV = (exportMode) => {
-    if (!results.length) return;
+    const exportResults = resultView === 'new' ? queryMatchedResults : results;
+    if (!exportResults.length) return;
+    const exportOrderedResults = exportResults
+      .map((item, index) => ({ item, index }))
+      .sort((a, b) => getFilterOrderIndex(`medium:${a.item.medium}`) - getFilterOrderIndex(`medium:${b.item.medium}`) || a.index - b.index)
+      .map(({ item }) => item);
+    const exportSourceStatuses = (item) => {
+      const fema = femaProfiles[item.cas];
+      const compound = compoundProfiles[item.cas];
+      const normalize = (value) => value === 'ready' ? 'available' : value === 'no_data' || value === 'not_requested' ? 'unavailable' : value;
+      const states = {
+        local_thresholds: item.threshold_data?.length ? 'available' : 'unavailable',
+        fema: !fema || fema.loading ? 'loading' : fema.error ? 'failed' : fema.found ? 'available' : 'unavailable',
+        pubchem: !compound || compound.loading ? 'loading' : compound.pubchem?.error || compound.error ? 'failed' : compound.pubchem?.found ? 'available' : 'unavailable',
+        flavordb: !compound || compound.loading ? 'loading' : compound.flavordb?.error || compound.error ? 'failed' : compound.flavordb?.found ? 'available' : 'unavailable',
+        book: bookLoading ? 'loading' : bookError ? 'failed' : bookResults.length ? 'available' : 'unavailable',
+      };
+      return Object.entries(states).map(([key, value]) => `${key}:${normalize(value)}`).join('; ');
+    };
     
     const headers = [
       '序号',
@@ -1250,7 +1268,8 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       '阈值数值',
       '阈值单位',
       ...(includeFlavorDescriptions ? ['FEMA编号', 'FEMA风味描述', 'FEMA链接'] : []),
-      ...(includeBookResults ? ['书籍来源', '书籍页码片段', '书籍分类', '书籍命中文本'] : [])
+      ...(includeBookResults ? ['书籍来源', '书籍页码片段', '书籍分类', '书籍命中文本'] : []),
+      '来源状态'
     ];
     const rows = [headers.join(',')];
     const formatCommonEnglishName = (value) => {
@@ -1289,7 +1308,9 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       const selectedMediaInOrder = filterOrder
         .filter(key => key.startsWith('medium:'))
         .map(key => key.replace('medium:', ''))
-        .filter(medium => selectedMedia.includes(medium));
+        .filter(medium => resultView === 'new'
+          ? exportResults.some(item => item.medium === medium)
+          : selectedMedia.includes(medium));
       const compactHeaders = [
         '序号',
         'CAS号',
@@ -1303,12 +1324,13 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           `${medium}-阈值类型(d/r)`,
           `${medium}-阈值数值`,
           `${medium}-阈值单位`
-        ])
+        ]),
+        '来源状态'
       ];
       const compactRows = [compactHeaders.map(csvCell).join(',')];
       const compounds = new Map();
 
-      orderedResults.forEach(item => {
+      exportOrderedResults.forEach(item => {
         if (!compounds.has(item.cas)) compounds.set(item.cas, { item, media: new Map() });
         compounds.get(item.cas).media.set(item.medium, item);
       });
@@ -1341,7 +1363,8 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           csvCell(exportClassification.label),
           csvCell(pubchem.molecular_formula),
           csvCell(splitDescriptorValues(fema.flavor_profile).join('; ')),
-          ...thresholdCells
+          ...thresholdCells,
+          csvCell(exportSourceStatuses(item))
         ].join(','));
       });
 
@@ -1371,7 +1394,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     };
     
     let detailedRowIndex = 0;
-    orderedResults.forEach(item => {
+    exportOrderedResults.forEach(item => {
       const fema = femaProfiles[item.cas] || {};
       const profile = compoundProfiles[item.cas] || {};
       const pubchem = profile.pubchem || {};
@@ -1432,7 +1455,8 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           csvCell(bookMatches.map(hit => `第 ${hit.page} 页 / 片段 ${hit.chunk}`).join('\n')),
           csvCell([...new Set(bookMatches.map(hit => classifyBookHit(hit.text)))].join('; ')),
           csvCell(bookMatches.map(hit => `[第 ${hit.page} 页 / 片段 ${hit.chunk}] ${hit.text}`).join('\n\n'))
-        ] : [])
+        ] : []),
+        csvCell(exportSourceStatuses(item))
         ].join(','));
       });
     });

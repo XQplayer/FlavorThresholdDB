@@ -5,7 +5,7 @@ const SOURCE_META = [
   ['pubchem', 'PubChem BioAssay'], ['chembl', 'ChEMBL'], ['gtopdb', 'GtoPdb'], ['bindingdb', 'BindingDB'],
 ];
 
-export default function BioactivityEvidence({ apiUrl, cid, inchikey, smiles, isEnglish }) {
+export default function BioactivityEvidence({ apiUrl, cid, inchikey, smiles, isEnglish, onStatusChange }) {
   const [payload, setPayload] = useState({ loading: true });
   const [active, setActive] = useState('pubchem');
   useEffect(() => {
@@ -22,6 +22,9 @@ export default function BioactivityEvidence({ apiUrl, cid, inchikey, smiles, isE
     return () => controller.abort();
   }, [apiUrl, cid, inchikey, smiles]);
   const data = useMemo(() => normalizeBioactivity(payload), [payload]);
+  useEffect(() => {
+    onStatusChange?.(payload.loading ? 'loading' : payload.requestFailed ? 'failed' : 'available');
+  }, [onStatusChange, payload.loading, payload.requestFailed]);
   const rows = data[active] || [];
   if (!cid && !inchikey && !smiles) return null;
   return <section className="bioactivity-evidence" aria-label={isEnglish ? 'Bioactivity evidence' : '生物活性证据'}>
