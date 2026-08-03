@@ -266,7 +266,9 @@ const chapter = (records = []) => ({ records });
 
 const parseThreshold = (value) => {
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? { value, unit: null } : { value: null, unit: null };
+    return Number.isFinite(value) && value > 0
+      ? { value, unit: null }
+      : { value: null, unit: null };
   }
   const text = String(value ?? '').trim();
   const exactMatch = /^([+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(?:\s*([A-Za-zµμ%]+(?:\s*\/\s*[A-Za-z0-9µμ³^%-]+)?))?$/.exec(text);
@@ -401,7 +403,9 @@ const toThresholdEvidence = (matchedResults, integratedResults) => {
         originalText,
         sourceRecordKey: entry?.source_record_key ?? entry?.sourceRecordKey ?? null,
         raw: entry,
-        ...(stringEntry ? { parseStatus: parsedString.parseStatus } : {}),
+        parseStatus: stringEntry
+          ? parsedString.parseStatus
+          : parsed.value == null ? 'unparsed' : 'parsed',
       };
       const signature = `${entityKey}|${thresholdSignature(record)}`;
       const origins = seenOrigins.get(signature) ?? new Set();

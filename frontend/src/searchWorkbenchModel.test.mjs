@@ -308,6 +308,7 @@ test('builds identity and preserves parsed threshold provenance', () => {
     sourceRecordKey: 'book:p12:r3',
     id: 'book:p12:r3',
     raw: threshold.threshold_data[0],
+    parseStatus: 'parsed',
   }]);
   assert.deepEqual(dossier.sourceStates, {
     pubchem: { state: 'ready', status: 'ready' },
@@ -430,6 +431,36 @@ test('does not structure comparator or range values from object thresholds', () 
     [0.005, 'mg/L'],
   ]);
   assert.deepEqual(records.map(record => record.raw), entries);
+});
+
+test('rejects nonpositive and nonfinite structured threshold values', () => {
+  const entries = [
+    { value: 0, unit: 'mg/L' },
+    { value: -1, unit: 'mg/L' },
+    { value: Number.NaN, unit: 'mg/L' },
+    { value: Number.POSITIVE_INFINITY, unit: 'mg/L' },
+  ];
+  const records = buildCompoundDossier({
+    matchedResults: [{ cas: '123-45-9', medium: '水', threshold_data: entries }],
+  }).thresholds.records;
+  assert.deepEqual(records.map(({ value, unit, parseStatus }) => ({ value, unit, parseStatus })), [
+    { value: null, unit: null, parseStatus: 'unparsed' },
+    { value: null, unit: null, parseStatus: 'unparsed' },
+    { value: null, unit: null, parseStatus: 'unparsed' },
+    { value: null, unit: null, parseStatus: 'unparsed' },
+  ]);
+  assert.deepEqual(records.map(record => record.raw), entries);
+});
+
+test('keeps a positive structured threshold value parsed', () => {
+  const entry = { value: 0.25, unit: 'mg/L' };
+  const [record] = buildCompoundDossier({
+    matchedResults: [{ cas: '123-45-9', medium: '水', threshold_data: [entry] }],
+  }).thresholds.records;
+  assert.deepEqual(
+    { value: record.value, unit: record.unit, parseStatus: record.parseStatus, raw: record.raw },
+    { value: 0.25, unit: 'mg/L', parseStatus: 'parsed', raw: entry },
+  );
 });
 
 test('leaves author-led strings without a threshold type unparsed', () => {
