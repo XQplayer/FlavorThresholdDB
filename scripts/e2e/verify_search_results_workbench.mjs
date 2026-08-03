@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -199,6 +199,7 @@ async function inspectAccessibility(page, scopeSelector = '.search-view') {
   assert.deepEqual(audit.illegalBooleanAria, [], 'aria-expanded and aria-pressed values are legal');
   assert.deepEqual(audit.illegalCurrent, [], 'aria-current values are legal');
   assert.deepEqual(audit.invalidHeaders, [], 'every rendered table header declares scope');
+  assert.ok(audit.liveRegions.length >= 1, 'the rendered workbench exposes at least one live region');
   assert.ok(audit.liveRegions.length <= 3, `visible live regions are bounded (${audit.liveRegions.length} <= 3)`);
   return audit;
 }
@@ -427,10 +428,14 @@ const successfulCompound = {
     await pubchem.getByRole('button', { name: '重试', exact: true }).click();
     await pubchem.getByRole('button', { name: '重试中…', exact: true }).waitFor();
     assert.equal(await pubchem.getByRole('button').isDisabled(), true, 'compound retry button is disabled while loading');
+    const retryLiveText = (await summary.textContent()).replace(/\s+/g, ' ').trim();
+    assert.match(retryLiveText, /PubChem.*失败.*重试中/, 'source live region announces the active PubChem retry');
     await page.screenshot({ path: path.join(screenshotRoot, 'search-workbench-state-disabled.png'), fullPage: true });
     assert.match(await local.textContent(), /可用/, 'local thresholds remain visible during compound retry');
     await workbench.getByText('8857', { exact: true }).waitFor({ timeout: 30_000 });
     await pubchem.getByText('可用', { exact: true }).waitFor();
+    const retryCompletionAnnouncement = await summary.locator('.source-status-summary__announcement').textContent();
+    assert.equal(retryCompletionAnnouncement.trim(), 'PubChem: 可用', 'source live region announces the completed PubChem retry');
     assert.equal(await pubchem.evaluate(node => document.activeElement === node), true, 'successful retry restores focus to source status');
     assert.ok(requestUrls.compound[1].searchParams.has('_retry'), 'compound retry cache-busts its second request');
     assert.doesNotMatch(await summary.textContent(), /PubChem失败|FlavorDB2失败/, 'compound failures clear after retry');
@@ -440,7 +445,10 @@ const successfulCompound = {
       fema: beforeRetry.fema,
       compound: beforeRetry.compound + 1,
     }, 'compound retry increments only the shared compound endpoint');
-    evidence.compound = { ...counts };
+    evidence.compound = {
+      ...counts,
+      liveRegion: { retry: retryLiveText, completion: retryCompletionAnnouncement.trim() },
+    };
   } finally {
     await closeScenario(compoundScenario);
   }
@@ -570,7 +578,10 @@ const successfulCompound = {
     const { page, counts, requestUrls } = coreScenario;
     const input = page.getByLabel('化合物名称或 CAS 号');
     await input.fill('141-78-6');
-    await page.getByText('正在建立化合物档案', { exact: true }).waitFor();
+    const loadingLiveRegion = page.locator('[aria-live="polite"]').filter({ hasText: '正在建立化合物档案' }).first();
+    await loadingLiveRegion.getByText('正在建立化合物档案', { exact: true }).waitFor();
+    const loadingLiveText = (await loadingLiveRegion.textContent()).replace(/\s+/g, ' ').trim();
+    assert.match(loadingLiveText, /正在建立化合物档案.*正在载入本地检索数据/, 'loading live region contains the active loading announcement');
     await page.screenshot({ path: path.join(screenshotRoot, 'search-workbench-state-loading.png'), fullPage: true });
     const error = page.getByTestId('core-search-error');
     await error.getByText('暂时无法完成检索', { exact: true }).waitFor();
@@ -585,10 +596,18 @@ const successfulCompound = {
     assert.ok(requestUrls.core[1].searchParams.has('_retry'), 'core retry cache-busts its second request');
     await page.getByRole('button', { name: '新版档案' }).click();
     await page.getByTestId('search-results-workbench').getByText('CAS 141-78-6', { exact: true }).waitFor();
+    const coreCompletionLiveText = (await page.getByLabel('来源状态').textContent()).replace(/\s+/g, ' ').trim();
+    assert.match(coreCompletionLiveText, /本地阈值.*可用/, 'source live region updates after the core retry completes');
     await input.fill('definitely missing compound');
     await page.getByText('未找到可确认的化合物身份', { exact: true }).waitFor();
     await page.screenshot({ path: path.join(screenshotRoot, 'search-workbench-state-no-match.png'), fullPage: true });
-    evidence.core = { core: counts.core, inputPreserved: true, viewPreserved: true, noMatchDistinguished: true };
+    evidence.core = {
+      core: counts.core,
+      inputPreserved: true,
+      viewPreserved: true,
+      noMatchDistinguished: true,
+      liveRegion: { loading: loadingLiveText, completion: coreCompletionLiveText },
+    };
   } finally {
     await closeScenario(coreScenario);
   }
@@ -1561,12 +1580,39 @@ try {
   finalQa.queries.singleCasExact = { query: '141-78-6', matched: true };
 
   const finalMatchMode = page.getByRole('group', { name: '匹配方式' });
-  await finalMatchMode.getByRole('button', { name: '模糊', exact: true }).focus();
+  const finalExactMode = finalMatchMode.getByRole('button', { name: '精确', exact: true });
+  const finalFuzzyMode = finalMatchMode.getByRole('button', { name: '模糊', exact: true });
+  if (await finalExactMode.getAttribute('aria-pressed') !== 'true') {
+    await finalExactMode.focus();
+    await page.keyboard.press('Enter');
+  }
+  const fuzzyOnlyQuery = 'ethyl acet';
+  await finalInput.fill(fuzzyOnlyQuery);
+  const exactNoMatch = page.getByText('未找到可确认的化合物身份', { exact: true });
+  await exactNoMatch.waitFor({ state: 'visible' });
+  assert.equal(await finalInput.inputValue(), fuzzyOnlyQuery, 'exact no-match state belongs to the intended partial English query');
+  assert.equal(await finalExactMode.getAttribute('aria-pressed'), 'true', 'partial English query does not match while exact mode is active');
+  await finalFuzzyMode.focus();
   await page.keyboard.press('Enter');
-  await finalInput.fill('ethyl acetate');
-  await page.getByTestId('search-results-workbench').waitFor();
-  await page.getByTestId('search-results-workbench').getByText(/CAS 141-78-6|请选择匹配实体/).first().waitFor();
-  finalQa.queries.singleEnglishFuzzy = { query: 'ethyl acetate', fuzzyPressed: true, rendered: true };
+  const fuzzyPressed = await finalFuzzyMode.getAttribute('aria-pressed');
+  assert.equal(fuzzyPressed, 'true', 'fuzzy mode exposes its active state for the partial English query');
+  await page.waitForFunction((query) => {
+    const input = document.querySelector('#compound-search');
+    const workbench = document.querySelector('[data-testid="search-results-workbench"]');
+    if (!input || input.value !== query || !workbench) return false;
+    return !workbench.textContent.includes('未找到可确认的化合物身份')
+      && Boolean(workbench.querySelector('.compound-identity-header, .dossier-candidate-list button'));
+  }, fuzzyOnlyQuery);
+  const fuzzyCandidateCount = await page.getByTestId('search-results-workbench')
+    .locator('.compound-identity-header, .dossier-candidate-list button').count();
+  assert.ok(fuzzyCandidateCount >= 1, 'fuzzy mode returns at least one real candidate for a query that exact mode did not match');
+  assert.equal(await finalInput.inputValue(), fuzzyOnlyQuery, 'fuzzy result remains scoped to the original partial English query');
+  finalQa.queries.singleEnglishFuzzy = {
+    query: fuzzyOnlyQuery,
+    exactMatched: false,
+    fuzzyPressed,
+    candidateCount: fuzzyCandidateCount,
+  };
 
   await page.getByRole('button', { name: '批量匹配' }).focus();
   await page.keyboard.press('Enter');
@@ -1577,6 +1623,7 @@ try {
   await finalBulkInput.fill('141-78-6\n64-17-5\nunknown');
   const finalBatch = page.getByRole('region', { name: '批量审查结果' });
   await finalBatch.waitFor({ state: 'visible' });
+  await finalBatch.locator('tbody tr').first().waitFor({ state: 'visible' });
   assert.deepEqual(
     await finalBatch.locator('tbody tr').evaluateAll(rows => rows.map(row => row.dataset.status)),
     ['exact', 'exact', 'unmatched'],
@@ -1630,9 +1677,14 @@ try {
   const classicExportButton = page.locator('.search-toolbar-export .result-export-button');
   await classicExportButton.waitFor({ state: 'visible' });
   finalQa.regressions.classic = { layout: true, filters: true, export: true };
-  finalQa.screenshots.push(...[1440, 1024, 768, 375].map(width => `search-workbench-${width}.png`));
 
   const evidenceStateRetries = await verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin });
+  finalQa.screenshots = [
+    ...[1440, 1024, 768, 375].map(width => `search-workbench-${width}.png`),
+    'search-workbench-batch-mobile.png',
+    ...['loading', 'no-match', 'core-error', 'partial', 'failed', 'disabled']
+      .map(state => `search-workbench-state-${state}.png`),
+  ].map(filename => path.relative(root, path.join(screenshotRoot, filename)).split(path.sep).join('/'));
 
   const duplicateKeyErrors = consoleErrors.filter(message => /unique "key" prop|same key|duplicate key/i.test(message));
   assert.deepEqual(duplicateKeyErrors, [], 'PubChem and other rendered lists emit no duplicate-key diagnostics');
@@ -1640,8 +1692,10 @@ try {
   assert.deepEqual(consoleErrors, [], 'console errors');
   e2eStages.push('complete');
   await context.close();
-  console.log(JSON.stringify({
+  const resultsPath = path.join(screenshotRoot, 'search-workbench-results.json');
+  const result = {
     ok: true,
+    resultsPath: path.relative(root, resultsPath).split(path.sep).join('/'),
     ports: { proxyPort, vitePort },
     defaultNew: {
       sharedRequests: sharedBeforeClassic,
@@ -1677,7 +1731,10 @@ try {
     batchReviewEvidence,
     e2eStages,
     firstClassicMountRequestCount: classicRequestsAfterMount.length,
-  }, null, 2));
+  };
+  const serializedResult = JSON.stringify(result, null, 2);
+  writeFileSync(resultsPath, `${serializedResult}\n`, 'utf8');
+  console.log(serializedResult);
 } finally {
   if (browser) await browser.close();
   for (const record of [...children].reverse()) await stop(record);
