@@ -1,5 +1,86 @@
 const errorMessage = error => error?.message || String(error || 'Source unavailable');
 
+const NEW_EXPORT_MEDIA = Object.freeze(['水', '空气', '其他介质']);
+
+export function buildCsvExportContract({
+  resultView,
+  queryMatchedResults = [],
+  classicResults = [],
+  selectedMedia = [],
+  selectedThresholdTypes = [],
+  includePubChem = true,
+  includeFlavorDB = true,
+  includeFlavorDescriptions = true,
+  includeBookResults = true,
+} = {}) {
+  if (resultView === 'new') {
+    return {
+      results: queryMatchedResults,
+      media: [...NEW_EXPORT_MEDIA],
+      thresholdTypes: null,
+      includePubChem: true,
+      includeFlavorDB: true,
+      includeFlavorDescriptions: true,
+      includeBookResults: true,
+    };
+  }
+
+  return {
+    results: classicResults,
+    media: [...selectedMedia],
+    thresholdTypes: [...selectedThresholdTypes],
+    includePubChem,
+    includeFlavorDB,
+    includeFlavorDescriptions,
+    includeBookResults,
+  };
+}
+
+const childExportStatus = (compound, child) => {
+  if (child?.found === true) return 'available';
+  if (child?.error || compound?.error) return 'failed';
+  if (!compound || compound.loading) return 'loading';
+  return 'unavailable';
+};
+
+const bookHitMatchesCas = (hit, cas) => Boolean(cas) && [
+  hit?.matched_entity_cas,
+  hit?.entity?.cas,
+  hit?.entity_cas,
+  ...(hit?.entity_cas_list || []),
+].includes(cas);
+
+export function buildEntityExportSourceStatuses({
+  item = {},
+  femaProfile,
+  compoundProfile,
+  bookResults = [],
+  bookLoading = false,
+  bookError,
+} = {}) {
+  const entityHasBookEvidence = bookResults.some(hit => bookHitMatchesCas(hit, item.cas));
+  const states = {
+    local_thresholds: item.threshold_data?.length ? 'available' : 'unavailable',
+    fema: femaProfile?.found === true
+      ? 'available'
+      : !femaProfile || femaProfile.loading
+        ? 'loading'
+        : femaProfile.error
+          ? 'failed'
+          : 'unavailable',
+    pubchem: childExportStatus(compoundProfile, compoundProfile?.pubchem),
+    flavordb: childExportStatus(compoundProfile, compoundProfile?.flavordb),
+    book: entityHasBookEvidence
+      ? 'available'
+      : bookLoading
+        ? 'loading'
+        : bookError
+          ? 'failed'
+          : 'unavailable',
+  };
+  return Object.entries(states).map(([key, value]) => `${key}:${value}`).join('; ');
+}
+
 export function withRetryGeneration(url, generation = 0) {
   if (!(generation > 0)) return url;
   const separator = String(url).includes('?') ? '&' : '?';

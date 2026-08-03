@@ -27,6 +27,8 @@ import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
 import { loadResultView, saveResultView } from './resultViewPreference';
 import {
+  buildCsvExportContract,
+  buildEntityExportSourceStatuses,
   beginCompoundProfileRequest,
   beginFemaProfileRequest,
   failCompoundProfileRequest,
@@ -1222,33 +1224,59 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
   };
 
   const exportCSV = (exportMode) => {
-    const exportResults = resultView === 'new' ? queryMatchedResults : results;
+    const exportContract = buildCsvExportContract({
+      resultView,
+      queryMatchedResults,
+      classicResults: results,
+      selectedMedia,
+      selectedThresholdTypes,
+      includePubChem,
+      includeFlavorDB,
+      includeFlavorDescriptions,
+      includeBookResults,
+    });
+    const exportResults = exportContract.results;
     if (!exportResults.length) return;
+    const exportMediumOrder = new Map(exportContract.media.map((medium, index) => [medium, index]));
     const exportOrderedResults = exportResults
       .map((item, index) => ({ item, index }))
-      .sort((a, b) => getFilterOrderIndex(`medium:${a.item.medium}`) - getFilterOrderIndex(`medium:${b.item.medium}`) || a.index - b.index)
+      .sort((a, b) => {
+        const mediumDelta = resultView === 'new'
+          ? (exportMediumOrder.get(a.item.medium) ?? exportContract.media.length)
+            - (exportMediumOrder.get(b.item.medium) ?? exportContract.media.length)
+          : getFilterOrderIndex(`medium:${a.item.medium}`) - getFilterOrderIndex(`medium:${b.item.medium}`);
+        return mediumDelta || a.index - b.index;
+      })
       .map(({ item }) => item);
-    const exportSourceStatuses = (item) => {
-      const fema = femaProfiles[item.cas];
-      const compound = compoundProfiles[item.cas];
-      const normalize = (value) => value === 'ready' ? 'available' : value === 'no_data' || value === 'not_requested' ? 'unavailable' : value;
-      const states = {
-        local_thresholds: item.threshold_data?.length ? 'available' : 'unavailable',
-        fema: !fema || fema.loading ? 'loading' : fema.error ? 'failed' : fema.found ? 'available' : 'unavailable',
-        pubchem: !compound || compound.loading ? 'loading' : compound.pubchem?.error || compound.error ? 'failed' : compound.pubchem?.found ? 'available' : 'unavailable',
-        flavordb: !compound || compound.loading ? 'loading' : compound.flavordb?.error || compound.error ? 'failed' : compound.flavordb?.found ? 'available' : 'unavailable',
-        book: bookLoading ? 'loading' : bookError ? 'failed' : bookResults.length ? 'available' : 'unavailable',
-      };
-      return Object.entries(states).map(([key, value]) => `${key}:${normalize(value)}`).join('; ');
+    const getBookMatchesForItem = (item, fema, commonName) => {
+      if (!exportContract.includeBookResults || !bookIndex.length) return [];
+      return searchBookIndex({
+        records: bookIndex,
+        rawQueries: [item.cas, item.chinese_name, item.english_name, commonName, fema?.name].filter(Boolean),
+        matchedCompounds: [item],
+        bookEntities,
+        limit: 3,
+      });
     };
+    const exportSourceStatuses = (item, entityBookResults) => buildEntityExportSourceStatuses({
+      item,
+      femaProfile: femaProfiles[item.cas],
+      compoundProfile: compoundProfiles[item.cas],
+      bookResults: entityBookResults,
+      bookLoading,
+      bookError,
+    });
+    const getExportThresholds = item => exportContract.thresholdTypes === null
+      ? (item.threshold_data || [])
+      : getFilteredThresholds(item);
     
     const headers = [
       '序号',
       'CAS号',
       '化合物中文名',
       '常用英文名',
-      ...(includeFlavorDB ? ['主要官能团', 'FlavorDB2 CID', 'FlavorDB2风味描述', 'FlavorDB2链接'] : []),
-      ...(includePubChem ? [
+      ...(exportContract.includeFlavorDB ? ['主要官能团', 'FlavorDB2 CID', 'FlavorDB2风味描述', 'FlavorDB2链接'] : []),
+      ...(exportContract.includePubChem ? [
         '主要化合物类别',
         'SMARTS命中',
         '分子式',
@@ -1267,8 +1295,8 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       '阈值类型(d/r)',
       '阈值数值',
       '阈值单位',
-      ...(includeFlavorDescriptions ? ['FEMA编号', 'FEMA风味描述', 'FEMA链接'] : []),
-      ...(includeBookResults ? ['书籍来源', '书籍页码片段', '书籍分类', '书籍命中文本'] : []),
+      ...(exportContract.includeFlavorDescriptions ? ['FEMA编号', 'FEMA风味描述', 'FEMA链接'] : []),
+      ...(exportContract.includeBookResults ? ['书籍来源', '书籍页码片段', '书籍分类', '书籍命中文本'] : []),
       '来源状态'
     ];
     const rows = [headers.join(',')];
@@ -1305,12 +1333,12 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     };
 
     if (exportMode === 'compact') {
-      const selectedMediaInOrder = filterOrder
-        .filter(key => key.startsWith('medium:'))
-        .map(key => key.replace('medium:', ''))
-        .filter(medium => resultView === 'new'
-          ? exportResults.some(item => item.medium === medium)
-          : selectedMedia.includes(medium));
+      const selectedMediaInOrder = resultView === 'new'
+        ? exportContract.media
+        : filterOrder
+            .filter(key => key.startsWith('medium:'))
+            .map(key => key.replace('medium:', ''))
+            .filter(medium => exportContract.media.includes(medium));
       const compactHeaders = [
         '序号',
         'CAS号',
@@ -1341,9 +1369,10 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
         const pubchem = profile.pubchem || {};
         const exportClassification = getExportClassification(profile, isEnglish);
         const commonEnglishNameText = formatCommonEnglishName(fema.name || item.english_name);
+        const entityBookResults = getBookMatchesForItem(item, fema, commonEnglishNameText);
         const thresholdCells = selectedMediaInOrder.flatMap(medium => {
           const mediumItem = media.get(medium);
-          const firstThreshold = mediumItem ? getFilteredThresholds(mediumItem)[0] : '';
+          const firstThreshold = mediumItem ? getExportThresholds(mediumItem)[0] : '';
           const parsed = firstThreshold
             ? parseThresholdStr(firstThreshold)
             : { author: '', type: '', value: '' };
@@ -1364,7 +1393,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           csvCell(pubchem.molecular_formula),
           csvCell(splitDescriptorValues(fema.flavor_profile).join('; ')),
           ...thresholdCells,
-          csvCell(exportSourceStatuses(item))
+          csvCell(exportSourceStatuses(item, entityBookResults))
         ].join(','));
       });
 
@@ -1382,17 +1411,6 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       return categories.length ? [...new Set(categories)].join('; ') : '书籍片段';
     };
 
-    const getBookMatchesForItem = (item, fema, commonName) => {
-      if (!includeBookResults || !bookIndex.length) return [];
-      return searchBookIndex({
-        records: bookIndex,
-        rawQueries: [item.cas, item.chinese_name, item.english_name, commonName, fema?.name].filter(Boolean),
-        matchedCompounds: [item],
-        bookEntities,
-        limit: 3,
-      });
-    };
-    
     let detailedRowIndex = 0;
     exportOrderedResults.forEach(item => {
       const fema = femaProfiles[item.cas] || {};
@@ -1401,7 +1419,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       const flavordb = profile.flavordb || {};
       const commonEnglishNameText = formatCommonEnglishName(fema.name || item.english_name);
       const bookMatches = getBookMatchesForItem(item, fema, commonEnglishNameText);
-      const filteredThresholds = getFilteredThresholds(item);
+      const filteredThresholds = getExportThresholds(item);
       const thresholdRecords = filteredThresholds.length ? filteredThresholds : [''];
       const functionalGroups = flavordb.functional_groups || [];
       const exportClassification = getExportClassification(profile, isEnglish);
@@ -1416,7 +1434,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
         csvCasCell(item.cas),
         csvCell(item.chinese_name),
         csvCell(commonEnglishNameText),
-        ...(includeFlavorDB ? [
+        ...(exportContract.includeFlavorDB ? [
           csvCell(functionalGroups.join('; ')),
           csvCell(flavordb.cid),
           csvCell([
@@ -1426,7 +1444,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           ].join('; ')),
           csvCell(flavordb.url)
         ] : []),
-        ...(includePubChem ? [
+        ...(exportContract.includePubChem ? [
           csvCell(exportClassification.label),
           csvCell(exportClassification.matches.join('; ')),
           csvCell(pubchem.molecular_formula),
@@ -1445,18 +1463,18 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
         csvCell(parsed.type),
         csvCell(parsed.value),
         csvCell(threshold ? getThresholdUnit(item.medium) : ''),
-        ...(includeFlavorDescriptions ? [
+        ...(exportContract.includeFlavorDescriptions ? [
           csvCell(fema.fema_number),
           csvCell(fema.flavor_profile),
           csvCell(fema.url)
         ] : []),
-        ...(includeBookResults ? [
+        ...(exportContract.includeBookResults ? [
           csvCell(bookMatches.length ? '酒类风味化学' : ''),
           csvCell(bookMatches.map(hit => `第 ${hit.page} 页 / 片段 ${hit.chunk}`).join('\n')),
           csvCell([...new Set(bookMatches.map(hit => classifyBookHit(hit.text)))].join('; ')),
           csvCell(bookMatches.map(hit => `[第 ${hit.page} 页 / 片段 ${hit.chunk}] ${hit.text}`).join('\n\n'))
         ] : []),
-        csvCell(exportSourceStatuses(item))
+        csvCell(exportSourceStatuses(item, bookMatches))
         ].join(','));
       });
     });
