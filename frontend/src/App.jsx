@@ -13,6 +13,7 @@ import BioactivityEvidence from './components/BioactivityEvidence';
 import StructureEvidence from './components/StructureEvidence';
 import ResultViewSwitch from './components/search-results/ResultViewSwitch';
 import SearchResultsWorkbench from './components/search-results/SearchResultsWorkbench';
+import { buildCompoundDossier } from './searchWorkbenchModel';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
 import { loadResultView, saveResultView } from './resultViewPreference';
@@ -619,6 +620,13 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
         return true;
       });
   }, [queryMatchedResults, femaProfiles, compoundProfiles, includeFlavorDescriptions, includePubChem, includeFlavorDB]);
+
+  const compoundDossier = useMemo(() => buildCompoundDossier({
+    matchedResults: queryMatchedResults,
+    integratedResults: integratedCompoundResults,
+    bookResults,
+    sourceStates: {},
+  }), [queryMatchedResults, integratedCompoundResults, bookResults]);
 
   useEffect(() => {
     if (!queryMatchedResults.length) return;
@@ -1533,6 +1541,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
             query={searchMode === 'single' ? singleQuery : bulkQuery}
             loading={loading}
             matchCount={queryMatchedResults.length}
+            dossier={compoundDossier}
             isEnglish={isEnglish}
           />
         ) : (

@@ -119,7 +119,7 @@ try {
     browser = await chromium.launch({ headless: true, executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
   }
 
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
   const consoleErrors = [];
   const pageErrors = [];
@@ -173,6 +173,41 @@ try {
   const newButton = page.getByRole('button', { name: '新版档案' });
   const classicButton = page.getByRole('button', { name: '经典版' });
   assert.equal(await newButton.getAttribute('aria-pressed'), 'true', 'new dossier is the default view');
+
+  const identityCas = page.getByText('CAS 141-78-6', { exact: true });
+  await identityCas.waitFor({ state: 'visible', timeout: 30_000 });
+  assert.equal(await identityCas.count(), 1, 'new dossier renders the complete CAS identity exactly once');
+  assert.equal(await workbench.getByText('英文名', { exact: true }).count(), 1, 'English alias is labelled when present');
+  assert.equal(await workbench.getByText('中文名', { exact: true }).count(), 1, 'Chinese alias is labelled when present');
+
+  const chapterNavigation = page.getByRole('navigation', { name: '档案章节' });
+  const chapterButtons = chapterNavigation.getByRole('button');
+  assert.equal(await chapterButtons.count(), 8, 'new dossier exposes eight chapter buttons');
+  const thresholdChapter = chapterNavigation.getByRole('button', { name: /阈值/ });
+  await thresholdChapter.click();
+  assert.equal(await thresholdChapter.getAttribute('aria-current'), 'page', 'clicked chapter becomes current');
+
+  const rawRecordButton = workbench.getByRole('button', { name: /原始记录/ }).first();
+  await rawRecordButton.waitFor({ state: 'visible' });
+  assert.equal(await rawRecordButton.getAttribute('aria-expanded'), 'false', 'raw evidence is collapsed by default');
+  await rawRecordButton.focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await rawRecordButton.getAttribute('aria-expanded'), 'true', 'Enter expands raw evidence');
+
+  const assertNoPageOverflow = async (width) => {
+    await page.setViewportSize({ width, height: 900 });
+    const dimensions = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    assert.ok(
+      dimensions.scrollWidth <= dimensions.clientWidth,
+      `${width}px viewport has no page-level horizontal overflow (${dimensions.scrollWidth} <= ${dimensions.clientWidth})`,
+    );
+  };
+  await assertNoPageOverflow(1440);
+  await assertNoPageOverflow(375);
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.waitForLoadState('networkidle');
   const isClassicRequest = request => classicEndpointPrefixes.some(prefix => request.path.startsWith(prefix));
