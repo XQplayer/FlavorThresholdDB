@@ -1,5 +1,5 @@
 const STATUS_LABELS = {
-  idle: { zh: '未加载', en: 'Idle' },
+  idle: { zh: '点击章节加载', en: 'Click to load chapter' },
   available: { zh: '可用', en: 'Available' },
   ready: { zh: '有数据', en: 'Ready' },
   no_data: { zh: '暂无数据', en: 'No data' },
@@ -25,6 +25,11 @@ export default function ChapterNavigation({ chapters, activeId, onChange, isEngl
               onClick={() => onChange(chapter.id)}
             >
               <span>{label}</span>
+              {chapter.status === 'idle' && (
+                <span className="chapter-navigation__load-action">
+                  {isEnglish ? 'Load data' : '加载数据'}
+                </span>
+              )}
               {(
                 <span className="chapter-navigation__meta">
                   {chapter.count != null && <span>{chapter.count}</span>}

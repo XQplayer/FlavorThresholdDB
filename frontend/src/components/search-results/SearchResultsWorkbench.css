@@ -494,6 +494,16 @@
   font-weight: 700;
 }
 
+.chapter-navigation__load-action {
+  width: fit-content;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  background: #dcebf5;
+  color: #075985;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
 .chapter-navigation__button:not([aria-current='page']) .chapter-navigation__meta {
   color: #3d5d73;
 }
@@ -504,6 +514,10 @@
   border: 1px solid #7596b0;
   border-radius: 1rem;
   background: #fbfdff;
+}
+
+.chapter-panel-stack {
+  min-width: 0;
 }
 
 .chapter-panel__header {
@@ -645,6 +659,28 @@
   border-color: #89a6ba;
   background: #edf5fa;
   color: #294e67;
+}
+
+.chapter-panel__loading-spinner {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-right: 0.55rem;
+  border: 2px solid #8ca9bd;
+  border-top-color: #075985;
+  border-radius: 50%;
+  vertical-align: -0.12rem;
+  animation: chapter-loading-spin 0.8s linear infinite;
+}
+
+@keyframes chapter-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chapter-panel__loading-spinner {
+    animation: none;
+  }
 }
 
 .evidence-record-list {

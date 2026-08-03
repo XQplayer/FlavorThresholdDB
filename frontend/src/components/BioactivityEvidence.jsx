@@ -54,7 +54,7 @@ export default function BioactivityEvidence({ apiUrl, cid, inchikey, smiles, isE
           const id = row.aid || row.activity_id || row.interaction_id || index;
           const target = row.target_name || row.target_accession || row.target_id || row.assay_name || (isEnglish ? 'Assay record' : '实验记录');
           const measure = [row.type || row.activity_name || row.outcome || row.action, row.relation, row.value || row.activity_value_um || row.affinity, row.units || (row.activity_value_um ? 'µM' : ''), row.affinity_parameter].filter(Boolean).join(' ');
-          return <a key={`${active}-${id}`} href={row.source_url} target="_blank" rel="noopener noreferrer"><strong>{target}</strong><span>{measure || (isEnglish ? 'View source evidence' : '查看来源证据')}</span><small>{row.aid ? `AID ${row.aid}` : row.activity_id ? `Activity ${row.activity_id}` : row.interaction_id ? `Interaction ${row.interaction_id}` : ''}{row.organism || row.species ? ` · ${row.organism || row.species}` : ''}</small></a>;
+          return <a key={`${active}-${id}-${index}`} href={row.source_url} target="_blank" rel="noopener noreferrer"><strong>{target}</strong><span>{measure || (isEnglish ? 'View source evidence' : '查看来源证据')}</span><small>{row.aid ? `AID ${row.aid}` : row.activity_id ? `Activity ${row.activity_id}` : row.interaction_id ? `Interaction ${row.interaction_id}` : ''}{row.organism || row.species ? ` · ${row.organism || row.species}` : ''}</small></a>;
         })}
       </div>
       <div className="bioactivity-source-note">

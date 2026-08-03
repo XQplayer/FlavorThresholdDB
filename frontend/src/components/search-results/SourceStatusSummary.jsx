@@ -49,7 +49,9 @@ export default function SourceStatusSummary({ sources, isEnglish = false, onRetr
       <ul>
         {entries.map(([name, source]) => {
           const status = source?.status ?? source?.state ?? 'not_requested';
-          const label = STATUS_LABELS[status] || STATUS_LABELS.not_requested;
+          const label = name === 'flavordb' && status === 'no_data'
+            ? { zh: '无匹配数据', en: 'No matching data' }
+            : STATUS_LABELS[status] || STATUS_LABELS.not_requested;
           const sourceLabel = (isEnglish ? source?.labelEn : source?.labelZh) || name;
           const failedChildren = status === 'partial' && Array.isArray(source?.failedChildren)
             ? source.failedChildren

@@ -1,7 +1,7 @@
 import SourceStatusSummary from './SourceStatusSummary';
 
 const STATUS_LABELS = {
-  idle: { zh: '未加载', en: 'Idle' },
+  idle: { zh: '点击章节加载', en: 'Click to load chapter' },
   available: { zh: '可用', en: 'Available' },
   ready: { zh: '有数据', en: 'Ready' },
   no_data: { zh: '暂无数据', en: 'No data' },
@@ -32,7 +32,7 @@ export default function ChapterPanel({
     : status === 'failed'
       ? (isEnglish ? 'The sources for this chapter are temporarily unavailable.' : '本章相关来源暂不可用。')
       : status === 'loading'
-        ? (isEnglish ? 'This chapter is still loading; available records remain visible.' : '本章来源仍在载入；已获得的记录继续显示。')
+        ? (isEnglish ? 'Loading data. This usually takes 5–15 seconds; public-source response times may vary.' : '正在加载数据，预计需要 5–15 秒；公共数据源响应时间可能不同。')
         : status === 'no_data'
           ? (isEnglish ? 'The relevant sources were queried but returned no records.' : '已查询本章相关来源，但未返回记录。')
           : null;
@@ -56,6 +56,7 @@ export default function ChapterPanel({
       </header>
       {hasExternalState && statusMessage && (
         <p className="chapter-panel__state-callout" data-status={status} aria-live="polite">
+          {status === 'loading' && <span className="chapter-panel__loading-spinner" aria-hidden="true" />}
           {statusMessage}
           {failedSources.length > 0 && (
             <span>
