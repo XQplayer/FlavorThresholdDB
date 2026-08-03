@@ -89,6 +89,14 @@ const proxyPort = await choosePort(18789);
 const vitePort = await choosePort(5177, new Set([proxyPort]));
 const proxyOrigin = `http://127.0.0.1:${proxyPort}`;
 const baseUrl = `http://127.0.0.1:${vitePort}/FlavorThresholdDB/aroma-threshold/`;
+const classicEndpointPrefixes = [
+  '/spectra/',
+  '/nist-webbook',
+  '/biochemistry/resolve',
+  '/biological-context/resolve',
+  '/bioactivity/resolve',
+  '/structures/resolve',
+];
 let browser;
 
 try {
@@ -121,7 +129,9 @@ try {
   });
   page.on('pageerror', error => pageErrors.push(error.message));
   page.on('request', request => {
-    if (request.url().startsWith(proxyOrigin)) apiRequests.push(`${request.method()} ${request.url()}`);
+    if (request.url().startsWith(proxyOrigin)) {
+      apiRequests.push({ method: request.method(), path: new URL(request.url()).pathname, url: request.url() });
+    }
   });
   await page.route(`${proxyOrigin}/**`, route => route.fulfill({
     status: 200,
@@ -137,7 +147,15 @@ try {
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
-      pubchem: { found: false },
+      pubchem: {
+        found: true,
+        cid: 8857,
+        title: 'Ethyl acetate',
+        molecular_formula: 'C4H8O2',
+        smiles: 'CCOC(=O)C',
+        inchi_key: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N',
+        url: 'https://pubchem.ncbi.nlm.nih.gov/compound/8857',
+      },
       pubchem_volatile: { found: false, status: 'no_data', properties: {} },
       flavordb: { found: false },
     }),
@@ -157,19 +175,29 @@ try {
   assert.equal(await newButton.getAttribute('aria-pressed'), 'true', 'new dossier is the default view');
 
   await page.waitForLoadState('networkidle');
-  const beforeClassic = apiRequests.length;
+  const isClassicRequest = request => classicEndpointPrefixes.some(prefix => request.path.startsWith(prefix));
+  const sharedCounts = () => Object.fromEntries(['/fema', '/compound'].map(pathname => [
+    pathname,
+    apiRequests.filter(request => request.path === pathname).length,
+  ]));
+  const defaultNewClassicRequests = apiRequests.filter(isClassicRequest);
+  assert.equal(defaultNewClassicRequests.length, 0, 'default new dossier does not mount or request classic-only result modules');
+  assert.equal(await page.getByTestId('classic-search-results').count(), 0, 'classic result marker is absent in the new dossier');
+  const sharedBeforeClassic = sharedCounts();
   await classicButton.click();
   const classicResults = page.getByTestId('classic-search-results');
   await classicResults.waitFor({ state: 'attached' });
-  assert.equal(await classicResults.getAttribute('aria-hidden'), 'false', 'classic result region is revealed');
   await page.getByText('CAS 141-78-6', { exact: true }).first().waitFor({ state: 'visible', timeout: 30_000 });
   await page.waitForLoadState('networkidle');
-  assert.equal(apiRequests.length, beforeClassic, 'switching to classic does not issue additional API requests');
+  const classicRequestsAfterMount = apiRequests.filter(isClassicRequest);
+  assert.ok(classicRequestsAfterMount.length > 0, 'classic-only requests begin when the classic tree is first mounted');
+  assert.deepEqual(sharedCounts(), sharedBeforeClassic, 'switching to classic does not repeat App-level shared lookups');
 
   await newButton.click();
   await workbench.waitFor();
-  await page.waitForLoadState('networkidle');
-  assert.equal(apiRequests.length, beforeClassic, 'switching back to the new dossier does not issue additional API requests');
+  assert.equal(await page.getByTestId('classic-search-results').count(), 0, 'classic result marker is removed after returning to the new dossier');
+  assert.equal(await page.locator('.open-spectra-workbench').count(), 0, 'classic-only components are removed after returning to the new dossier');
+  assert.deepEqual(sharedCounts(), sharedBeforeClassic, 'returning to the new dossier does not repeat App-level shared lookups');
   await classicButton.click();
 
   await page.reload({ waitUntil: 'domcontentloaded' });
@@ -183,7 +211,15 @@ try {
   assert.deepEqual(pageErrors, [], 'page errors');
   assert.deepEqual(consoleErrors, [], 'console errors');
   await context.close();
-  console.log(JSON.stringify({ ok: true, ports: { proxyPort, vitePort }, apiRequestCountBeforeClassic: beforeClassic }, null, 2));
+  console.log(JSON.stringify({
+    ok: true,
+    ports: { proxyPort, vitePort },
+    defaultNew: {
+      sharedRequests: sharedBeforeClassic,
+      classicOnlyRequestCount: defaultNewClassicRequests.length,
+    },
+    firstClassicMountRequestCount: classicRequestsAfterMount.length,
+  }, null, 2));
 } finally {
   if (browser) await browser.close();
   for (const record of [...children].reverse()) await stop(record);

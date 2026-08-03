@@ -1528,20 +1528,15 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
 
         <ResultViewSwitch value={resultView} onChange={changeResultView} isEnglish={isEnglish} />
 
-        {resultView === 'new' && (
+        {resultView === 'new' ? (
           <SearchResultsWorkbench
             query={searchMode === 'single' ? singleQuery : bulkQuery}
             loading={loading}
             matchCount={queryMatchedResults.length}
             isEnglish={isEnglish}
           />
-        )}
-
-        <div
-          data-testid="classic-search-results"
-          aria-hidden={resultView !== 'classic'}
-          style={{ display: resultView === 'classic' ? 'contents' : 'none' }}
-        >
+        ) : (
+        <div data-testid="classic-search-results" style={{ display: 'contents' }}>
         {/* Results Section */}
         {!loading && (singleQuery.trim() || bulkQuery.trim()) && (
           <section className="search-summary-strip" aria-label={isEnglish ? 'Search summary' : '检索摘要'}>
@@ -2344,6 +2339,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
         )}
 
         </div>
+        )}
 
       </main>
       </>
