@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import EvidenceRecordDisclosure from '../EvidenceRecordDisclosure';
 
 const asArray = value => Array.isArray(value) ? value : value == null ? [] : [value];
@@ -12,16 +12,25 @@ const locatorText = (raw, isEnglish) => {
 };
 
 export default function CitationExportChapter({ citationExampleText, records = [], onExportCompact, onExportDetailed, isEnglish = false }) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState('idle');
+  const copyTimerRef = useRef(null);
+
+  useEffect(() => () => {
+    if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
+  }, []);
 
   const copyCitation = async () => {
+    if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
     try {
       await navigator.clipboard.writeText(citationExampleText || '');
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      setCopyState('success');
     } catch {
-      setCopied(false);
+      setCopyState('error');
     }
+    copyTimerRef.current = window.setTimeout(() => {
+      setCopyState('idle');
+      copyTimerRef.current = null;
+    }, 2000);
   };
 
   return (
@@ -29,8 +38,15 @@ export default function CitationExportChapter({ citationExampleText, records = [
       <section className="citation-export-chapter__example" aria-labelledby="citation-example-heading">
         <div className="citation-export-chapter__heading">
           <h4 id="citation-example-heading">{isEnglish ? 'Citation and export' : '引用与导出'}</h4>
-          <button type="button" onClick={copyCitation}>{copied ? (isEnglish ? 'Copied' : '已复制') : (isEnglish ? 'Copy citation' : '复制引用')}</button>
+          <button type="button" onClick={copyCitation}>{copyState === 'success' ? (isEnglish ? 'Copied' : '已复制') : (isEnglish ? 'Copy citation' : '复制引用')}</button>
         </div>
+        <span className="citation-export-chapter__copy-status" role="status" aria-live="polite">
+          {copyState === 'success'
+            ? (isEnglish ? 'Citation copied' : '引用已复制')
+            : copyState === 'error'
+              ? (isEnglish ? 'Copy failed' : '复制失败')
+              : ''}
+        </span>
         <pre>{citationExampleText || (isEnglish ? 'No citation example is available.' : '暂无引用示例。')}</pre>
         <div className="citation-export-chapter__actions" aria-label={isEnglish ? 'CSV exports' : 'CSV 导出'}>
           <button type="button" onClick={onExportCompact}>{isEnglish ? 'Export compact CSV' : '导出精简版 CSV'}</button>

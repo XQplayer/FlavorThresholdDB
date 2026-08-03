@@ -326,6 +326,40 @@ test('builds identity and preserves parsed threshold provenance', () => {
   for (const { id } of CHAPTERS) assert.ok(Array.isArray(dossier[id].records));
 });
 
+test('builds canonical scientific props from the same raw profile used by classic and dossier views', () => {
+  assert.equal(typeof searchWorkbenchModel.buildScientificComponentProps, 'function');
+  const rawProfile = {
+    item: threshold,
+    fema: { found: true, name: 'ETHYL   ACETATE (natural)' },
+    profile: {
+      pubchem: {
+        found: true,
+        cid: 8857,
+        title: 'PUBCHEM TITLE',
+        inchi_key: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N',
+        smiles: 'CCOC(=O)C',
+      },
+      flavordb: { found: true, cid: 999999, common_name: 'FlavorDB name' },
+    },
+  };
+  const expected = {
+    cas: '141-78-6',
+    cid: 8857,
+    inchikey: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N',
+    smiles: 'CCOC(=O)C',
+    name: 'Ethyl acetate',
+  };
+
+  assert.deepEqual(searchWorkbenchModel.buildScientificComponentProps({ rawProfile }), expected);
+  assert.deepEqual(searchWorkbenchModel.buildScientificComponentProps({
+    dossier: { identity: { cas: '141-78-6', raw: threshold }, rawProfile },
+  }), expected);
+  assert.deepEqual(searchWorkbenchModel.buildScientificComponentProps({
+    rawProfile,
+    includeFlavorDescriptions: false,
+  }), { ...expected, name: 'Pubchem title' });
+});
+
 test('maps thresholds and identity from integrated-only results', () => {
   const dossier = buildCompoundDossier({ matchedResults: [], integratedResults: [integrated] });
   assert.equal(dossier.identity.cid, 8857);

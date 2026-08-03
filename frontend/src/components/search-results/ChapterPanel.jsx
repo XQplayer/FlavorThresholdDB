@@ -14,7 +14,7 @@ export default function ChapterPanel({
   title,
   count = 0,
   status = 'not_requested',
-  hasExternalState = true,
+  statusOwner = 'workbench',
   sourceStates,
   filters,
   children,
@@ -23,6 +23,7 @@ export default function ChapterPanel({
 }) {
   const headingId = `${id}-chapter-heading`;
   const statusLabel = STATUS_LABELS[status] || STATUS_LABELS.not_requested;
+  const hasExternalState = statusOwner !== 'child';
 
   return (
     <section className="chapter-panel" aria-labelledby={headingId}>

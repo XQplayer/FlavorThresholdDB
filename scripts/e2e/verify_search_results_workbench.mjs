@@ -153,11 +153,20 @@ try {
   const consoleErrors = [];
   const pageErrors = [];
   const apiRequests = [];
+  const failedScientificRequests = [];
   let selectedCandidateRequestEvidence = null;
   page.on('console', message => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
   page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('requestfailed', request => {
+    if (request.url().startsWith(proxyOrigin) && request.url().includes('/spectra/')) {
+      failedScientificRequests.push({
+        path: new URL(request.url()).pathname,
+        errorText: request.failure()?.errorText || '',
+      });
+    }
+  });
   page.on('request', request => {
     if (request.url().startsWith(proxyOrigin)) {
       apiRequests.push({ method: request.method(), path: new URL(request.url()).pathname, url: request.url() });
@@ -176,7 +185,7 @@ try {
       body: JSON.stringify(cas === '18127-01-0'
         ? { found: true, name: 'Selected Bourgeonal FEMA' }
         : cas === '141-78-6'
-          ? { found: true, flavor_profile: 'fruity, pineapple', source: 'FEMA Flavor Library' }
+          ? { found: true, name: 'FEMA   CANONICAL NAME (Natural)', flavor_profile: 'fruity, pineapple', source: 'FEMA Flavor Library' }
           : { found: false }),
     });
   });
@@ -199,7 +208,7 @@ try {
       pubchem_volatile: { found: false, status: 'no_data', properties: {} },
       flavordb: isSelectedCandidate
         ? { found: false }
-        : { found: true, flavor_profile: ['fruity'], odor: ['pineapple'], taste: ['sweet'], source: 'FlavorDB2' },
+        : { found: true, cid: 999999, common_name: 'FlavorDB fallback name', flavor_profile: ['fruity'], odor: ['pineapple'], taste: ['sweet'], source: 'FlavorDB2' },
       flavordb2_entities: isSelectedCandidate
         ? { found: false, entities: [] }
         : { found: true, entities: [{ id: 12, name: 'Pineapple', natural_source: { name: 'Ananas comosus' } }] },
@@ -234,18 +243,56 @@ try {
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
-      records: [{
+      records: [1, 2].map(index => ({
         source: 'MassBank',
-        spectrum_id: 'MB-FIXTURE-1',
+        spectrum_id: `MB-FIXTURE-${index}`,
         spectrum_type: 'EI',
         ion_mode: 'positive',
         instrument: 'GC-EI-MS',
-        source_url: 'https://massbank.eu/MassBank/RecordDisplay?id=MB-FIXTURE-1',
-      }],
-      summary: { total: 1, massbank: 1, gnps: 0, ei: 1, ms2: 0 },
+        source_url: `https://massbank.eu/MassBank/RecordDisplay?id=MB-FIXTURE-${index}`,
+      })),
+      summary: { total: 2, massbank: 2, gnps: 0, ei: 2, ms2: 0 },
       sources: { MassBank: { status: 'ok' }, GNPS: { status: 'no_data' } },
     }),
   }));
+  const detailRequestCounts = new Map();
+  await page.route('**/spectra/MassBank/MB-FIXTURE-*', async route => {
+    const spectrumId = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1));
+    const requestCount = (detailRequestCounts.get(spectrumId) || 0) + 1;
+    detailRequestCounts.set(spectrumId, requestCount);
+    if (spectrumId === 'MB-FIXTURE-1' && requestCount === 1) {
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+    }
+    if (spectrumId === 'MB-FIXTURE-2' && requestCount === 1) {
+      try {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '{fixture detail failure' });
+      } catch {
+        // The browser may abort the routed request while switching chapters.
+      }
+      return;
+    }
+    try {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          source: 'MassBank', spectrum_id: spectrumId, spectrum_type: 'EI', ion_mode: 'positive',
+          instrument: 'GC-EI-MS', peaks: [[43, 100], [61, 50]], license: 'CC BY 4.0',
+          source_url: `https://massbank.eu/MassBank/RecordDisplay?id=${spectrumId}`,
+        }),
+      });
+    } catch {
+      // Expected when an AbortController cancels a pending detail request.
+    }
+  });
+  await page.route('**/spectra/compare', async route => {
+    await new Promise(resolve => setTimeout(resolve, 1_000));
+    try {
+      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'fixture compare failure' }) });
+    } catch {
+      // Expected when the comparison owner unmounts.
+    }
+  });
   await page.route('**/nist-webbook?**', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -334,9 +381,18 @@ try {
   assert.equal(apiRequests.filter(request => request.path === '/biochemistry/resolve').length, 0, 'spectra does not mount biochemistry');
   assert.equal(apiRequests.filter(request => request.path === '/bioactivity/resolve').length, 0, 'spectra does not mount bioactivity');
   assert.equal(apiRequests.filter(request => request.path === '/structures/resolve').length, 0, 'spectra does not mount structures');
+  const detailRequestStarted = page.waitForRequest(request => new URL(request.url()).pathname === '/spectra/MassBank/MB-FIXTURE-1');
+  await workbench.locator('.spectrum-record-main').first().click();
+  await detailRequestStarted;
+  const detailAbortObserved = page.waitForEvent('requestfailed', {
+    predicate: request => new URL(request.url()).pathname === '/spectra/MassBank/MB-FIXTURE-1',
+    timeout: 2_500,
+  }).then(() => true).catch(() => false);
 
   const biochemistryChapter = chapterNavigation.getByRole('button', { name: /生化关系/ });
   await biochemistryChapter.click();
+  const detailWasAborted = await detailAbortObserved;
+  assert.equal(detailWasAborted, true, 'leaving spectra aborts a pending detail request');
   assert.equal(await page.getByTestId('spectrum-workbench').count(), 0, 'leaving spectra unmounts the spectrum workbench');
   await workbench.getByText('RHEA:10020', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
   await workbench.getByText('ATF2', { exact: true }).waitFor({ state: 'visible' });
@@ -362,19 +418,73 @@ try {
   assert.equal(await workbench.locator('.bioactivity-evidence').count(), 0, 'protein structures do not mount bioactivity');
   assert.equal(await workbench.locator('.biochemical-relationships').count(), 0, 'protein structures do not mount biochemistry');
 
+  const expectedScientificQueries = {
+    '/spectra/search': { inchikey: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N', cas: '141-78-6', smiles: 'CCOC(=O)C', name: 'Fema canonical name' },
+    '/nist-webbook': { cas: '141-78-6' },
+    '/biochemistry/resolve': { inchikey: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N', cas: '141-78-6', name: 'Fema canonical name' },
+    '/biological-context/resolve': { inchikey: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N', cas: '141-78-6', name: 'Fema canonical name' },
+    '/bioactivity/resolve': { cid: '8857', inchikey: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N', smiles: 'CCOC(=O)C' },
+    '/structures/resolve': { inchikey: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N', cas: '141-78-6', name: 'Fema canonical name' },
+  };
+  const assertScientificQueries = (requests, owner) => {
+    for (const [pathname, expected] of Object.entries(expectedScientificQueries)) {
+      const matching = requests.filter(request => request.path === pathname);
+      assert.ok(matching.length > 0, `${owner}: ${pathname} was requested`);
+      for (const request of matching) {
+        assert.deepEqual(Object.fromEntries(new URL(request.url).searchParams), expected, `${owner}: ${pathname} uses canonical query parameters`);
+      }
+    }
+  };
+  assertScientificQueries(apiRequests, 'new dossier');
+
+  await spectraChapter.click();
+  await workbench.getByText('MassBank · MB-FIXTURE-2', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
+  const comparisonButtons = workbench.getByRole('button', { name: '加入比较' });
+  await comparisonButtons.nth(0).click();
+  await workbench.getByText(/A · MassBank · MB-FIXTURE-1/).waitFor({ state: 'visible' });
+  await comparisonButtons.nth(1).click();
+  await workbench.getByText(/谱图载入失败/).waitFor({ state: 'visible' });
+  assert.deepEqual(pageErrors, [], 'failed comparison detail is handled without an unhandled rejection');
+  const compareRequestStarted = page.waitForRequest(request => new URL(request.url()).pathname === '/spectra/compare');
+  await comparisonButtons.nth(1).click();
+  await compareRequestStarted;
+  const compareAbortObserved = page.waitForEvent('requestfailed', {
+    predicate: request => new URL(request.url()).pathname === '/spectra/compare',
+    timeout: 2_500,
+  }).then(() => true).catch(() => false);
+
   const citationChapter = chapterNavigation.getByRole('button', { name: /引用与导出/ });
   await citationChapter.click();
+  const compareWasAborted = await compareAbortObserved;
+  assert.equal(compareWasAborted, true, 'leaving spectra aborts a pending comparison request');
   await workbench.getByRole('heading', { name: '引用与导出', level: 4 }).waitFor({ state: 'visible' });
   await workbench.getByRole('button', { name: '复制引用' }).click();
   await workbench.getByRole('button', { name: '已复制' }).waitFor({ state: 'visible' });
-  const downloadBytes = async click => {
+  await page.evaluate(() => {
+    Object.defineProperty(navigator.clipboard, 'writeText', {
+      configurable: true,
+      value: () => Promise.reject(new Error('clipboard denied by fixture')),
+    });
+  });
+  await workbench.getByRole('button', { name: '已复制' }).click();
+  await workbench.getByText('复制失败', { exact: true }).waitFor({ state: 'visible' });
+  const captureDownload = async click => {
     const [download] = await Promise.all([page.waitForEvent('download'), click()]);
-    return readFileSync(await download.path());
+    return {
+      bytes: readFileSync(await download.path()),
+      suggestedFilename: download.suggestedFilename(),
+    };
   };
   const newExports = {
-    compact: await downloadBytes(() => workbench.getByRole('button', { name: '导出精简版 CSV' }).click()),
-    detailed: await downloadBytes(() => workbench.getByRole('button', { name: '导出详细版 CSV' }).click()),
+    compact: await captureDownload(() => workbench.getByRole('button', { name: '导出精简版 CSV' }).click()),
+    detailed: await captureDownload(() => workbench.getByRole('button', { name: '导出详细版 CSV' }).click()),
   };
+  for (const [mode, download] of Object.entries(newExports)) {
+    assert.ok(download.bytes.length > 0, `new ${mode} export is non-empty`);
+    assert.match(download.bytes.toString('utf8'), /CAS/, `new ${mode} export contains the CAS header`);
+    assert.match(download.suggestedFilename, mode === 'compact' ? /(compact|精简版).*\.csv$/i : /(detailed|详细版).*\.csv$/i, `new ${mode} export filename identifies its mode`);
+  }
+  assert.notEqual(Buffer.compare(newExports.compact.bytes, newExports.detailed.bytes), 0, 'compact and detailed exports contain different content');
 
   const thresholdChapter = chapterNavigation.getByRole('button', { name: /阈值/ });
   await thresholdChapter.click();
@@ -538,7 +648,17 @@ try {
   const newChapterRequestsBeforeClassic = apiRequests.filter(isClassicRequest);
   assert.deepEqual(
     [...new Set(newChapterRequestsBeforeClassic.map(request => request.path))].sort(),
-    ['/bioactivity/resolve', '/biochemistry/resolve', '/biological-context/resolve', '/nist-webbook', '/spectra/search', '/structures/resolve'],
+    [
+      '/bioactivity/resolve',
+      '/biochemistry/resolve',
+      '/biological-context/resolve',
+      '/nist-webbook',
+      '/spectra/MassBank/MB-FIXTURE-1',
+      '/spectra/MassBank/MB-FIXTURE-2',
+      '/spectra/compare',
+      '/spectra/search',
+      '/structures/resolve',
+    ],
     'new dossier requests each heavy source only after its owning chapter is visited',
   );
   assert.equal(await page.getByTestId('classic-search-results').count(), 0, 'classic result marker is absent in the new dossier');
@@ -553,11 +673,17 @@ try {
   assert.deepEqual(sharedCounts(), sharedBeforeClassic, 'switching to classic does not repeat App-level shared lookups');
   const exportMenu = page.locator('.search-toolbar-export');
   await exportMenu.locator('.result-export-button').click();
-  const classicCompact = await downloadBytes(() => exportMenu.getByRole('menuitem', { name: /精简版/ }).click());
+  const classicCompact = await captureDownload(() => exportMenu.getByRole('menuitem', { name: /精简版/ }).click());
   await exportMenu.locator('.result-export-button').click();
-  const classicDetailed = await downloadBytes(() => exportMenu.getByRole('menuitem', { name: /详细版/ }).click());
-  assert.equal(Buffer.compare(newExports.compact, classicCompact), 0, 'new and classic compact CSV exports are byte-identical');
-  assert.equal(Buffer.compare(newExports.detailed, classicDetailed), 0, 'new and classic detailed CSV exports are byte-identical');
+  const classicDetailed = await captureDownload(() => exportMenu.getByRole('menuitem', { name: /详细版/ }).click());
+  for (const [mode, download] of Object.entries({ compact: classicCompact, detailed: classicDetailed })) {
+    assert.ok(download.bytes.length > 0, `classic ${mode} export is non-empty`);
+    assert.match(download.bytes.toString('utf8'), /CAS/, `classic ${mode} export contains the CAS header`);
+    assert.match(download.suggestedFilename, mode === 'compact' ? /(compact|精简版).*\.csv$/i : /(detailed|详细版).*\.csv$/i, `classic ${mode} export filename identifies its mode`);
+  }
+  assert.equal(Buffer.compare(newExports.compact.bytes, classicCompact.bytes), 0, 'new and classic compact CSV exports are byte-identical');
+  assert.equal(Buffer.compare(newExports.detailed.bytes, classicDetailed.bytes), 0, 'new and classic detailed CSV exports are byte-identical');
+  assertScientificQueries(apiRequests, 'classic and new dossier requests');
   const pubchemFilter = page.locator('[data-filter-key="pubchem"]');
   const bookFilter = page.locator('[data-filter-key="book"]');
   assert.equal(await pubchemFilter.getAttribute('aria-pressed'), 'true', 'classic PubChem filter starts enabled');
@@ -682,7 +808,23 @@ try {
       initialHeavyRequestCount: 0,
       visitedChapterRequestCount: newChapterRequestsBeforeClassic.length,
     },
-    exportComparison: { compact: 'byte-identical', detailed: 'byte-identical' },
+    scientificQueryParams: expectedScientificQueries,
+    abortEvidence: {
+      detail: detailWasAborted,
+      compare: compareWasAborted,
+      failures: failedScientificRequests,
+    },
+    copyFeedback: { success: true, error: true },
+    exportComparison: {
+      compact: 'byte-identical',
+      detailed: 'byte-identical',
+      distinctModes: Buffer.compare(newExports.compact.bytes, newExports.detailed.bytes) !== 0,
+      new: Object.fromEntries(Object.entries(newExports).map(([mode, download]) => [mode, { bytes: download.bytes.length, filename: download.suggestedFilename }])),
+      classic: {
+        compact: { bytes: classicCompact.bytes.length, filename: classicCompact.suggestedFilename },
+        detailed: { bytes: classicDetailed.bytes.length, filename: classicDetailed.suggestedFilename },
+      },
+    },
     selectedCandidateRequestEvidence,
     firstClassicMountRequestCount: classicRequestsAfterMount.length,
   }, null, 2));

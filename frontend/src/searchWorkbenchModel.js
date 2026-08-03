@@ -133,6 +133,42 @@ const getFlavorDb = (entry) => {
   return profile.flavordb ?? entry?.flavordb ?? {};
 };
 
+const formatScientificCompoundName = (value) => {
+  const raw = (value || '').toString().replace(/\([^)]*\)/g, '').trim();
+  if (!raw) return '';
+  const lower = raw.toLowerCase().replace(/\s+/g, ' ');
+  return lower.replace(/[A-Za-z]/, match => match.toUpperCase());
+};
+
+export function buildScientificComponentProps({
+  dossier,
+  rawProfile,
+  includeFlavorDescriptions = true,
+} = {}) {
+  const source = rawProfile ?? dossier?.rawProfile ?? {};
+  const item = getItem(source);
+  const fema = source?.fema ?? {};
+  const profile = getProfile(source);
+  const pubchem = profile.pubchem ?? {};
+  const flavorDb = profile.flavordb ?? {};
+  const identity = dossier?.identity ?? {};
+  const commonName = formatScientificCompoundName(
+    (includeFlavorDescriptions && fema.name)
+      || pubchem.title
+      || flavorDb.common_name
+      || item.english_name
+      || identity.englishName,
+  );
+
+  return {
+    cas: item.cas ?? identity.cas ?? null,
+    cid: pubchem.cid ?? null,
+    inchikey: pubchem.inchi_key ?? null,
+    smiles: pubchem.smiles ?? null,
+    name: commonName || item.english_name || identity.englishName || null,
+  };
+}
+
 export function compoundEntityKey(item) {
   const entity = getItem(item);
   const cas = normaliseCas(entity?.cas);
@@ -551,6 +587,7 @@ export function buildCompoundDossier({
   const thresholdEvidence = toThresholdEvidence(matched, integrated);
 
   return {
+    rawProfile: primaryEntry ?? { item: primaryItem, fema: {}, profile: {} },
     identity: {
       entityKey: cas ?? (cid == null ? normaliseText(englishName || chineseName) || null : `cid:${cid}`),
       cas,

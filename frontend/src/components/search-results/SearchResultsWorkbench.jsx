@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CHAPTERS, createDefaultChapterFilters, summarizeChapterStatus } from '../../searchWorkbenchModel';
+import {
+  CHAPTERS,
+  buildScientificComponentProps,
+  createDefaultChapterFilters,
+  summarizeChapterStatus,
+} from '../../searchWorkbenchModel';
 import ChapterNavigation from './ChapterNavigation';
 import ChapterPanel from './ChapterPanel';
 import CompoundIdentityHeader from './CompoundIdentityHeader';
@@ -38,6 +43,7 @@ export default function SearchResultsWorkbench({
   citationText = '',
   onExportCompact,
   onExportDetailed,
+  includeFlavorDescriptions = true,
   isEnglish = false,
 }) {
   const queryKey = String(query || '').trim().toLowerCase();
@@ -63,7 +69,7 @@ export default function SearchResultsWorkbench({
     : defaultChapterFilters;
   const chapters = useMemo(() => CHAPTERS.map((chapter) => {
     if (DELEGATED_CHAPTER_IDS.has(chapter.id)) {
-      return { ...chapter, count: null, status: null, hasExternalState: false };
+      return { ...chapter, count: null, status: null, statusOwner: 'child' };
     }
     const count = dossier?.[chapter.id]?.records?.length || 0;
     const sourceStates = (CHAPTER_SOURCE_KEYS[chapter.id] || [])
@@ -73,7 +79,7 @@ export default function SearchResultsWorkbench({
       ...chapter,
       count,
       status: summarizeChapterStatus({ recordCount: count, sourceStates }),
-      hasExternalState: true,
+      statusOwner: 'workbench',
     };
   }), [dossier]);
 
@@ -156,11 +162,7 @@ export default function SearchResultsWorkbench({
     };
     const scientificProps = {
       apiUrl,
-      cas: dossier.identity.cas,
-      cid: dossier.identity.cid,
-      inchikey: dossier.identity.inchikey,
-      smiles: dossier.identity.smiles,
-      name: dossier.identity.commonName || dossier.identity.englishName || dossier.identity.chineseName,
+      ...buildScientificComponentProps({ dossier, includeFlavorDescriptions }),
       isEnglish,
     };
 
@@ -187,7 +189,7 @@ export default function SearchResultsWorkbench({
             title={isEnglish ? activeChapter.en : activeChapter.zh}
             count={activeChapter.count}
             status={activeChapter.status}
-            hasExternalState={activeChapter.hasExternalState}
+            statusOwner={activeChapter.statusOwner}
             sourceStates={panelSourceStates}
             isEnglish={isEnglish}
           >

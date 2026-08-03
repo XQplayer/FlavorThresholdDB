@@ -13,6 +13,7 @@ import ResultViewSwitch from './components/search-results/ResultViewSwitch';
 import SearchResultsWorkbench from './components/search-results/SearchResultsWorkbench';
 import {
   buildCompoundDossier,
+  buildScientificComponentProps,
   buildWorkbenchIntegratedResults,
   deriveDossierSourceStates,
   groupDossierInputsByEntity,
@@ -1645,6 +1646,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
             citationText={citationExampleText}
             onExportCompact={() => exportCSV('compact')}
             onExportDetailed={() => exportCSV('detailed')}
+            includeFlavorDescriptions={includeFlavorDescriptions}
             isEnglish={isEnglish}
           />
         ) : (
@@ -1838,9 +1840,11 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                   includeFlavorDescriptions && selectedFlavorSources.includes('FEMA') ? fema : {},
                   includeFlavorDB && selectedFlavorSources.includes('FlavorDB') ? flavordb : {}
                 );
-                const commonName = formatDisplayCommonEnglishName(
-                  (includeFlavorDescriptions && fema.name) || pubchem.title || flavordb.common_name || item.english_name
-                );
+                const scientificProps = buildScientificComponentProps({
+                  rawProfile: { item, fema, profile },
+                  includeFlavorDescriptions,
+                });
+                const commonName = scientificProps.name;
                 const primaryCompoundClass = profile.smart_classification || {
                   key: 'others',
                   zh: '其他类',
@@ -1989,42 +1993,42 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
                       {pubchem.found && (
                         <OpenSpectraWorkbench
                           apiUrl={FEMA_API_URL}
-                          cas={item.cas}
-                          inchikey={pubchem.inchi_key}
-                          smiles={pubchem.smiles}
-                          compoundName={commonName || item.english_name}
+                          cas={scientificProps.cas}
+                          inchikey={scientificProps.inchikey}
+                          smiles={scientificProps.smiles}
+                          compoundName={scientificProps.name}
                           isEnglish={isEnglish}
                         />
                       )}
 
-                      <NistWebbookPresence apiUrl={FEMA_API_URL} cas={item.cas} isEnglish={isEnglish} />
+                      <NistWebbookPresence apiUrl={FEMA_API_URL} cas={scientificProps.cas} isEnglish={isEnglish} />
                     </Suspense>
 
                     <BiochemicalRelationships
                       apiUrl={FEMA_API_URL}
-                      cas={item.cas}
-                      inchikey={pubchem.inchi_key}
-                      compoundName={commonName || item.english_name}
+                      cas={scientificProps.cas}
+                      inchikey={scientificProps.inchikey}
+                      compoundName={scientificProps.name}
                       isEnglish={isEnglish}
                     />
 
                     <BiologicalContext
                       apiUrl={FEMA_API_URL}
-                      cas={item.cas}
-                      inchikey={pubchem.inchi_key}
-                      compoundName={commonName || item.english_name}
+                      cas={scientificProps.cas}
+                      inchikey={scientificProps.inchikey}
+                      compoundName={scientificProps.name}
                       isEnglish={isEnglish}
                     />
 
                     <BioactivityEvidence
                       apiUrl={FEMA_API_URL}
-                      cid={pubchem.cid}
-                      inchikey={pubchem.inchi_key}
-                      smiles={pubchem.smiles}
+                      cid={scientificProps.cid}
+                      inchikey={scientificProps.inchikey}
+                      smiles={scientificProps.smiles}
                       isEnglish={isEnglish}
                     />
 
-                    <StructureEvidence apiUrl={FEMA_API_URL} cas={item.cas} inchikey={pubchem.inchi_key} compoundName={commonName || item.english_name} isEnglish={isEnglish} />
+                    <StructureEvidence apiUrl={FEMA_API_URL} cas={scientificProps.cas} inchikey={scientificProps.inchikey} compoundName={scientificProps.name} isEnglish={isEnglish} />
 
                     <footer className="integrated-source-links">
                       <div><strong>{isEnglish ? 'Sources and original records' : '来源与原始记录'}</strong><span>{isEnglish ? 'Open the source page to verify the record.' : '可跳转原网页核验数据。'}</span></div>

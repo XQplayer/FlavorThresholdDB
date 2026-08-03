@@ -13,7 +13,7 @@ export default function ChapterNavigation({ chapters, activeId, onChange, isEngl
       <div className="chapter-navigation__list">
         {chapters.map((chapter) => {
           const label = isEnglish ? chapter.en : chapter.zh;
-          const status = chapter.hasExternalState === false
+          const status = chapter.statusOwner === 'child'
             ? null
             : STATUS_LABELS[chapter.status] || STATUS_LABELS.not_requested;
           return (
@@ -25,7 +25,7 @@ export default function ChapterNavigation({ chapters, activeId, onChange, isEngl
               onClick={() => onChange(chapter.id)}
             >
               <span>{label}</span>
-              {chapter.hasExternalState !== false && (
+              {chapter.statusOwner !== 'child' && (
                 <span className="chapter-navigation__meta">
                   <span>{chapter.count}</span>
                   <span>{isEnglish ? status.en : status.zh}</span>
