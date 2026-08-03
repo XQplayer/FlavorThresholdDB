@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { sortBatchRows } from '../../searchWorkbenchModel';
 
 const PAGE_SIZE = 25;
@@ -63,6 +63,13 @@ export default function BatchReviewTable({
   isEnglish = false,
 }) {
   const [conflictSelections, setConflictSelections] = useState({});
+  const pendingConflictFocusRef = useRef(null);
+  useEffect(() => {
+    const rowId = pendingConflictFocusRef.current;
+    if (!rowId) return;
+    pendingConflictFocusRef.current = null;
+    requestAnimationFrame(() => document.querySelector(`[data-row-id="${CSS.escape(rowId)}"] .batch-review__open`)?.focus());
+  }, [conflictSelections]);
   const updateState = partial => onStateChange({ ...state, ...partial });
   const filteredRows = useMemo(() => rows.filter((row) => {
     if (state.status !== 'all' && row.status !== state.status) return false;
@@ -169,9 +176,7 @@ export default function BatchReviewTable({
             <tbody>
               {visibleRows.map(row => {
                 const conflictCandidates = row.status === 'conflict'
-                  ? candidates.filter(candidate => row.matches.some(match => (
-                    candidate.entityKey === `cas:${match.cas}` || candidate.cas === match.cas
-                  )))
+                  ? candidates.filter(candidate => row.candidateEntityKeys?.includes(candidate.entityKey))
                   : [];
                 const selectedConflictCandidate = conflictCandidates.find(candidate => (
                   candidate.entityKey === conflictSelections[row.id]
@@ -207,7 +212,10 @@ export default function BatchReviewTable({
                               type="button"
                               className="batch-review__candidate-choice"
                               aria-pressed={conflictSelections[row.id] === option.entityKey}
-                              onClick={() => setConflictSelections(current => ({ ...current, [row.id]: option.entityKey }))}
+                              onClick={() => {
+                                pendingConflictFocusRef.current = row.id;
+                                setConflictSelections(current => ({ ...current, [row.id]: option.entityKey }));
+                              }}
                             >
                               {option.englishName || option.chineseName || option.cas} {option.cas ? `(${option.cas})` : ''}
                             </button>

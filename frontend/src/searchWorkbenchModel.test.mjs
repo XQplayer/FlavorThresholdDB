@@ -954,6 +954,7 @@ test('treats a CAS identity and a no-CAS normalized-name identity as ambiguous',
   assert.equal(row.standardName, null);
   assert.equal(row.cas, null);
   assert.ok(row.issues.includes('ambiguous_identity'));
+  assert.deepEqual(row.candidateEntityKeys, ['cas:111-11-1', 'name:shared identity']);
 });
 
 test('writes actual dossier chapter coverage onto uniquely linked batch rows', () => {

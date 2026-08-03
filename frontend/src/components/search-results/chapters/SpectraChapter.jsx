@@ -1,14 +1,19 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 
 const OpenSpectraWorkbench = lazy(() => import('../../spectra/OpenSpectraWorkbench'));
 const NistWebbookPresence = lazy(() => import('../../NistWebbookPresence'));
 
-function LoadedStatus({ onStatusChange }) {
-  useEffect(() => { onStatusChange?.('available'); }, [onStatusChange]);
-  return null;
-}
-
 export default function SpectraChapter({ apiUrl, cas, inchikey, smiles, name, isEnglish = false, onStatusChange }) {
+  const [sourceStatuses, setSourceStatuses] = useState({ open: 'loading', nist: 'loading' });
+  const setOpenStatus = useCallback(status => setSourceStatuses(current => ({ ...current, open: status })), []);
+  const setNistStatus = useCallback(status => setSourceStatuses(current => ({ ...current, nist: status })), []);
+  useEffect(() => {
+    const values = Object.values(sourceStatuses);
+    const status = values.includes('loading') ? 'loading'
+      : values.every(value => value === 'failed') ? 'failed'
+        : values.some(value => ['failed', 'partial'].includes(value)) ? 'partial' : 'available';
+    onStatusChange?.(status);
+  }, [onStatusChange, sourceStatuses]);
   return (
     <div className="spectra-chapter" data-testid="spectrum-workbench">
       <p className="scientific-chapter-note">
@@ -17,7 +22,6 @@ export default function SpectraChapter({ apiUrl, cas, inchikey, smiles, name, is
           : '谱图匹配与原站可用性均为证据记录；实验条件请回到原始来源核验。'}
       </p>
       <Suspense fallback={<p>{isEnglish ? 'Loading spectrum tools…' : '正在载入谱图工具…'}</p>}>
-        <LoadedStatus onStatusChange={onStatusChange} />
         <OpenSpectraWorkbench
           apiUrl={apiUrl}
           cas={cas}
@@ -25,8 +29,9 @@ export default function SpectraChapter({ apiUrl, cas, inchikey, smiles, name, is
           smiles={smiles}
           compoundName={name}
           isEnglish={isEnglish}
+          onStatusChange={setOpenStatus}
         />
-        <NistWebbookPresence apiUrl={apiUrl} cas={cas} isEnglish={isEnglish} />
+        <NistWebbookPresence apiUrl={apiUrl} cas={cas} isEnglish={isEnglish} onStatusChange={setNistStatus} />
       </Suspense>
     </div>
   );

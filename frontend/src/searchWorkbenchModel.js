@@ -758,6 +758,7 @@ export function buildBatchReviewRows(rawInputs, matchedResults, {
         ?? null,
       cas: ambiguous ? null : matches[0]?.cas ?? (/^\d{2,7}-\d{2}-\d$/.test(cas) ? cas : null),
       candidateEntityKey,
+      candidateEntityKeys,
       status,
       thresholdRecordCount: coverage.thresholdRecordCount,
       media: coverage.media,

@@ -24,8 +24,10 @@ function SpectrumPlot({ record, mirror = false, matched = new Set() }) {
   );
 }
 
-export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, compoundName, isEnglish }) {
+export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, compoundName, isEnglish, onStatusChange }) {
   const [search, setSearch] = useState({ loading: true, records: [], summary: {}, sources: {} });
+  const [retryNonce, setRetryNonce] = useState(0);
+  const searchGenerationRef = useRef(0);
   const [selected, setSelected] = useState(null);
   const [filters, setFilters] = useState({ source: 'all', type: 'all', ionMode: 'all', adduct: 'all', instrument: 'all' });
   const [slots, setSlots] = useState({ a: null, b: null });
@@ -52,7 +54,11 @@ export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, co
 
   useEffect(() => {
     if (!inchikey && !cas && !compoundName) return;
+    const generation = searchGenerationRef.current + 1;
+    searchGenerationRef.current = generation;
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSearch(previous => retryNonce ? { ...previous, loading: true, error: null } : { loading: true, records: [], summary: {}, sources: {} });
     const query = new URLSearchParams();
     if (inchikey) query.set('inchikey', inchikey);
     if (cas) query.set('cas', cas);
@@ -60,12 +66,19 @@ export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, co
     if (compoundName) query.append('name', compoundName);
     fetch(`${apiUrl}/spectra/search?${query}`, { signal: controller.signal })
       .then(response => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
-      .then(data => setSearch({ ...data, loading: false }))
+      .then(data => { if (searchGenerationRef.current === generation) setSearch({ ...data, loading: false }); })
       .catch(error => {
-        if (error.name !== 'AbortError') setSearch({ loading: false, records: [], summary: {}, sources: {}, error: error.message });
+        if (error.name !== 'AbortError' && searchGenerationRef.current === generation) setSearch(current => ({ ...current, loading: false, error: error.message }));
       });
     return () => controller.abort();
-  }, [apiUrl, cas, compoundName, inchikey, smiles]);
+  }, [apiUrl, cas, compoundName, inchikey, retryNonce, smiles]);
+
+  useEffect(() => {
+    const statuses = Object.values(search.sources || {}).map(source => typeof source === 'string' ? source : source?.status);
+    const failed = Boolean(search.error) || statuses.some(status => ['failed', 'partial_failure', 'upstream_unavailable', 'error'].includes(status));
+    const available = (search.records || []).length > 0 || statuses.some(status => ['ok', 'ready', 'available'].includes(status));
+    onStatusChange?.(search.loading ? 'loading' : failed && available ? 'partial' : failed ? 'failed' : 'available');
+  }, [onStatusChange, search.error, search.loading, search.records, search.sources]);
 
   const visibleRecords = useMemo(() => filterSpectrumRecords(search.records || [], filters), [filters, search.records]);
   const filterOptions = useMemo(() => spectrumFilterOptions(search.records || []), [search.records]);
@@ -177,7 +190,7 @@ export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, co
         <select aria-label={isEnglish ? 'Instrument' : '仪器类型'} value={filters.instrument} onChange={event => updateFilter('instrument', event.target.value)}><option value="all">{isEnglish ? 'All instruments' : '全部仪器'}</option>{filterOptions.instruments.map(value => <option key={value} value={value}>{value}</option>)}</select>
         <button type="button" onClick={() => setFilters({ source: 'all', type: 'all', ionMode: 'all', adduct: 'all', instrument: 'all' })}>{isEnglish ? 'Reset' : '重置'}</button>
       </div>
-      {search.error && <p className="spectra-message error">{search.error}</p>}
+      {search.error && <p className="spectra-message error">{search.error} <button type="button" onClick={() => setRetryNonce(value => value + 1)}>{isEnglish ? 'Retry open spectra' : '重试开放谱图'}</button></p>}
       {!search.loading && !search.error && visibleRecords.length === 0 && <p className="spectra-message">{isEnglish ? 'No exact public spectrum found.' : '当前公共谱库暂无精确匹配谱图。'}</p>}
       {visibleRecords.length > 0 && <div className="spectra-workspace-grid">
         <div className="spectrum-record-list">

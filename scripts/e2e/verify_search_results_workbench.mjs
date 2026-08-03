@@ -701,7 +701,7 @@ async function inspectClassicLayout(page, width) {
         const targetRect = target.getBoundingClientRect();
         return getComputedStyle(target).display !== 'none' && targetRect.width > 0 && targetRect.height > 0;
       })
-      .map(target => ({ width: target.getBoundingClientRect().width, height: target.getBoundingClientRect().height }));
+      .map(target => ({ tag: target.tagName, className: String(target.className), type: target.type, width: target.getBoundingClientRect().width, height: target.getBoundingClientRect().height }));
     return {
       displayMode: getComputedStyle(element).display,
       visibleDescendantCount: renderedDescendants.length,
@@ -713,12 +713,14 @@ async function inspectClassicLayout(page, width) {
         minimumWidth: targets.length ? Math.min(...targets.map(target => target.width)) : null,
         minimumHeight: targets.length ? Math.min(...targets.map(target => target.height)) : null,
         meets44px: targets.length ? targets.every(target => target.width >= 44 && target.height >= 44) : null,
+        undersized: targets.filter(target => target.width < 44 || target.height < 44).map(target => ({ tag: target.tagName, className: target.className, type: target.type, width: target.width, height: target.height })),
       },
     };
   });
   assert.ok(metrics.visibleDescendantCount > 0, `${width}px classic display-contents container renders visible result descendants`);
   assert.ok(metrics.renderedBounds.left >= 0 && metrics.renderedBounds.right <= width, `${width}px classic rendered result bounds stay within the viewport`);
   assert.ok(metrics.document.scrollWidth <= metrics.document.clientWidth, `${width}px classic page has no document-level horizontal overflow`);
+  if (width === 375) assert.equal(metrics.touchTargets.meets44px, true, `375px classic visible controls meet the 44px touch-target contract: ${JSON.stringify(metrics.touchTargets.undersized)}`);
   return metrics;
 }
 let browser;
@@ -1341,8 +1343,8 @@ try {
     assert.match(download.bytes.toString('utf8'), /CAS/, `classic ${mode} export contains the CAS header`);
     assert.match(download.suggestedFilename, mode === 'compact' ? /(compact|精简版).*\.csv$/i : /(detailed|详细版).*\.csv$/i, `classic ${mode} export filename identifies its mode`);
   }
-  assert.equal(Buffer.compare(newExports.compact.bytes, classicCompact.bytes), 0, 'new and classic compact CSV exports are byte-identical');
-  assert.equal(Buffer.compare(newExports.detailed.bytes, classicDetailed.bytes), 0, 'new and classic detailed CSV exports are byte-identical');
+  assert.notEqual(Buffer.compare(newExports.compact.bytes, classicCompact.bytes), 0, 'new compact CSV uses its fixed dossier evidence contract');
+  assert.notEqual(Buffer.compare(newExports.detailed.bytes, classicDetailed.bytes), 0, 'new detailed CSV uses its fixed dossier evidence contract');
   assertScientificQueries(apiRequests, 'classic and new dossier requests');
   const pubchemFilter = page.locator('[data-filter-key="pubchem"]');
   const bookFilter = page.locator('[data-filter-key="book"]');
@@ -1365,6 +1367,14 @@ try {
   assert.equal(await page.getByTestId('classic-search-results').count(), 0, 'classic result marker is removed after returning to the new dossier');
   assert.equal(await page.locator('.open-spectra-workbench').count(), 0, 'classic-only components are removed after returning to the new dossier');
   assert.deepEqual(sharedCounts(), sharedBeforeClassic, 'returning to the new dossier does not repeat App-level shared lookups');
+  await exportMenu.locator('.result-export-button').click();
+  const newCompactAfterClassicFilters = await captureDownload(() => exportMenu.getByRole('menuitem', { name: /精简版/ }).click());
+  await exportMenu.locator('.result-export-button').click();
+  const newDetailedAfterClassicFilters = await captureDownload(() => exportMenu.getByRole('menuitem', { name: /详细版/ }).click());
+  assert.equal(Buffer.compare(newExports.compact.bytes, newCompactAfterClassicFilters.bytes), 0, 'new compact CSV ignores hidden classic filters');
+  assert.equal(Buffer.compare(newExports.detailed.bytes, newDetailedAfterClassicFilters.bytes), 0, 'new detailed CSV ignores hidden classic filters');
+  assert.match(newDetailedAfterClassicFilters.bytes.toString('utf8'), /PubChem CID/, 'new detailed CSV retains fixed PubChem fields');
+  assert.match(newDetailedAfterClassicFilters.bytes.toString('utf8'), /书籍来源/, 'new detailed CSV retains fixed book fields');
 
   await input.fill('对叔丁基苯甲醛');
   const candidateHeading = workbench.getByRole('heading', { name: '请选择匹配实体' });
@@ -1839,8 +1849,9 @@ try {
     },
     copyFeedback: { success: true, error: true, stalePromiseIgnored: true, unmountTimerCreations: 0 },
     exportComparison: {
-      compact: 'byte-identical',
-      detailed: 'byte-identical',
+      compact: 'view-specific-contracts',
+      detailed: 'view-specific-contracts',
+      newUnaffectedByClassicFilters: true,
       distinctModes: Buffer.compare(newExports.compact.bytes, newExports.detailed.bytes) !== 0,
       new: Object.fromEntries(Object.entries(newExports).map(([mode, download]) => [mode, { bytes: download.bytes.length, filename: download.suggestedFilename }])),
       classic: {

@@ -3785,6 +3785,18 @@ select:focus-visible,
 }
 
 @media (max-width: 560px) {
+  .search-view button,
+  .search-view select,
+  .search-view input:not([type='checkbox']):not([type='radio']) {
+    min-width: 44px;
+    min-height: 44px !important;
+  }
+
+  .search-view input[type='checkbox'],
+  .search-view input[type='radio'] {
+    width: 44px;
+    height: 44px;
+  }
   .search-view .science-mobile-contact {
     width: 44px;
     height: 44px;
