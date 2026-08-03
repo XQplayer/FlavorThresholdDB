@@ -50,7 +50,7 @@ const WORKFLOW = [
 ]
 
 const STATUS_LABELS = {
-  created: '等待运行', queued: '排队中', running: '处理中', waiting_review: '等待复核', complete: '已完成', failed: '运行失败',
+  created: '等待运行', queued: '排队中', running: '处理中', saving: '云端保存中', waiting_review: '等待复核', complete: '已完成', failed: '运行失败',
   pending: '未开始', PASS: '通过', WARN: '警告', REVIEW: '需复核', FAIL: '失败',
 }
 
@@ -218,6 +218,8 @@ function LiveMonitor({ job, capabilities, engine: engineOverride }) {
     ? '等待输入文件'
     : job.status === 'complete'
       ? '完整性验证已通过'
+      : job.status === 'saving'
+        ? '计算完成，正在保存私有结果包'
       : job.status === 'waiting_review'
         ? `等待复核：${stage.label}`
         : job.status === 'failed'
@@ -416,15 +418,18 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
       })
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
       resultUrlRef.current = URL.createObjectURL(new Blob([result.archiveBytes], { type: 'application/zip' }))
-      setJob(current => ({ ...current, status: 'complete', next_stage: 7, updated_at: new Date().toISOString(), downloadUrl: resultUrlRef.current, resultFileName: result.fileName, archiveSha256: result.archiveSha256, archiveSize: result.archiveSize }))
+      const completedResult = { next_stage: 7, updated_at: new Date().toISOString(), downloadUrl: resultUrlRef.current, resultFileName: result.fileName, archiveSha256: result.archiveSha256, archiveSize: result.archiveSize }
+      setJob(current => ({ ...current, ...completedResult, status: cloud.configured ? 'saving' : 'complete' }))
       if (cloud.configured) {
         try {
           await cloudSyncRef.current
           await cloud.uploadResult({ userId: session.user.id, jobId: created.id, archiveBytes: result.archiveBytes, sha256: result.archiveSha256 })
           setHistory(await cloud.listJobs())
+          setJob(current => ({ ...current, ...completedResult, status: 'complete' }))
         } catch (value) {
           setCloudError(`分析已完成且可立即下载，但云端结果保存失败：${value.message}`)
           await cloud.updateJob(created.id, { status: 'complete', current_stage: 7, progress: 100, completed_at: new Date().toISOString() }).catch(() => {})
+          setJob(current => ({ ...current, ...completedResult, status: 'complete' }))
         }
       }
     } catch (value) {
@@ -541,8 +546,9 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
               <div className="shimadzu-job-actions">
                 {job.status === 'waiting_review' && <button type="button" className="primary" onClick={continueJob}><ChevronRight />复核完成，继续</button>}
                 {job.status === 'running' && <button type="button" onClick={cancelJob}><AlertCircle />取消分析</button>}
+                {job.status === 'saving' && <span className="shimadzu-saving"><Loader2 className="spin" />正在保存结果</span>}
                 {job.status === 'complete' && <a className="primary" href={job.downloadUrl} download={job.resultFileName}><Download />下载结果包</a>}
-                <button type="button" onClick={reset}><RotateCcw />新任务</button>
+                {job.status !== 'saving' && <button type="button" onClick={reset}><RotateCcw />新任务</button>}
               </div>
             </section>
             {job.error && <div className="shimadzu-inline-error"><AlertCircle /><span><strong>{job.error.code}</strong>{job.error.message}</span></div>}
