@@ -163,7 +163,8 @@
   background: var(--sz-surface-raised);
 }
 
-.shimadzu-hero-status > span.online { color: var(--sz-accent); background: var(--sz-accent-soft); }
+.shimadzu-hero-status > span.ready { color: var(--sz-accent); background: var(--sz-accent-soft); }
+.shimadzu-hero-status > span.unavailable { color: var(--sz-warning); background: var(--sz-warning-soft); }
 .shimadzu-hero-status svg { width: 20px; height: 20px; }
 .shimadzu-hero-status small { display: block; color: var(--sz-faint); font-size: 10px; font-weight: 760; letter-spacing: .12em; }
 .shimadzu-hero-status strong { display: block; margin-top: 6px; color: var(--sz-ink); font-size: 15px; font-weight: 720; }
