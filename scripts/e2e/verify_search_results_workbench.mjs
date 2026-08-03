@@ -155,6 +155,8 @@ try {
   const apiRequests = [];
   const failedScientificRequests = [];
   let selectedCandidateRequestEvidence = null;
+  let bulkLimitRequestEvidence = null;
+  const e2eStages = [];
   page.on('console', message => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
@@ -849,6 +851,7 @@ try {
   assert.equal(await batchReview.getByRole('button', { name: '查看档案' }).count(), 2, 'only uniquely matched rows can open a dossier');
   assert.equal(await initialBatchRows.filter({ hasText: 'unknown' }).getByRole('button', { name: '查看档案' }).count(), 0, 'unmatched rows cannot open a dossier');
   assert.equal(await batchReview.getByRole('columnheader').count(), 7, 'batch results keep semantic table headers');
+  e2eStages.push('batch-basic');
 
   await page.setViewportSize({ width: 390, height: 900 });
   const batchMobileDimensions = await page.evaluate(() => ({
@@ -879,11 +882,59 @@ try {
   assert.equal(await batchSort.inputValue(), 'reviewPriority', 'batch sort exposes the active review-priority choice');
 
   await bulkInput.fill('对叔丁基苯甲醛');
-  const ambiguousBatchRow = batchReview.locator('tbody tr');
+  const ambiguousBatchRow = batchReview.locator('tbody tr').filter({ hasText: '对叔丁基苯甲醛' });
   await ambiguousBatchRow.waitFor({ state: 'visible' });
   assert.equal(await ambiguousBatchRow.getAttribute('data-status'), 'candidate', 'same-name multi-CAS input remains a candidate');
   assert.equal(await ambiguousBatchRow.getByRole('button', { name: '选择候选 / 待处理' }).isDisabled(), true, 'ambiguous candidate cannot open an arbitrary first dossier');
   assert.equal(await batchReview.getByRole('button', { name: '查看档案' }).count(), 0, 'ambiguous candidate has no direct dossier action');
+  e2eStages.push('batch-ambiguous');
+
+  const compoundLimitInputs = [
+    '103-84-4',
+    '64-19-7',
+    '108-24-7',
+    '98-86-2',
+    '122-00-9',
+    '22047-25-2',
+    '1072-83-9',
+    '85213-22-5',
+    '24295-03-2',
+    '523-80-8',
+    '29926-41-8',
+  ];
+  const lateSelectedCas = compoundLimitInputs.at(-1);
+  await bulkInput.fill(compoundLimitInputs.join('\n'));
+  const lateSelectedRow = batchReview.locator('tbody tr').filter({ hasText: lateSelectedCas });
+  await lateSelectedRow.waitFor({ state: 'visible' });
+  await page.waitForFunction(({ origin, expectedCas }) => {
+    const requests = performance.getEntriesByType('resource').map(entry => entry.name);
+    return expectedCas.every(cas => requests.some((url) => {
+      if (!url.startsWith(origin) || !url.includes('/compound?')) return false;
+      return new URL(url).searchParams.get('cas') === cas;
+    }));
+  }, { origin: proxyOrigin, expectedCas: compoundLimitInputs.slice(0, 10) });
+  assert.equal(requestCountFor('/compound', lateSelectedCas), 0, 'the eleventh bulk CAS is outside the initial compound prefetch');
+  await lateSelectedRow.getByRole('button', { name: '查看档案' }).click();
+  await workbench.getByText(`CAS ${lateSelectedCas}`, { exact: true }).waitFor({ state: 'visible' });
+  await page.waitForFunction(({ origin, cas }) => performance.getEntriesByType('resource').some((entry) => {
+    if (!entry.name.startsWith(origin) || !entry.name.includes('/compound?')) return false;
+    return new URL(entry.name).searchParams.get('cas') === cas;
+  }), { origin: proxyOrigin, cas: lateSelectedCas });
+  await page.waitForFunction(() => {
+    const summary = document.querySelector('[aria-label="来源状态"]');
+    return summary && !summary.textContent.includes('载入中');
+  });
+  assert.equal(requestCountFor('/compound', lateSelectedCas), 1, 'opening the eleventh bulk row requests its compound profile once');
+  bulkLimitRequestEvidence = {
+    cas: lateSelectedCas,
+    initialPosition: 11,
+    compoundRequestsBeforeSelection: 0,
+    compoundRequestsAfterSelection: requestCountFor('/compound', lateSelectedCas),
+    loadingCleared: true,
+  };
+  e2eStages.push('batch-late-selected-request');
+  await workbench.getByRole('button', { name: '返回批量结果' }).click();
+  await batchReview.waitFor({ state: 'visible' });
 
   const paginatedInputs = Array.from({ length: 50 }, (_, index) => index % 2 === 0 ? '141-78-6' : '64-17-5');
   await bulkInput.fill(paginatedInputs.join('\n'));
@@ -912,6 +963,7 @@ try {
   assert.ok((await batchReview.locator('tbody tr').count()) > 0, 'returning keeps filtered rows visible');
   await page.waitForFunction(expected => Math.abs(window.scrollY - expected) <= 2, savedBatchScrollY);
   assert.ok(Math.abs((await page.evaluate(() => window.scrollY)) - savedBatchScrollY) <= 2, 'returning restores scroll within two pixels');
+  e2eStages.push('batch-state-restored');
 
   await page.getByRole('button', { name: '单物质检索' }).click();
   await classicButton.click();
@@ -926,6 +978,7 @@ try {
 
   assert.deepEqual(pageErrors, [], 'page errors');
   assert.deepEqual(consoleErrors, [], 'console errors');
+  e2eStages.push('complete');
   await context.close();
   console.log(JSON.stringify({
     ok: true,
@@ -954,6 +1007,8 @@ try {
       },
     },
     selectedCandidateRequestEvidence,
+    bulkLimitRequestEvidence,
+    e2eStages,
     firstClassicMountRequestCount: classicRequestsAfterMount.length,
   }, null, 2));
 } finally {

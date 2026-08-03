@@ -135,6 +135,45 @@ test('prioritizes a selected single-search CAS without expanding ambiguous candi
   }), ['939-97-9', '18127-01-0']);
 });
 
+test('puts a selected late bulk CAS inside the compound prefetch limit without duplicates', () => {
+  const matches = Array.from({ length: 12 }, (_, index) => ({ cas: `batch-${index + 1}` }));
+  matches.splice(4, 0, { cas: 'batch-2' });
+
+  assert.deepEqual(searchWorkbenchModel.selectProfileRequestCas({
+    matchedResults: matches,
+    searchMode: 'bulk',
+    bulkLimit: 10,
+  }), Array.from({ length: 10 }, (_, index) => `batch-${index + 1}`));
+
+  const selected = searchWorkbenchModel.selectProfileRequestCas({
+    matchedResults: matches,
+    searchMode: 'bulk',
+    selectedCas: 'batch-12',
+    bulkLimit: 10,
+  });
+  assert.deepEqual(selected, [
+    ...Array.from({ length: 9 }, (_, index) => `batch-${index + 1}`),
+    'batch-12',
+  ]);
+  assert.equal(selected.length, 10);
+  assert.equal(new Set(selected).size, selected.length);
+});
+
+test('puts a selected late bulk CAS inside the FEMA prefetch limit', () => {
+  const matches = Array.from({ length: 52 }, (_, index) => ({ cas: `fema-${index + 1}` }));
+  const selected = searchWorkbenchModel.selectProfileRequestCas({
+    matchedResults: matches,
+    searchMode: 'bulk',
+    selectedCas: 'fema-52',
+    bulkLimit: 50,
+  });
+
+  assert.equal(selected.length, 50);
+  assert.deepEqual(selected.slice(0, -1), Array.from({ length: 49 }, (_, index) => `fema-${index + 1}`));
+  assert.equal(selected.at(-1), 'fema-52');
+  assert.equal(new Set(selected).size, selected.length);
+});
+
 test('summarizes chapter status from records and source outcomes', () => {
   assert.equal(typeof searchWorkbenchModel.summarizeChapterStatus, 'function');
   const status = searchWorkbenchModel.summarizeChapterStatus;

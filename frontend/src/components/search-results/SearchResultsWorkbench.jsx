@@ -146,11 +146,20 @@ export default function SearchResultsWorkbench({
           candidates={candidates}
           state={batchState}
           onStateChange={setBatchState}
-          onOpen={(rowId) => setBatchState(current => ({
-            ...current,
-            selectedRowId: rowId,
-            scrollY: window.scrollY,
-          }))}
+          onOpen={(rowId) => {
+            const row = batchRows.find(candidateRow => candidateRow.id === rowId);
+            const rowCandidates = row?.candidateEntityKey
+              ? candidates.filter(candidate => candidate.entityKey === row.candidateEntityKey)
+              : [];
+            if (rowCandidates.length !== 1) return;
+            const candidate = rowCandidates[0];
+            onCandidateSelect?.({ entityKey: candidate.entityKey, cas: candidate.cas });
+            setBatchState(current => ({
+              ...current,
+              selectedRowId: rowId,
+              scrollY: window.scrollY,
+            }));
+          }}
           isEnglish={isEnglish}
         />
       </section>

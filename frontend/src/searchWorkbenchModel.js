@@ -211,7 +211,11 @@ export function selectProfileRequestCas({
   if (searchMode !== 'bulk') {
     return [uniqueCas.includes(selectedCas) ? selectedCas : uniqueCas[0]].filter(Boolean);
   }
-  return uniqueCas.slice(0, bulkLimit);
+  const prefetchedCas = uniqueCas.slice(0, bulkLimit);
+  if (!uniqueCas.includes(selectedCas) || prefetchedCas.includes(selectedCas) || prefetchedCas.length === 0) {
+    return prefetchedCas;
+  }
+  return [...prefetchedCas.slice(0, -1), selectedCas];
 }
 
 const bookRecordValues = (record, field) => [
