@@ -1,0 +1,65 @@
+{
+    "schemaVersion":  "shimadzu-browser-core-1",
+    "files":  [
+                  {
+                      "name":  "normalize.mjs",
+                      "source":  "scripts/core/normalize.mjs",
+                      "sha256":  "c99ed718ff5e252169fa9f71562ecfa364f1577fe846084a341d90ae38ccdb2c"
+                  },
+                  {
+                      "name":  "parse-shimadzu.mjs",
+                      "source":  "scripts/core/parse-shimadzu.mjs",
+                      "sha256":  "1e28a84427164a60d5fbc9265e9ff33c438522209b95ecbf847c7f098aaaf709"
+                  },
+                  {
+                      "name":  "v2-sample-config.mjs",
+                      "source":  "scripts/core/v2-sample-config.mjs",
+                      "sha256":  "8c736905aa0170337b41ca64811c615a11172d761bbb28b67ce36cd407efa553"
+                  },
+                  {
+                      "name":  "v2-hit1-stage.mjs",
+                      "source":  "scripts/core/v2-hit1-stage.mjs",
+                      "sha256":  "0d1d8ad7e7467201af123103d27350a0fb417d752fb2d8700de593dfac0fd6fa"
+                  },
+                  {
+                      "name":  "filtering.mjs",
+                      "source":  "scripts/core/filtering.mjs",
+                      "sha256":  "ee3008953c4e499d8cdb484dafd95c904273ccad26273e41048feff4de3c184a"
+                  },
+                  {
+                      "name":  "duplicate-cas.mjs",
+                      "source":  "scripts/core/duplicate-cas.mjs",
+                      "sha256":  "0ab1d4ca56e69aac2ae842a30a42d6b1b62c87088fea0b63ec7190079309fab8"
+                  },
+                  {
+                      "name":  "v2-screening-stage.mjs",
+                      "source":  "scripts/core/v2-screening-stage.mjs",
+                      "sha256":  "527a77e693ec4d69e93e6cc22726e6a3afe46fdb64445eb137e52600635c9b05"
+                  },
+                  {
+                      "name":  "v2-replicate-area-stage.mjs",
+                      "source":  "scripts/core/v2-replicate-area-stage.mjs",
+                      "sha256":  "7d1b51ab6f82761686aea4e7e5b8787225bec05385b67a2959ccf0f74b00b636"
+                  },
+                  {
+                      "name":  "semiquant.mjs",
+                      "source":  "scripts/core/semiquant.mjs",
+                      "sha256":  "132327ea2860fbd4aa1819f7d53ff69adc7f44f916e478a858517e1b22a0136d"
+                  },
+                  {
+                      "name":  "v2-semiquant-stage.mjs",
+                      "source":  "scripts/core/v2-semiquant-stage.mjs",
+                      "sha256":  "abec4e4fa729e87a00c4eece2fa4dd009bf51ea0b15a571887ac9057278a3c2c"
+                  },
+                  {
+                      "name":  "v2-statistics-stage.mjs",
+                      "source":  "scripts/core/v2-statistics-stage.mjs",
+                      "sha256":  "48230313988c55a5d7b3a1b41f9752c5b9353b2899fd9d5748ef6515b4562d8a"
+                  },
+                  {
+                      "name":  "v2-matrix-split-stage.mjs",
+                      "source":  "scripts/core/v2-matrix-split-stage.mjs",
+                      "sha256":  "86460564483e998316bda246265f7fd9ca98d7d07ecc1fb69f070c92fa22bbf5"
+                  }
+              ]
+}
