@@ -8,7 +8,7 @@
     "build": "vite build && node scripts/create-static-routes.mjs",
     "lint": "eslint .",
     "test:book-search": "node --test src/bookSearch.test.mjs",
-    "test:search-workbench": "node --test src/resultViewPreference.test.mjs src/searchSourceState.test.mjs src/searchWorkbenchModel.test.mjs",
+    "test:search-workbench": "node --test src/resultViewPreference.test.mjs src/searchSourceState.test.mjs src/searchWorkbenchModel.test.mjs src/scientificChapterPreload.test.mjs",
     "test:static-routes": "node --test src/staticRoutes.test.mjs",
     "test:shimadzu": "node --test src/shimadzuApi.test.mjs",
     "test:shimadzu-browser": "node --test src/components/shimadzu/ShimadzuAnalysisPage.layout.test.mjs src/lib/shimadzuBrowserContract.test.mjs src/lib/shimadzuCloud.test.mjs src/lib/shimadzuWorkerClient.test.mjs src/shimadzu-core/*.test.mjs src/workers/*.test.mjs",
