@@ -235,6 +235,11 @@ try {
   const rawRecordButton = workbench.getByRole('button', { name: /原始记录/ }).first();
   await rawRecordButton.waitFor({ state: 'visible' });
   assert.equal(await rawRecordButton.getAttribute('aria-expanded'), 'false', 'raw evidence is collapsed by default');
+  assert.match(
+    await rawRecordButton.locator('.evidence-record-disclosure__summary > span:not(.evidence-record-disclosure__sr-only)').textContent(),
+    /Backman \(1917\).*本地.*空气.*识别阈/,
+    'collapsed threshold metadata includes the actual source, origin kind, medium, and type',
+  );
   for (let remainingControl = 0; remainingControl < 15; remainingControl += 1) {
     await page.keyboard.press('Tab');
   }
@@ -251,6 +256,11 @@ try {
   assert.match(disclosureFocusStyle.boxShadow, /rgb\(30, 58, 138\)/, 'disclosure boundary has a visible cobalt outer focus ring');
   await page.keyboard.press('Enter');
   assert.equal(await rawRecordButton.getAttribute('aria-expanded'), 'true', 'Enter expands raw evidence');
+  assert.equal(
+    await rawRecordButton.locator('..').getByText('结构化数值', { exact: true }).count(),
+    0,
+    'a threshold range does not expose a fabricated structured single value',
+  );
 
   const thresholdPanel = workbench.locator('.threshold-evidence-chapter');
   const waterFilter = thresholdPanel.getByRole('button', { name: '水', exact: true });
@@ -267,15 +277,29 @@ try {
   const sensoryChapter = chapterNavigation.getByRole('button', { name: /感官/ });
   await sensoryChapter.click();
   const sensoryPanel = workbench.locator('.sensory-sources-chapter');
+  const allSensorySources = sensoryPanel.getByRole('button', { name: '全部来源', exact: true });
+  const allSensoryKinds = sensoryPanel.getByRole('button', { name: '全部信息类型', exact: true });
   const femaFilter = sensoryPanel.getByRole('button', { name: 'FEMA', exact: true });
   const flavorDbFilter = sensoryPanel.getByRole('button', { name: 'FlavorDB2', exact: true });
-  assert.equal(await femaFilter.getAttribute('aria-pressed'), 'true', 'FEMA starts selected independently');
-  assert.equal(await flavorDbFilter.getAttribute('aria-pressed'), 'true', 'FlavorDB2 starts selected independently');
+  const odorFilter = sensoryPanel.getByRole('button', { name: '气味', exact: true });
+  assert.equal(await allSensorySources.getAttribute('aria-pressed'), 'true', 'sensory source filter starts at explicit all');
+  assert.equal(await allSensoryKinds.getAttribute('aria-pressed'), 'true', 'sensory kind filter starts at explicit all');
+  assert.equal(await femaFilter.getAttribute('aria-pressed'), 'false', 'specific sensory sources are distinct from explicit all');
   assert.equal(await sensoryPanel.getByRole('heading', { name: 'FEMA', exact: true }).count(), 1, 'FEMA evidence has its own group');
   assert.equal(await sensoryPanel.getByRole('heading', { name: 'FlavorDB2', exact: true }).count(), 1, 'FlavorDB2 evidence has its own group');
+  await flavorDbFilter.click();
+  await odorFilter.click();
+  assert.equal(await flavorDbFilter.getAttribute('aria-pressed'), 'true', 'FlavorDB2 source can be selected independently');
+  assert.equal(await odorFilter.getAttribute('aria-pressed'), 'true', 'odor kind can be selected independently');
+  assert.equal(await sensoryPanel.getByRole('heading', { name: 'FEMA', exact: true }).count(), 0, 'source filter excludes the FEMA group');
+  await sensoryPanel.getByText('pineapple', { exact: true }).waitFor({ state: 'visible' });
   await thresholdChapter.click();
   assert.equal(await waterFilter.getAttribute('aria-pressed'), 'true', 'threshold medium filter survives chapter switching');
   assert.equal(await recognitionFilter.getAttribute('aria-pressed'), 'true', 'threshold type filter survives chapter switching');
+  await sensoryChapter.click();
+  assert.equal(await flavorDbFilter.getAttribute('aria-pressed'), 'true', 'sensory source filter survives chapter switching');
+  assert.equal(await odorFilter.getAttribute('aria-pressed'), 'true', 'sensory kind filter survives chapter switching');
+  await thresholdChapter.click();
   const allMediaFilter = thresholdPanel.getByRole('button', { name: '全部介质', exact: true });
   const allTypeFilter = thresholdPanel.getByRole('button', { name: '全部类型', exact: true });
   await allMediaFilter.click();
@@ -426,6 +450,19 @@ try {
     'true',
     'new entity resets threshold type filter',
   );
+  await workbench.getByRole('button', { name: /感官/ }).click();
+  const selectedSensoryPanel = workbench.locator('.sensory-sources-chapter');
+  assert.equal(
+    await selectedSensoryPanel.getByRole('button', { name: '全部来源', exact: true }).getAttribute('aria-pressed'),
+    'true',
+    'new entity resets sensory source filter',
+  );
+  assert.equal(
+    await selectedSensoryPanel.getByRole('button', { name: '全部信息类型', exact: true }).getAttribute('aria-pressed'),
+    'true',
+    'new entity resets sensory kind filter',
+  );
+  await workbench.getByRole('button', { name: /阈值/ }).click();
   assert.equal(await workbench.getByText('939-97-9', { exact: false }).count(), 0, 'selected threshold chapter excludes the other entity CAS');
 
   await input.fill('141-78-6');

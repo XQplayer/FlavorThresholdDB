@@ -20,13 +20,13 @@ const freezeFilters = (value) => {
 };
 
 export const DEFAULT_CHAPTER_FILTERS = freezeFilters({
-  sensory: { sources: ['FEMA', 'FlavorDB'] },
+  sensory: { sources: null, kinds: null },
   thresholds: { media: null, types: null, includeBooks: true, bookOnly: false },
   spectra: { sources: ['PubChem'], includeExperimental: true },
 });
 
 export const createDefaultChapterFilters = () => ({
-  sensory: { ...DEFAULT_CHAPTER_FILTERS.sensory, sources: [...DEFAULT_CHAPTER_FILTERS.sensory.sources] },
+  sensory: { ...DEFAULT_CHAPTER_FILTERS.sensory },
   thresholds: {
     ...DEFAULT_CHAPTER_FILTERS.thresholds,
     media: DEFAULT_CHAPTER_FILTERS.thresholds.media,
@@ -265,14 +265,17 @@ export function summarizeChapterStatus({ recordCount = 0, sourceStates = [] } = 
 const chapter = (records = []) => ({ records });
 
 const parseThreshold = (value) => {
-  if (typeof value === 'number') return { value, unit: null };
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? { value, unit: null } : { value: null, unit: null };
+  }
   const text = String(value ?? '').trim();
-  const match = text.replace(/,/g, '').match(/[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:\s*[eE][+-]?\d+)?/);
-  if (!match) return { value: null, unit: text || null };
-  const valueText = match[0].replace(/\s+/g, '');
-  const remainder = text.slice((match.index ?? 0) + match[0].length);
-  const unitMatch = remainder.match(/^\s*([A-Za-zµμ]+(?:\s*\/\s*[A-Za-z0-9^]+)?)/);
-  return { value: Number(valueText), unit: unitMatch?.[1]?.replace(/\s+/g, '') ?? null };
+  const exactMatch = /^([+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)(?:\s*([A-Za-zµμ%]+(?:\s*\/\s*[A-Za-z0-9µμ³^%-]+)?))?$/.exec(text);
+  if (!exactMatch) return { value: null, unit: null };
+  const numericText = exactMatch[1].replace(/,/g, '').replace(/\s+/g, '');
+  const parsedValue = Number(numericText);
+  return Number.isFinite(parsedValue)
+    ? { value: parsedValue, unit: exactMatch[2]?.replace(/\s+/g, '') ?? null }
+    : { value: null, unit: null };
 };
 
 const parseStringThreshold = (raw) => {
@@ -280,12 +283,11 @@ const parseStringThreshold = (raw) => {
   const trimmed = text.trim();
   const typeMatch = /(?:^|\s)([dr])\s+(.+)$/i.exec(trimmed);
   const parseReliableValue = (thresholdText) => {
-    if (/\d+[.,]\d+\s+\d+/.test(thresholdText)) {
-      return { value: null, unit: null, parseStatus: 'unparsed' };
-    }
     const parsed = parseThreshold(thresholdText);
     const looksLikeYear = Number.isInteger(parsed.value) && parsed.value >= 1800 && parsed.value <= 2099;
-    return looksLikeYear ? { value: null, unit: null, parseStatus: 'unparsed' } : { ...parsed, parseStatus: 'parsed' };
+    return parsed.value == null || looksLikeYear
+      ? { value: null, unit: null, parseStatus: 'unparsed' }
+      : { ...parsed, parseStatus: 'parsed' };
   };
   if (typeMatch) {
     const thresholdText = typeMatch[2].trim();
@@ -334,7 +336,19 @@ const toThresholdRecords = (matchedResults, integratedResults) => {
     return asArray(item.threshold_data).flatMap((entry) => {
       const stringEntry = typeof entry === 'string';
       const parsedString = stringEntry ? parseStringThreshold(entry) : null;
-      const parsed = stringEntry ? parsedString : parseThreshold(entry?.threshold ?? entry?.value);
+      const hasObjectQualifier = !stringEntry && (
+        [entry?.comparator, entry?.operator, entry?.qualifier]
+          .some(value => String(value ?? '').trim() !== '')
+        || entry?.high != null
+        || entry?.max != null
+        || entry?.upper != null
+        || asArray(entry?.range).length > 1
+      );
+      const parsed = stringEntry
+        ? parsedString
+        : hasObjectQualifier
+          ? { value: null, unit: null }
+          : parseThreshold(entry?.threshold ?? entry?.value);
       const thresholdType = stringEntry
         ? parsedString.type
         : entry?.type ?? entry?.threshold_type ?? item.threshold_type ?? null;
@@ -347,7 +361,7 @@ const toThresholdRecords = (matchedResults, integratedResults) => {
         type: thresholdType,
         thresholdType,
         value: parsed.value,
-        unit: entry?.unit ?? parsed.unit,
+        unit: parsed.value == null ? null : entry?.unit ?? parsed.unit,
         source: entry?.reference ?? entry?.source ?? parsedString?.source ?? item.reference ?? null,
         originalText,
         sourceRecordKey: entry?.source_record_key ?? entry?.sourceRecordKey ?? null,
@@ -381,7 +395,7 @@ const toSensoryRecords = (integratedResults) => asArray(integratedResults).flatM
   const addDescriptors = (source, informationType, value, raw) => {
     const descriptors = sensoryValues(value);
     if (descriptors.length > 0) {
-      records.push({ source, sourceLabel: raw?.source ?? source, informationType, descriptors, raw });
+      records.push({ source, sourceLabel: raw?.source ?? source, kind: informationType, informationType, descriptors, raw });
     }
   };
   addDescriptors('FEMA', 'flavor', fema.flavor_profile, fema);
@@ -393,6 +407,7 @@ const toSensoryRecords = (integratedResults) => asArray(integratedResults).flatM
     records.push({
       source: 'FlavorDB',
       sourceLabel: flavorDb.source ?? 'FlavorDB2',
+      kind: 'food_entity',
       informationType: 'food_entity',
       descriptors: [String(entity.name)],
       naturalSource: entity.natural_source?.name ?? null,
@@ -402,6 +417,7 @@ const toSensoryRecords = (integratedResults) => asArray(integratedResults).flatM
       records.push({
         source: 'FlavorDB',
         sourceLabel: flavorDb.source ?? 'FlavorDB2',
+        kind: 'natural_source',
         informationType: 'natural_source',
         descriptors: [String(entity.natural_source.name)],
         relatedFoodEntity: String(entity.name),
@@ -412,7 +428,23 @@ const toSensoryRecords = (integratedResults) => asArray(integratedResults).flatM
   return records;
 });
 
-const bookThresholdValue = (record) => {
+const bookThresholdQuality = (record) => ({
+  associationMethod: record?.association_method ?? null,
+  associationConfidence: record?.association_confidence ?? null,
+  reviewStatus: record?.review_status ?? null,
+  reviewFlags: [...asArray(record?.review_flags)],
+  sourceCorrections: [...asArray(record?.source_corrections)],
+  subjectResolution: record?.subject_resolution ?? null,
+});
+
+const bookThresholdValue = (record, quality) => {
+  const resolutionType = normaliseText(quality.subjectResolution?.resolution_type);
+  const unreliable = quality.reviewFlags.length > 0
+    || (quality.reviewStatus != null && quality.reviewStatus !== 'clean')
+    || quality.associationConfidence === 'low'
+    || resolutionType.includes('conflict')
+    || resolutionType.includes('error');
+  if (unreliable) return { value: null, unit: null };
   const values = asArray(record?.values).filter(value => value?.role == null || value.role === 'threshold');
   if (values.length !== 1 || values[0].high != null) return { value: null, unit: null };
   const parsed = Number(values[0].low);
@@ -422,19 +454,21 @@ const bookThresholdValue = (record) => {
 const toBookThresholdRecords = (bookThresholds) => asArray(bookThresholds).filter(Boolean).map((entry, index) => {
   const recordId = entry.record_id ?? entry.source_record_key ?? `record-${index}`;
   const blockMatch = String(recordId).match(/-b(\d+)$/);
+  const quality = bookThresholdQuality(entry);
   return {
     id: `book:${recordId}:${index}`,
     cas: entry.entity_cas ?? entry.subject_resolution?.canonical_cas ?? null,
     medium: asArray(entry.media).filter(Boolean)[0] ?? null,
     type: entry.threshold_type ?? null,
     thresholdType: entry.threshold_type ?? null,
-    ...bookThresholdValue(entry),
+    ...bookThresholdValue(entry, quality),
     source: '酒类风味化学',
     sourceKind: 'book',
     originalText: entry.raw_text ?? null,
     sourceRecordKey: recordId,
     page: Number.isFinite(entry.page) ? entry.page : null,
     block: blockMatch ? Number(blockMatch[1]) : null,
+    quality,
     raw: entry,
   };
 });
@@ -497,7 +531,11 @@ export function buildCompoundDossier({
 
 export function filterSensoryRecords(records, filters = {}) {
   const sources = filters.sources == null ? null : new Set(filters.sources);
-  return asArray(records).filter(record => !sources || sources.has(record.source));
+  const kinds = filters.kinds == null ? null : new Set(filters.kinds);
+  return asArray(records).filter(record => (
+    (!sources || sources.has(record.source))
+    && (!kinds || kinds.has(record.kind))
+  ));
 }
 
 const thresholdMediumCategory = (medium) => {

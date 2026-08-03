@@ -2,8 +2,18 @@ import { filterSensoryRecords } from '../../../searchWorkbenchModel';
 import EvidenceRecordDisclosure from '../EvidenceRecordDisclosure';
 
 const SOURCE_OPTIONS = [
+  { value: null, zh: '全部来源', en: 'All sources' },
   { value: 'FEMA', label: 'FEMA' },
   { value: 'FlavorDB', label: 'FlavorDB2' },
+];
+
+const KIND_OPTIONS = [
+  { value: null, zh: '全部信息类型', en: 'All information types' },
+  { value: 'odor', zh: '气味', en: 'Odor' },
+  { value: 'taste', zh: '味觉', en: 'Taste' },
+  { value: 'natural_source', zh: '天然来源', en: 'Natural source' },
+  { value: 'food_entity', zh: '食材实体', en: 'Food entity' },
+  { value: 'flavor', zh: '风味描述', en: 'Flavor profile' },
 ];
 
 const TYPE_LABELS = {
@@ -17,35 +27,47 @@ const TYPE_LABELS = {
 const sourceLabel = source => source === 'FlavorDB' ? 'FlavorDB2' : source;
 
 export default function SensorySourcesChapter({ records = [], filters, onFiltersChange, isEnglish = false }) {
-  const selectedSources = filters?.sources ?? SOURCE_OPTIONS.map(option => option.value);
-  const visibleRecords = filterSensoryRecords(records, { sources: selectedSources });
-  const grouped = SOURCE_OPTIONS.map(option => ({
+  const currentFilters = filters || { sources: null, kinds: null };
+  const activeSource = currentFilters.sources?.[0] ?? null;
+  const activeKind = currentFilters.kinds?.[0] ?? null;
+  const visibleRecords = filterSensoryRecords(records, currentFilters);
+  const grouped = SOURCE_OPTIONS.filter(option => option.value).map(option => ({
     ...option,
     records: visibleRecords.filter(record => record.source === option.value),
   })).filter(group => group.records.length > 0);
 
-  const toggleSource = (source) => {
-    const nextSources = selectedSources.includes(source)
-      ? selectedSources.filter(value => value !== source)
-      : [...selectedSources, source];
-    onFiltersChange?.({ ...filters, sources: nextSources });
-  };
-
   return (
     <div className="sensory-sources-chapter">
-      <div className="chapter-filter-group" role="group" aria-label={isEnglish ? 'Sensory sources' : '感官来源筛选'}>
-        <span className="chapter-filter-group__label">{isEnglish ? 'Source' : '来源'}</span>
-        <div className="chapter-filter-group__buttons">
-          {SOURCE_OPTIONS.map(option => (
-            <button
-              key={option.value}
-              type="button"
-              aria-pressed={selectedSources.includes(option.value)}
-              onClick={() => toggleSource(option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
+      <div className="sensory-filter-rows">
+        <div className="chapter-filter-group" role="group" aria-label={isEnglish ? 'Sensory sources' : '感官来源筛选'}>
+          <span className="chapter-filter-group__label">{isEnglish ? 'Source' : '来源'}</span>
+          <div className="chapter-filter-group__buttons">
+            {SOURCE_OPTIONS.map(option => (
+              <button
+                key={option.value ?? 'all'}
+                type="button"
+                aria-pressed={activeSource === option.value}
+                onClick={() => onFiltersChange?.({ ...currentFilters, sources: option.value == null ? null : [option.value] })}
+              >
+                {option.label || (isEnglish ? option.en : option.zh)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="chapter-filter-group" role="group" aria-label={isEnglish ? 'Sensory information types' : '感官信息类型筛选'}>
+          <span className="chapter-filter-group__label">{isEnglish ? 'Information' : '信息类型'}</span>
+          <div className="chapter-filter-group__buttons">
+            {KIND_OPTIONS.map(option => (
+              <button
+                key={option.value ?? 'all'}
+                type="button"
+                aria-pressed={activeKind === option.value}
+                onClick={() => onFiltersChange?.({ ...currentFilters, kinds: option.value == null ? null : [option.value] })}
+              >
+                {isEnglish ? option.en : option.zh}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -59,9 +81,9 @@ export default function SensorySourcesChapter({ records = [], filters, onFilters
               </header>
               <div className="sensory-record-list">
                 {group.records.map((record, index) => {
-                  const typeLabel = TYPE_LABELS[record.informationType] || TYPE_LABELS.flavor;
+                  const typeLabel = TYPE_LABELS[record.kind] || TYPE_LABELS.flavor;
                   return (
-                    <article className="sensory-record" key={`${record.source}-${record.informationType}-${index}`}>
+                    <article className="sensory-record" key={`${record.source}-${record.kind}-${index}`}>
                       <div className="sensory-record__meta">
                         <span>{sourceLabel(record.source)}</span>
                         <span>{isEnglish ? typeLabel.en : typeLabel.zh}</span>

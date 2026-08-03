@@ -29,6 +29,12 @@ const recordSummary = (record, isEnglish) => (
   || (isEnglish ? 'Threshold source record' : '阈值来源记录')
 );
 
+const recordSourceSummary = (record, isEnglish) => {
+  const source = record.source || (isEnglish ? 'Source not stated' : '来源未说明');
+  if (record.sourceKind !== 'book' || record.page == null) return source;
+  return isEnglish ? `${source}, page ${record.page}` : `${source} · 第 ${record.page} 页`;
+};
+
 export default function ThresholdEvidenceChapter({ records = [], filters, onFiltersChange, isEnglish = false }) {
   const currentFilters = filters || { media: null, types: null, includeBooks: true, bookOnly: false };
   const visibleRecords = filterThresholdRecords(records, currentFilters);
@@ -91,6 +97,7 @@ export default function ThresholdEvidenceChapter({ records = [], filters, onFilt
               isEnglish={isEnglish}
               summary={recordSummary(record, isEnglish)}
               summaryMeta={[
+                recordSourceSummary(record, isEnglish),
                 record.sourceKind === 'book' ? (isEnglish ? 'Book' : '书籍') : (isEnglish ? 'Local' : '本地'),
                 record.medium || (isEnglish ? 'Medium not stated' : '介质未说明'),
                 typeLabel(record, isEnglish),
@@ -106,6 +113,10 @@ export default function ThresholdEvidenceChapter({ records = [], filters, onFilt
                   {record.page != null && <div><dt>{isEnglish ? 'Book page' : '书籍页码'}</dt><dd>{record.page}</dd></div>}
                   {record.block != null && <div><dt>{isEnglish ? 'Source block' : '来源块'}</dt><dd>{record.block}</dd></div>}
                   {record.sourceRecordKey && <div><dt>{isEnglish ? 'Source key' : '来源键'}</dt><dd>{record.sourceRecordKey}</dd></div>}
+                  {record.quality?.associationMethod && <div><dt>{isEnglish ? 'Association method' : '关联方法'}</dt><dd>{record.quality.associationMethod}</dd></div>}
+                  {record.quality?.associationConfidence && <div><dt>{isEnglish ? 'Association confidence' : '关联置信度'}</dt><dd>{record.quality.associationConfidence}</dd></div>}
+                  {record.quality?.reviewStatus && <div><dt>{isEnglish ? 'Review status' : '审核状态'}</dt><dd>{record.quality.reviewStatus}</dd></div>}
+                  {record.quality?.reviewFlags?.length > 0 && <div><dt>{isEnglish ? 'Review flags' : '审核标记'}</dt><dd>{record.quality.reviewFlags.join('、')}</dd></div>}
                 </dl>
               )}
             />

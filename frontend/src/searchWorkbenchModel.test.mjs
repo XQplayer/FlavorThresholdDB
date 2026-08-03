@@ -225,10 +225,9 @@ test('defines eight bilingual compound-dossier chapters', () => {
 
 test('creates independent default chapter-filter copies', () => {
   const defaults = createDefaultChapterFilters();
-  defaults.sensory.sources.pop();
   defaults.thresholds.media = 'water';
   assert.deepEqual(createDefaultChapterFilters(), {
-    sensory: { sources: ['FEMA', 'FlavorDB'] },
+    sensory: { sources: null, kinds: null },
     thresholds: { media: null, types: null, includeBooks: true, bookOnly: false },
     spectra: { sources: ['PubChem'], includeExperimental: true },
   });
@@ -253,6 +252,7 @@ test('keeps FEMA and FlavorDB2 sensory evidence separate and filters without mut
   };
   const records = buildCompoundDossier({ integratedResults: [sensoryInput] }).sensory.records;
   const before = structuredClone(records);
+  assert.ok(records.every(record => ['odor', 'taste', 'natural_source', 'food_entity', 'flavor'].includes(record.kind)));
   assert.ok(records.some(record => record.source === 'FEMA' && record.descriptors.includes('fruity')));
   assert.ok(records.some(record => record.source === 'FlavorDB' && record.descriptors.includes('fruity')));
   assert.ok(records.some(record => record.source === 'FEMA' && record.sourceLabel === 'FEMA Flavor Library'));
@@ -270,6 +270,11 @@ test('keeps FEMA and FlavorDB2 sensory evidence separate and filters without mut
   )));
   assert.ok(filterSensoryRecords(records, { sources: ['FEMA'] }).every(record => record.source === 'FEMA'));
   assert.ok(filterSensoryRecords(records, { sources: ['FlavorDB'] }).every(record => record.source === 'FlavorDB'));
+  assert.ok(filterSensoryRecords(records, { kinds: ['odor'] }).every(record => record.kind === 'odor'));
+  assert.ok(filterSensoryRecords(records, { sources: ['FlavorDB'], kinds: ['taste'] }).every(record => (
+    record.source === 'FlavorDB' && record.kind === 'taste'
+  )));
+  assert.deepEqual(filterSensoryRecords(records, { sources: null, kinds: null }), records);
   assert.deepEqual(records, before);
 });
 
@@ -329,7 +334,9 @@ test('maps production-style string thresholds without losing comparator or range
   };
   const records = buildCompoundDossier({ matchedResults: [productionRecord] }).thresholds.records;
   assert.equal(records[0].type, 'd');
-  assert.equal(records[0].value, 0.6);
+  assert.equal(records[0].value, null);
+  assert.equal(records[0].unit, null);
+  assert.equal(records[0].parseStatus, 'unparsed');
   assert.equal(records[0].raw, productionRecord.threshold_data[0]);
   assert.equal(records[0].originalText, productionRecord.threshold_data[0]);
   assert.equal(records[1].type, null);
@@ -338,14 +345,56 @@ test('maps production-style string thresholds without losing comparator or range
   assert.equal(filterThresholdRecords(records, createDefaultChapterFilters().thresholds).length, 2);
 });
 
-test('only parses a string value after an independent threshold type marker', () => {
+test('keeps a typed threshold range unparsed instead of collapsing it to the lower bound', () => {
   const source = 'Wise et al. (2007); Miyazawa et al. (2009a) d 0.017 - 0.020';
   const [record] = buildCompoundDossier({
     matchedResults: [{ cas: '123-45-6', medium: '空气', threshold_data: [source] }],
   }).thresholds.records;
   assert.equal(record.type, 'd');
-  assert.equal(record.value, 0.017);
+  assert.equal(record.value, null);
+  assert.equal(record.unit, null);
+  assert.equal(record.parseStatus, 'unparsed');
   assert.equal(record.originalText, source);
+});
+
+test('parses only an exact single string threshold with an optional unit', () => {
+  const source = 'Takeoka et al. (1989) d 0.005 mg/L';
+  const [record] = buildCompoundDossier({
+    matchedResults: [{ cas: '123-45-9', medium: '水', threshold_data: [source] }],
+  }).thresholds.records;
+  assert.equal(record.value, 0.005);
+  assert.equal(record.unit, 'mg/L');
+  assert.equal(record.parseStatus, 'parsed');
+  assert.equal(record.originalText, source);
+});
+
+test('keeps exact scientific-notation thresholds with an attached unit parseable', () => {
+  const source = 'Reference d 1.2e-3mg/L';
+  const [record] = buildCompoundDossier({
+    matchedResults: [{ cas: '123-45-2', medium: '水', threshold_data: [source] }],
+  }).thresholds.records;
+  assert.equal(record.value, 0.0012);
+  assert.equal(record.unit, 'mg/L');
+  assert.equal(record.parseStatus, 'parsed');
+});
+
+test('does not structure comparator or range values from object thresholds', () => {
+  const entries = [
+    { threshold: '< 0.6 mg/L', type: 'd' },
+    { threshold: '0.017 - 0.020 mg/L', type: 'd' },
+    { value: 0.6, unit: 'mg/L', comparator: '<', type: 'd' },
+    { threshold: '0.005 mg/L', type: 'd' },
+  ];
+  const records = buildCompoundDossier({
+    matchedResults: [{ cas: '123-45-0', medium: '水', threshold_data: entries }],
+  }).thresholds.records;
+  assert.deepEqual(records.map(({ value, unit }) => [value, unit]), [
+    [null, null],
+    [null, null],
+    [null, null],
+    [0.005, 'mg/L'],
+  ]);
+  assert.deepEqual(records.map(record => record.raw), entries);
 });
 
 test('leaves author-led strings without a threshold type unparsed', () => {
@@ -468,9 +517,47 @@ test('maps only associated book thresholds and preserves their source lineage', 
     sourceRecordKey: 'book-flavor-chemistry-p0182-b10',
     page: 182,
     block: 10,
+    quality: {
+      associationMethod: null,
+      associationConfidence: null,
+      reviewStatus: null,
+      reviewFlags: [],
+      sourceCorrections: [],
+      subjectResolution: null,
+    },
     raw: bookThreshold,
   }]);
   assert.equal(dossier.citation.records.length, 0, 'mapped thresholds do not fabricate citation hits');
+});
+
+test('keeps reviewed or weakly associated book thresholds unstructured with quality details', () => {
+  const bookThreshold = {
+    entity_cas: '141-78-6',
+    page: 182,
+    record_id: 'book-flavor-chemistry-p0182-b11',
+    media: ['水'],
+    threshold_type: 'odor',
+    values: [{ low: '0.6', high: null, unit: 'μg/L', role: 'threshold' }],
+    raw_text: '水中嗅阈值0.6μg/L',
+    association_method: 'inherited_context',
+    association_confidence: 'low',
+    review_status: 'review',
+    review_flags: ['identity_conflict'],
+    source_corrections: [{ field: 'subject_label', reason: 'source conflict' }],
+    subject_resolution: { resolution_type: 'source_identity_error' },
+  };
+  const [record] = buildCompoundDossier({ bookThresholds: [bookThreshold] }).thresholds.records;
+  assert.equal(record.value, null);
+  assert.equal(record.unit, null);
+  assert.deepEqual(record.quality, {
+    associationMethod: 'inherited_context',
+    associationConfidence: 'low',
+    reviewStatus: 'review',
+    reviewFlags: ['identity_conflict'],
+    sourceCorrections: [{ field: 'subject_label', reason: 'source conflict' }],
+    subjectResolution: { resolution_type: 'source_identity_error' },
+  });
+  assert.equal(record.raw, bookThreshold);
 });
 
 test('normalizes requested source states while retaining state fields', () => {
