@@ -11,8 +11,11 @@ import BiochemicalRelationships from './components/BiochemicalRelationships';
 import BiologicalContext from './components/BiologicalContext';
 import BioactivityEvidence from './components/BioactivityEvidence';
 import StructureEvidence from './components/StructureEvidence';
+import ResultViewSwitch from './components/search-results/ResultViewSwitch';
+import SearchResultsWorkbench from './components/search-results/SearchResultsWorkbench';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
+import { loadResultView, saveResultView } from './resultViewPreference';
 
 const ShimadzuAnalysisPage = lazy(() => import('./components/shimadzu/ShimadzuAnalysisPage'));
 import {
@@ -109,6 +112,7 @@ export default function App() {
   const [currentView, setCurrentView] = useState(getViewFromLocation);
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [resultView, setResultView] = useState(() => loadResultView());
   
   const [searchMode, setSearchMode] = useState('single'); // 'single' or 'bulk'
   const [singleQuery, setSingleQuery] = useState('');
@@ -181,6 +185,11 @@ export default function App() {
     setShowContact(false);
     window.history.pushState({ view: 'shimadzu' }, '', SHIMADZU_PATH);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const changeResultView = (view) => {
+    setResultView(view);
+    saveResultView(view);
   };
 
   const openDataSources = () => {
@@ -1480,6 +1489,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           </div>
 
           {/* Medium Filter Controls */}
+          {resultView === 'classic' && (
           <div className="filter-disclosure">
             <div id="advanced-filters" className="advanced-filters legacy-filter-list" role="group" aria-label={isEnglish ? 'Detection medium filter' : '检测介质过滤'}>
               {[
@@ -1513,8 +1523,25 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
               ))}
             </div>
           </div>
+          )}
         </div>
 
+        <ResultViewSwitch value={resultView} onChange={changeResultView} isEnglish={isEnglish} />
+
+        {resultView === 'new' && (
+          <SearchResultsWorkbench
+            query={searchMode === 'single' ? singleQuery : bulkQuery}
+            loading={loading}
+            matchCount={queryMatchedResults.length}
+            isEnglish={isEnglish}
+          />
+        )}
+
+        <div
+          data-testid="classic-search-results"
+          aria-hidden={resultView !== 'classic'}
+          style={{ display: resultView === 'classic' ? 'contents' : 'none' }}
+        >
         {/* Results Section */}
         {!loading && (singleQuery.trim() || bulkQuery.trim()) && (
           <section className="search-summary-strip" aria-label={isEnglish ? 'Search summary' : '检索摘要'}>
@@ -2315,6 +2342,8 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
             </div>
           </div>
         )}
+
+        </div>
 
       </main>
       </>
