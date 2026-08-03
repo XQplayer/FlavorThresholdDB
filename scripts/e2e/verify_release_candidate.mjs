@@ -182,11 +182,15 @@ async function search(page, baseUrl) {
   const input = page.getByLabel('化合物名称或 CAS 号');
   await input.waitFor({ timeout: 30_000 });
   await input.fill('141-78-6');
+  const classicView = page.getByRole('button', { name: '经典版' });
+  await classicView.click();
+  assert.equal(await classicView.getAttribute('aria-pressed'), 'true', 'release regression explicitly selects the classic result view');
   await page.getByRole('heading', { name: '挥发与分配性质' }).waitFor({ timeout: 60_000 });
 }
 
 async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
   const context = await browser.newContext({ viewport });
+  await context.addInitScript(() => localStorage.setItem('ftdb:result-view', 'new'));
   let payloadTimer;
   try {
     const page = await context.newPage();
@@ -314,6 +318,7 @@ async function runViewport(browser, name, viewport, baseUrl, proxyOrigin) {
 
 async function runFailureIsolation(browser, baseUrl, proxyOrigin) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  await context.addInitScript(() => localStorage.setItem('ftdb:result-view', 'new'));
   try {
     const page = await context.newPage();
     const observed = installObservers(page, proxyOrigin);
