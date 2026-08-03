@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CHAPTERS,
   buildScientificComponentProps,
@@ -36,6 +36,7 @@ const DELEGATED_CHAPTER_IDS = new Set(['spectra', 'biochemistry', 'bioactivity',
 
 const createDefaultBatchState = () => ({
   status: 'all',
+  coverageFilter: 'all',
   sortKey: 'inputOrder',
   sortDirection: 'asc',
   page: 1,
@@ -62,7 +63,18 @@ export default function SearchResultsWorkbench({
   const queryKey = String(query || '').trim().toLowerCase();
   const [candidateSelection, setCandidateSelection] = useState({ queryKey, entityKey: null });
   const [batchState, setBatchState] = useState(createDefaultBatchState);
-  const pendingBatchScrollRestore = useRef(null);
+  const batchBackButtonRef = useRef(null);
+  const batchRowAnchorRef = useRef(null);
+  const pendingBatchReturnRef = useRef(null);
+  const batchAnimationFrameIds = useRef(new Set());
+  const scheduleBatchAnimationFrame = useCallback((callback) => {
+    const id = requestAnimationFrame(() => {
+      batchAnimationFrameIds.current.delete(id);
+      callback();
+    });
+    batchAnimationFrameIds.current.add(id);
+    return id;
+  }, []);
   const selectedBatchRow = mode === 'bulk'
     ? batchRows.find(row => row.id === batchState.selectedRowId)
     : null;
@@ -129,13 +141,39 @@ export default function SearchResultsWorkbench({
   }, [entityKey]);
 
   useEffect(() => {
-    if (mode !== 'bulk' || batchState.selectedRowId !== null || pendingBatchScrollRestore.current === null) return;
-    const restoreY = pendingBatchScrollRestore.current;
-    pendingBatchScrollRestore.current = null;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => window.scrollTo(0, restoreY));
+    if (mode !== 'bulk' || batchState.selectedRowId === null) return;
+    scheduleBatchAnimationFrame(() => batchBackButtonRef.current?.focus({ preventScroll: true }));
+  }, [batchState.selectedRowId, mode, scheduleBatchAnimationFrame]);
+
+  useEffect(() => {
+    if (mode !== 'bulk' || batchState.selectedRowId !== null || pendingBatchReturnRef.current === null) return;
+    const pendingReturn = pendingBatchReturnRef.current;
+    pendingBatchReturnRef.current = null;
+    scheduleBatchAnimationFrame(() => {
+      scheduleBatchAnimationFrame(() => {
+        const row = [...document.querySelectorAll('[data-row-id]')]
+          .find(element => element.dataset.rowId === pendingReturn.rowId);
+        if (!row) {
+          window.scrollTo(0, pendingReturn.scrollY);
+          document.getElementById('batch-review-heading')?.focus({ preventScroll: true });
+          return;
+        }
+        row.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+        const rowRect = row.getBoundingClientRect();
+        const maximumTop = Math.max(16, window.innerHeight - Math.min(rowRect.height, 80) - 16);
+        const targetTop = Number.isFinite(pendingReturn.anchorTop)
+          ? Math.min(Math.max(pendingReturn.anchorTop, 16), maximumTop)
+          : Math.min(rowRect.top, maximumTop);
+        window.scrollTo({ top: window.scrollY + rowRect.top - targetTop, behavior: 'instant' });
+        row.querySelector('[data-batch-action-row-id]')?.focus({ preventScroll: true });
+      });
     });
-  }, [batchState.selectedRowId, mode]);
+  }, [batchState.selectedRowId, mode, scheduleBatchAnimationFrame]);
+
+  useEffect(() => () => {
+    batchAnimationFrameIds.current.forEach(id => cancelAnimationFrame(id));
+    batchAnimationFrameIds.current.clear();
+  }, [queryKey]);
 
   if (mode === 'bulk' && hasQuery && !loading && !selectedCandidate) {
     return (
@@ -146,13 +184,17 @@ export default function SearchResultsWorkbench({
           candidates={candidates}
           state={batchState}
           onStateChange={setBatchState}
-          onOpen={(rowId) => {
+          onOpen={(rowId, actionElement) => {
             const row = batchRows.find(candidateRow => candidateRow.id === rowId);
             const rowCandidates = row?.candidateEntityKey
               ? candidates.filter(candidate => candidate.entityKey === row.candidateEntityKey)
               : [];
             if (rowCandidates.length !== 1) return;
             const candidate = rowCandidates[0];
+            batchRowAnchorRef.current = {
+              rowId,
+              anchorTop: actionElement?.closest('[data-row-id]')?.getBoundingClientRect().top ?? null,
+            };
             onCandidateSelect?.({ entityKey: candidate.entityKey, cas: candidate.cas });
             setBatchState(current => ({
               ...current,
@@ -234,10 +276,15 @@ export default function SearchResultsWorkbench({
       <section className="search-results-workbench search-results-workbench--dossier" data-testid="search-results-workbench">
         {mode === 'bulk' && (
           <button
+            ref={batchBackButtonRef}
             type="button"
             className="batch-review__back"
             onClick={() => {
-              pendingBatchScrollRestore.current = batchState.scrollY;
+              pendingBatchReturnRef.current = {
+                rowId: batchRowAnchorRef.current?.rowId ?? batchState.selectedRowId,
+                anchorTop: batchRowAnchorRef.current?.anchorTop ?? null,
+                scrollY: batchState.scrollY,
+              };
               setBatchState(current => ({ ...current, selectedRowId: null }));
             }}
           >

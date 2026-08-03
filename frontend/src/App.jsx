@@ -476,10 +476,6 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     () => parseBatchReviewInputs(deferredBulkQuery),
     [deferredBulkQuery],
   );
-  const batchRows = useMemo(
-    () => buildBatchReviewRows(rawBatchInputs, queryMatchedResults),
-    [rawBatchInputs, queryMatchedResults],
-  );
 
   const results = useMemo(
     () => queryMatchedResults.filter(item => selectedMedia.includes(item.medium)),
@@ -734,6 +730,14 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     femaProfiles,
     compoundProfiles,
   ]);
+
+  const batchRows = useMemo(
+    () => buildBatchReviewRows(rawBatchInputs, queryMatchedResults, {
+      exactMatch,
+      dossierCandidates: compoundDossierCandidates,
+    }),
+    [rawBatchInputs, queryMatchedResults, exactMatch, compoundDossierCandidates],
+  );
 
   useEffect(() => {
     if (!queryMatchedResults.length) return;

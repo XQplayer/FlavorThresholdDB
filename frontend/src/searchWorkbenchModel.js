@@ -680,7 +680,15 @@ export function parseBatchReviewInputs(rawText) {
     .filter(line => line.trim() !== '');
 }
 
-export function buildBatchReviewRows(rawInputs, matchedResults) {
+const dossierChapterCoverage = (candidate) => CHAPTERS.reduce(
+  (count, { id }) => count + (asArray(candidate?.dossier?.[id]?.records).length > 0 ? 1 : 0),
+  0,
+);
+
+export function buildBatchReviewRows(rawInputs, matchedResults, {
+  exactMatch = true,
+  dossierCandidates = [],
+} = {}) {
   const occurrences = new Map();
   const candidates = asArray(matchedResults).filter(Boolean);
   return asArray(rawInputs).map((input, inputIndex) => {
@@ -692,10 +700,22 @@ export function buildBatchReviewRows(rawInputs, matchedResults) {
     const exactMatches = candidates.filter((item) => normaliseCas(item.cas) === cas && cas !== '');
     const normalizedName = normaliseText(originalInput);
     const nameMatches = candidates.filter((item) => matchedNames(item).includes(normalizedName) && normalizedName !== '');
-    const candidateCas = [...new Set(nameMatches.map((item) => normaliseCas(item.cas)).filter(Boolean))];
-    const ambiguous = exactMatches.length === 0 && candidateCas.length > 1;
-    const matches = exactMatches.length > 0 ? exactMatches : nameMatches;
+    const fuzzyMatches = exactMatch ? [] : candidates.filter((item) => (
+      normalizedName !== ''
+      && (normaliseCas(item.cas).toLocaleLowerCase().includes(normalizedName)
+        || matchedNames(item).some(name => name.includes(normalizedName)))
+    ));
+    const matches = exactMatches.length > 0
+      ? exactMatches
+      : exactMatch
+        ? nameMatches
+        : fuzzyMatches;
     const candidateEntityKeys = [...new Set(matches.map(compoundEntityKey).filter(key => key !== 'name:'))];
+    const ambiguous = exactMatches.length === 0 && candidateEntityKeys.length > 1;
+    const candidateEntityKey = candidateEntityKeys.length === 1 ? candidateEntityKeys[0] : null;
+    const linkedDossierCandidates = candidateEntityKey
+      ? asArray(dossierCandidates).filter(candidate => candidate?.entityKey === candidateEntityKey)
+      : [];
     const status = exactMatches.length > 0 ? 'exact' : matches.length > 0 ? 'candidate' : 'unmatched';
     const coverage = coverageFor(matches);
     return {
@@ -703,17 +723,20 @@ export function buildBatchReviewRows(rawInputs, matchedResults) {
       inputIndex,
       originalInput,
       normalizedName,
-      standardName: matches[0]?.english_name
+      standardName: ambiguous ? null : matches[0]?.english_name
         ?? matches[0]?.englishName
         ?? matches[0]?.chinese_name
         ?? matches[0]?.chineseName
         ?? null,
       cas: ambiguous ? null : matches[0]?.cas ?? (/^\d{2,7}-\d{2}-\d$/.test(cas) ? cas : null),
-      candidateEntityKey: candidateEntityKeys.length === 1 ? candidateEntityKeys[0] : null,
+      candidateEntityKey,
       status,
       thresholdRecordCount: coverage.thresholdRecordCount,
       media: coverage.media,
       coverage: coverage.coverage,
+      chapterCoverageCount: linkedDossierCandidates.length === 1
+        ? dossierChapterCoverage(linkedDossierCandidates[0])
+        : 0,
       issues: status === 'unmatched' ? ['no_match'] : status === 'candidate' ? [
         'name_match_not_cas',
         ...(ambiguous ? ['ambiguous_identity'] : []),
@@ -735,8 +758,9 @@ export function sortBatchRows(rows, { key = 'reviewPriority', direction = 'asc' 
       : key === 'inputOrder'
         ? (left.row.inputIndex ?? left.index) - (right.row.inputIndex ?? right.index)
         : key === 'coverage'
-          ? (left.row.thresholdRecordCount ?? 0) - (right.row.thresholdRecordCount ?? 0)
-            || (left.row.coverage ?? 0) - (right.row.coverage ?? 0)
+          ? (left.row.chapterCoverageCount ?? 0) - (right.row.chapterCoverageCount ?? 0)
+            || (left.row.media?.length ?? left.row.coverage ?? 0) - (right.row.media?.length ?? right.row.coverage ?? 0)
+            || (left.row.thresholdRecordCount ?? 0) - (right.row.thresholdRecordCount ?? 0)
           : compareValues(left.row[key], right.row[key]);
     if (compared) return compared * multiplier;
     const byId = compareValues(left.row.id, right.row.id);

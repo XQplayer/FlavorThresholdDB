@@ -818,6 +818,54 @@ test('keeps a multi-CAS name match ambiguous instead of choosing the first ident
   assert.equal(row.matches.length, 2);
 });
 
+test('uses actual matched names for fuzzy batch candidates while exact mode keeps full matches', () => {
+  const candidates = [
+    { cas: '141-78-6', english_name: 'Ethyl acetate', threshold_data: [] },
+    { cas: '105-54-4', english_name: 'Ethyl butyrate', common_english_name: 'Ethyl butanoate', threshold_data: [] },
+    { cas: '141-97-9', english_name: 'Ethyl acetoacetate', threshold_data: [] },
+  ];
+
+  const [exactRow] = buildBatchReviewRows(['ethyl acet'], candidates, { exactMatch: true });
+  assert.equal(exactRow.status, 'unmatched');
+
+  const [fuzzyRow] = buildBatchReviewRows(['ethyl acet'], candidates, { exactMatch: false });
+  assert.equal(fuzzyRow.status, 'candidate');
+  assert.equal(fuzzyRow.matches.length, 2);
+  assert.equal(fuzzyRow.candidateEntityKey, null);
+  assert.equal(fuzzyRow.standardName, null);
+  assert.equal(fuzzyRow.cas, null);
+  assert.ok(fuzzyRow.issues.includes('ambiguous_identity'));
+});
+
+test('treats a CAS identity and a no-CAS normalized-name identity as ambiguous', () => {
+  const candidates = [
+    { cas: '111-11-1', english_name: 'Shared identity', threshold_data: [] },
+    { cas: null, english_name: 'Shared identity', threshold_data: [] },
+  ];
+  const [row] = buildBatchReviewRows(['shared identity'], candidates);
+
+  assert.equal(row.status, 'candidate');
+  assert.equal(row.candidateEntityKey, null);
+  assert.equal(row.standardName, null);
+  assert.equal(row.cas, null);
+  assert.ok(row.issues.includes('ambiguous_identity'));
+});
+
+test('writes actual dossier chapter coverage onto uniquely linked batch rows', () => {
+  const [row] = buildBatchReviewRows(['141-78-6'], [threshold], {
+    dossierCandidates: [{
+      entityKey: 'cas:141-78-6',
+      dossier: {
+        overview: { records: [{ id: 'identity' }] },
+        thresholds: { records: [{ id: 'threshold' }] },
+        spectra: { records: [] },
+      },
+    }],
+  });
+
+  assert.equal(row.chapterCoverageCount, 2);
+});
+
 test('sorts batch review priority deterministically without changing inputs', () => {
   const rows = buildBatchReviewRows(['141-78-6', 'ethyl acetate', 'missing compound'], [threshold]);
   const before = rows.map(row => row.id);
@@ -853,6 +901,20 @@ test('sorts input order and coverage deterministically in both directions', () =
   );
   assert.deepEqual(
     sortBatchRows(rows, { key: 'coverage', direction: 'desc' }).map(row => row.id),
+    ['64-17-5:0', '141-78-6:0', 'missing compound:0'],
+  );
+});
+
+test('sorts coverage by chapters then media then threshold records', () => {
+  const rows = [
+    { id: 'threshold-rich', chapterCoverageCount: 0, media: ['water', 'air', 'wine'], thresholdRecordCount: 99 },
+    { id: 'one-chapter-one-medium', chapterCoverageCount: 1, media: ['water'], thresholdRecordCount: 50 },
+    { id: 'two-chapters', chapterCoverageCount: 2, media: [], thresholdRecordCount: 0 },
+    { id: 'one-chapter-two-media', chapterCoverageCount: 1, media: ['water', 'air'], thresholdRecordCount: 1 },
+  ];
+
+  assert.deepEqual(
     sortBatchRows(rows, { key: 'coverage', direction: 'desc' }).map(row => row.id),
+    ['two-chapters', 'one-chapter-two-media', 'one-chapter-one-medium', 'threshold-rich'],
   );
 });

@@ -156,6 +156,7 @@ try {
   const failedScientificRequests = [];
   let selectedCandidateRequestEvidence = null;
   let bulkLimitRequestEvidence = null;
+  const batchReviewEvidence = {};
   const e2eStages = [];
   page.on('console', message => {
     if (message.type() === 'error') consoleErrors.push(message.text());
@@ -870,13 +871,19 @@ try {
 
   const candidateFilter = batchReview.getByRole('button', { name: '候选', exact: true });
   await candidateFilter.click();
-  assert.equal(await batchReview.getByText('当前状态筛选下没有结果。', { exact: true }).count(), 1, 'empty filtered state explains why no rows are shown');
+  assert.equal(await batchReview.getByText('当前筛选条件下没有结果。', { exact: true }).count(), 1, 'empty filtered state explains why no rows are shown');
 
   const unmatchedFilter = batchReview.getByRole('button', { name: '未匹配', exact: true });
   await unmatchedFilter.click();
   assert.equal(await unmatchedFilter.getAttribute('aria-pressed'), 'true', 'unmatched filter exposes active state');
   assert.equal(await batchReview.locator('tbody tr').count(), 1, 'unmatched filter hides matched rows');
   assert.match(await batchReview.locator('tbody tr').first().innerText(), /unknown/, 'unmatched filter retains the unresolved raw input');
+  const noCoverageFilter = batchReview.getByRole('button', { name: '无数据', exact: true });
+  const allCoverageFilter = batchReview.getByRole('button', { name: '全部覆盖', exact: true });
+  await noCoverageFilter.click();
+  assert.equal(await noCoverageFilter.getAttribute('aria-pressed'), 'true', 'no-data coverage filter exposes active state');
+  assert.match(await batchReview.locator('tbody tr').first().innerText(), /unknown/, 'no-data coverage filter retains the uncovered row');
+  await allCoverageFilter.click();
   const batchSort = batchReview.getByLabel('排序方式');
   await batchSort.selectOption('reviewPriority');
   assert.equal(await batchSort.inputValue(), 'reviewPriority', 'batch sort exposes the active review-priority choice');
@@ -888,6 +895,17 @@ try {
   assert.equal(await ambiguousBatchRow.getByRole('button', { name: '选择候选 / 待处理' }).isDisabled(), true, 'ambiguous candidate cannot open an arbitrary first dossier');
   assert.equal(await batchReview.getByRole('button', { name: '查看档案' }).count(), 0, 'ambiguous candidate has no direct dossier action');
   e2eStages.push('batch-ambiguous');
+
+  const matchModeGroup = page.getByRole('group', { name: '匹配方式' });
+  await matchModeGroup.getByRole('button', { name: '模糊', exact: true }).click();
+  await bulkInput.fill('ethyl acet');
+  const fuzzyAmbiguousRow = batchReview.locator('tbody tr').filter({ hasText: 'ethyl acet' });
+  await fuzzyAmbiguousRow.waitFor({ state: 'visible' });
+  assert.equal(await fuzzyAmbiguousRow.getAttribute('data-status'), 'candidate', 'partial real-name input becomes a fuzzy candidate');
+  assert.equal(await fuzzyAmbiguousRow.getByRole('button', { name: '选择候选 / 待处理' }).isDisabled(), true, 'fuzzy multi-entity candidate cannot open an arbitrary dossier');
+  batchReviewEvidence.fuzzy = { input: 'ethyl acet', status: 'candidate', ambiguousActionDisabled: true };
+  e2eStages.push('batch-fuzzy-ambiguous');
+  await matchModeGroup.getByRole('button', { name: '精确', exact: true }).click();
 
   const compoundLimitInputs = [
     '103-84-4',
@@ -939,31 +957,56 @@ try {
   const paginatedInputs = Array.from({ length: 50 }, (_, index) => index % 2 === 0 ? '141-78-6' : '64-17-5');
   await bulkInput.fill(paginatedInputs.join('\n'));
   const exactFilter = batchReview.getByRole('button', { name: '精确', exact: true });
+  const hasCoverageFilter = batchReview.getByRole('button', { name: '有数据', exact: true });
   await exactFilter.click();
+  await hasCoverageFilter.click();
   await batchSort.selectOption('coverage');
   const directionButton = batchReview.getByRole('button', { name: /排序方向/ });
   await directionButton.click();
   assert.equal(await directionButton.getAttribute('aria-pressed'), 'true', 'descending sort direction exposes active state');
   await batchReview.getByRole('button', { name: '下一页' }).click();
+  await noCoverageFilter.click();
+  assert.equal(await batchReview.getByTestId('batch-page-label').innerText(), '第 1 页，共 1 页', 'coverage filtering clamps an out-of-range page');
+  await hasCoverageFilter.click();
+  await batchReview.getByRole('button', { name: '下一页' }).click();
   const savedPageLabel = await batchReview.getByTestId('batch-page-label').innerText();
   assert.match(savedPageLabel, /第 2 页，共 2 页/, 'batch pagination reaches the second page');
-  await batchReview.locator('tbody tr').last().scrollIntoViewIfNeeded();
+  const selectedBatchRow = batchReview.locator('tbody tr').last();
+  const selectedBatchRowId = await selectedBatchRow.getAttribute('data-row-id');
+  await selectedBatchRow.scrollIntoViewIfNeeded();
+  const savedBatchRowTop = await selectedBatchRow.evaluate(row => row.getBoundingClientRect().top);
   const savedBatchScrollY = await page.evaluate(() => window.scrollY);
   assert.ok(savedBatchScrollY > 0, 'batch dossier navigation starts from a real scrolled position');
-  await batchReview.getByRole('button', { name: '查看档案' }).last().click();
-  await workbench.getByRole('button', { name: '返回批量结果' }).waitFor({ state: 'visible' });
+  await selectedBatchRow.getByRole('button', { name: '查看档案' }).click();
+  const batchBackButton = workbench.getByRole('button', { name: '返回批量结果' });
+  await batchBackButton.waitFor({ state: 'visible' });
+  await page.waitForFunction(() => document.activeElement?.textContent?.includes('返回批量结果'));
+  batchReviewEvidence.dossierFocus = '返回批量结果';
   assert.equal(await workbench.locator('.compound-identity-header').count(), 1, 'batch detail renders exactly one compound identity header');
   assert.equal(await batchReview.count(), 0, 'batch table is not rendered alongside a selected full dossier');
-  await workbench.getByRole('button', { name: '返回批量结果' }).click();
+  await page.setViewportSize({ width: 1024, height: 650 });
+  await batchBackButton.click();
   await batchReview.waitFor({ state: 'visible' });
   assert.equal(await exactFilter.getAttribute('aria-pressed'), 'true', 'returning preserves the exact-status filter');
+  assert.equal(await hasCoverageFilter.getAttribute('aria-pressed'), 'true', 'returning preserves the coverage filter');
   assert.equal(await batchSort.inputValue(), 'coverage', 'returning preserves the active sort');
   assert.equal(await directionButton.getAttribute('aria-pressed'), 'true', 'returning preserves sort direction');
   assert.equal(await batchReview.getByTestId('batch-page-label').innerText(), savedPageLabel, 'returning preserves the current page');
   assert.ok((await batchReview.locator('tbody tr').count()) > 0, 'returning keeps filtered rows visible');
-  await page.waitForFunction(expected => Math.abs(window.scrollY - expected) <= 2, savedBatchScrollY);
-  assert.ok(Math.abs((await page.evaluate(() => window.scrollY)) - savedBatchScrollY) <= 2, 'returning restores scroll within two pixels');
-  e2eStages.push('batch-state-restored');
+  await page.waitForFunction(rowId => document.activeElement?.dataset?.batchActionRowId === rowId, selectedBatchRowId);
+  const restoredBatchRow = batchReview.locator(`[data-row-id="${selectedBatchRowId}"]`);
+  const restoredBatchPosition = await restoredBatchRow.evaluate(row => {
+    const rect = row.getBoundingClientRect();
+    return { top: rect.top, bottom: rect.bottom, viewportHeight: window.innerHeight, scrollY: window.scrollY };
+  });
+  assert.ok(restoredBatchPosition.bottom > 0 && restoredBatchPosition.top < restoredBatchPosition.viewportHeight, 'resize-aware return keeps the selected row in the viewport');
+  assert.ok(restoredBatchPosition.scrollY > 0, 'resize-aware return preserves a meaningful batch scroll position');
+  assert.ok(Math.abs(restoredBatchPosition.top - savedBatchRowTop) < 300, 'resize-aware return keeps a reasonable row anchor after viewport change');
+  batchReviewEvidence.coverage = { filter: 'withData', sort: 'coverage', page: savedPageLabel };
+  batchReviewEvidence.returnFocusRowId = selectedBatchRowId;
+  batchReviewEvidence.resizeRestore = restoredBatchPosition;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  e2eStages.push('batch-coverage-focus-resize-restored');
 
   await page.getByRole('button', { name: '单物质检索' }).click();
   await classicButton.click();
@@ -1008,6 +1051,7 @@ try {
     },
     selectedCandidateRequestEvidence,
     bulkLimitRequestEvidence,
+    batchReviewEvidence,
     e2eStages,
     firstClassicMountRequestCount: classicRequestsAfterMount.length,
   }, null, 2));

@@ -115,6 +115,7 @@
 
 .batch-review__toolbar,
 .batch-review__status-filters,
+.batch-review__coverage-filters,
 .batch-review__sort-controls {
   display: flex;
   flex-wrap: wrap;
@@ -132,6 +133,7 @@
 }
 
 .batch-review__status-filters button,
+.batch-review__coverage-filters button,
 .batch-review__direction,
 .batch-review__pagination button,
 .batch-review__open,
@@ -147,6 +149,7 @@
 }
 
 .batch-review__status-filters button,
+.batch-review__coverage-filters button,
 .batch-review__direction,
 .batch-review__pagination button,
 .batch-review__open,
@@ -155,12 +158,14 @@
 }
 
 .batch-review__status-filters button,
+.batch-review__coverage-filters button,
 .batch-review__direction,
 .batch-review__pagination button {
   padding: 0.55rem 0.85rem;
 }
 
 .batch-review__status-filters button[aria-pressed='true'],
+.batch-review__coverage-filters button[aria-pressed='true'],
 .batch-review__direction[aria-pressed='true'] {
   border-color: #075985;
   background: #075985;
@@ -842,7 +847,8 @@
     flex-direction: column;
   }
 
-  .batch-review__status-filters {
+  .batch-review__status-filters,
+  .batch-review__coverage-filters {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;

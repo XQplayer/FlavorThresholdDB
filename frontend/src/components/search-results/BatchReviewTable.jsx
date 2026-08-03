@@ -10,6 +10,12 @@ const STATUS_OPTIONS = [
   { value: 'unmatched', zh: '未匹配', en: 'Unmatched' },
 ];
 
+const COVERAGE_OPTIONS = [
+  { value: 'all', zh: '全部覆盖', en: 'All coverage' },
+  { value: 'withData', zh: '有数据', en: 'With data' },
+  { value: 'withoutData', zh: '无数据', en: 'Without data' },
+];
+
 const SORT_OPTIONS = [
   { value: 'inputOrder', zh: '输入顺序', en: 'Input order' },
   { value: 'reviewPriority', zh: '审查优先', en: 'Review priority' },
@@ -25,7 +31,7 @@ const STATUS_LABELS = {
 const ISSUE_LABELS = {
   no_match: { zh: '未找到匹配', en: 'No match found' },
   name_match_not_cas: { zh: '仅名称匹配', en: 'Name match only' },
-  ambiguous_identity: { zh: '多个 CAS 候选', en: 'Multiple CAS candidates' },
+  ambiguous_identity: { zh: '多个实体候选', en: 'Multiple entity candidates' },
 };
 
 const labelFor = (entry, isEnglish) => entry?.[isEnglish ? 'en' : 'zh'] ?? '';
@@ -39,12 +45,11 @@ function findUniqueCandidate(row, candidates) {
   return matches.length === 1 ? matches[0] : null;
 }
 
-function chapterCoverage(candidate) {
-  if (!candidate?.dossier) return 0;
-  return Object.values(candidate.dossier)
-    .filter(value => value && Array.isArray(value.records) && value.records.length > 0)
-    .length;
-}
+const rowHasCoverage = row => (
+  (row.chapterCoverageCount ?? 0) > 0
+  || row.media.length > 0
+  || row.thresholdRecordCount > 0
+);
 
 export default function BatchReviewTable({
   rawInputs = [],
@@ -56,9 +61,12 @@ export default function BatchReviewTable({
   isEnglish = false,
 }) {
   const updateState = partial => onStateChange({ ...state, ...partial });
-  const filteredRows = useMemo(() => (
-    state.status === 'all' ? rows : rows.filter(row => row.status === state.status)
-  ), [rows, state.status]);
+  const filteredRows = useMemo(() => rows.filter((row) => {
+    if (state.status !== 'all' && row.status !== state.status) return false;
+    if (state.coverageFilter === 'withData') return rowHasCoverage(row);
+    if (state.coverageFilter === 'withoutData') return !rowHasCoverage(row);
+    return true;
+  }), [rows, state.status, state.coverageFilter]);
   const sortedRows = useMemo(() => sortBatchRows(filteredRows, {
     key: state.sortKey,
     direction: state.sortDirection,
@@ -72,7 +80,7 @@ export default function BatchReviewTable({
       <header className="batch-review__header">
         <div>
           <span className="search-results-workbench__eyebrow">{isEnglish ? 'Batch review' : '批量审查'}</span>
-          <h2>{isEnglish ? 'Review compounds one row at a time' : '逐行审查化合物匹配'}</h2>
+          <h2 id="batch-review-heading" tabIndex="-1">{isEnglish ? 'Review compounds one row at a time' : '逐行审查化合物匹配'}</h2>
           <p>
             {isEnglish
               ? `${rawInputs.length} non-empty input rows. Blank lines are ignored.`
@@ -89,6 +97,18 @@ export default function BatchReviewTable({
               type="button"
               aria-pressed={state.status === option.value}
               onClick={() => updateState({ status: option.value, page: 1 })}
+            >
+              {labelFor(option, isEnglish)}
+            </button>
+          ))}
+        </div>
+        <div className="batch-review__coverage-filters" role="group" aria-label={isEnglish ? 'Coverage filter' : '覆盖程度'}>
+          {COVERAGE_OPTIONS.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={state.coverageFilter === option.value}
+              onClick={() => updateState({ coverageFilter: option.value, page: 1 })}
             >
               {labelFor(option, isEnglish)}
             </button>
@@ -146,7 +166,6 @@ export default function BatchReviewTable({
             <tbody>
               {visibleRows.map(row => {
                 const candidate = findUniqueCandidate(row, candidates);
-                const coveredChapters = chapterCoverage(candidate);
                 return (
                   <tr key={row.id} data-row-id={row.id} data-status={row.status}>
                     <th scope="row">{row.originalInput}</th>
@@ -156,12 +175,17 @@ export default function BatchReviewTable({
                     <td>
                       <span>{isEnglish ? `${row.thresholdRecordCount} threshold records` : `${row.thresholdRecordCount} 条阈值记录`}</span>
                       {row.media.length > 0 && <span>{isEnglish ? `${row.media.length} media` : `${row.media.length} 种介质`}：{row.media.join('、')}</span>}
-                      {coveredChapters > 0 && <span>{isEnglish ? `${coveredChapters} covered chapters` : `${coveredChapters} 个章节有数据`}</span>}
+                      {row.chapterCoverageCount > 0 && <span>{isEnglish ? `${row.chapterCoverageCount} covered chapters` : `${row.chapterCoverageCount} 个章节有数据`}</span>}
                     </td>
                     <td>{row.issues.length > 0 ? row.issues.map(issue => labelFor(ISSUE_LABELS[issue], isEnglish)).join(isEnglish ? '; ' : '；') : '—'}</td>
                     <td>
                       {candidate ? (
-                        <button type="button" className="batch-review__open" onClick={() => onOpen(row.id)}>
+                        <button
+                          type="button"
+                          className="batch-review__open"
+                          data-batch-action-row-id={row.id}
+                          onClick={event => onOpen(row.id, event.currentTarget)}
+                        >
                           {isEnglish ? 'View dossier' : '查看档案'}
                         </button>
                       ) : row.issues.includes('ambiguous_identity') ? (
@@ -180,7 +204,7 @@ export default function BatchReviewTable({
         </div>
       ) : (
         <p className="batch-review__empty">
-          {isEnglish ? 'No rows match the current status filter.' : '当前状态筛选下没有结果。'}
+          {isEnglish ? 'No rows match the current filters.' : '当前筛选条件下没有结果。'}
         </p>
       )}
 
