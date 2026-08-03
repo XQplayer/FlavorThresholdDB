@@ -63,9 +63,18 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare first_account boolean;
 begin
-  insert into public.profiles(id, display_name)
-  values (new.id, coalesce(new.raw_user_meta_data ->> 'display_name', ''))
+  perform pg_advisory_xact_lock(hashtext('shimadzu-first-admin'));
+  select not exists(select 1 from public.profiles) into first_account;
+  insert into public.profiles(id, display_name, approval_status, is_admin, reviewed_at)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data ->> 'display_name', ''),
+    case when first_account then 'approved' else 'pending' end,
+    first_account,
+    case when first_account then now() else null end
+  )
   on conflict (id) do nothing;
   return new;
 end;
@@ -167,6 +176,7 @@ revoke all on public.profiles, public.shimadzu_jobs, public.shimadzu_job_events 
 grant select on public.profiles to authenticated;
 grant select, insert, update on public.shimadzu_jobs to authenticated;
 grant select, insert on public.shimadzu_job_events to authenticated;
+grant usage, select on sequence public.shimadzu_job_events_id_seq to authenticated;
 grant execute on function public.is_shimadzu_admin() to authenticated;
 grant execute on function public.review_shimadzu_user(uuid, text) to authenticated;
 grant execute on function public.cleanup_expired_shimadzu_data() to authenticated;

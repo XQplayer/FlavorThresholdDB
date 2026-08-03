@@ -200,12 +200,63 @@
 .shimadzu-input-region,
 .shimadzu-settings,
 .shimadzu-job-bar,
-.shimadzu-stage-detail {
+.shimadzu-stage-detail,
+.shimadzu-account,
+.shimadzu-history {
   border: 1px solid var(--sz-line);
   border-radius: var(--sz-radius);
   background: var(--sz-surface);
   box-shadow: var(--sz-shadow);
 }
+
+.shimadzu-account {
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: minmax(270px, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+}
+
+.shimadzu-account.local { grid-template-columns: 24px minmax(0, 1fr); color: var(--sz-success); }
+.shimadzu-account.local svg { width: 20px; }
+.shimadzu-account-copy { min-width: 0; display: flex; align-items: center; gap: 13px; }
+.shimadzu-account-copy > svg { width: 34px; height: 34px; padding: 8px; border-radius: 11px; color: var(--sz-accent); background: var(--sz-accent-soft); }
+.shimadzu-account h2,
+.shimadzu-account strong { margin: 0; color: var(--sz-ink); font-size: 13px; font-weight: 720; }
+.shimadzu-account p { margin: 4px 0 0; color: var(--sz-muted); font-size: 10.5px; line-height: 1.5; }
+.shimadzu-auth-form { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.shimadzu-auth-form input { width: 190px; min-height: 40px; padding: 0 11px; border: 1px solid var(--sz-line-strong); border-radius: 9px; color: var(--sz-ink); background: var(--sz-surface-strong); font-size: 10.5px; outline: none; }
+.shimadzu-auth-form input:focus { border-color: var(--sz-accent); box-shadow: 0 0 0 3px var(--sz-accent-soft); }
+.shimadzu-auth-form button,
+.shimadzu-signout,
+.shimadzu-approval-queue button,
+.shimadzu-history-table button { min-height: 40px; padding: 0 12px; border: 1px solid var(--sz-accent); border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: white; background: var(--sz-accent); font-size: 10px; font-weight: 700; cursor: pointer; }
+.shimadzu-auth-form button svg,
+.shimadzu-signout svg,
+.shimadzu-history-table button svg { width: 14px; height: 14px; }
+.shimadzu-auth-form button.text { border-color: transparent; color: var(--sz-accent-deep); background: transparent; }
+.shimadzu-signout { border-color: var(--sz-line-strong); color: var(--sz-ink-2); background: var(--sz-surface-strong); }
+.shimadzu-approval { min-height: 30px; padding: 0 10px; border-radius: 8px; display: inline-flex; align-items: center; color: var(--sz-warning); background: var(--sz-warning-soft); font-size: 9px; font-weight: 760; }
+.shimadzu-approval.state-approved { color: var(--sz-success); background: var(--sz-success-soft); }
+.shimadzu-account-message { grid-column: 1 / -1; padding-top: 10px; border-top: 1px solid var(--sz-line); color: var(--sz-warning) !important; }
+.shimadzu-approval-queue { grid-column: 1 / -1; padding-top: 14px; border-top: 1px solid var(--sz-line); }
+.shimadzu-approval-queue h3 { margin: 0 0 8px; font-size: 11px; }
+.shimadzu-approval-queue > div { min-height: 42px; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 8px; }
+.shimadzu-approval-queue span { font-size: 10.5px; }
+.shimadzu-approval-queue button { min-height: 30px; }
+.shimadzu-approval-queue button:last-child { border-color: var(--sz-line-strong); color: var(--sz-danger); background: var(--sz-surface-strong); }
+.shimadzu-run-gate { margin: 12px 0 0; display: flex; align-items: center; gap: 7px; color: var(--sz-warning); font-size: 10px; }
+.shimadzu-run-gate svg { width: 14px; height: 14px; }
+
+.shimadzu-history { margin-top: 18px; padding: 26px; }
+.shimadzu-history h2 { display: flex; align-items: center; gap: 8px; }
+.shimadzu-history h2 svg { width: 17px; height: 17px; color: var(--sz-accent); }
+.shimadzu-history-table { margin-top: 18px; border-top: 1px solid var(--sz-line); }
+.shimadzu-history-table > div { min-height: 64px; padding: 10px 0; border-bottom: 1px solid var(--sz-line); display: grid; grid-template-columns: minmax(220px, 1fr) 90px 140px 118px; align-items: center; gap: 12px; }
+.shimadzu-history-table strong { display: block; color: var(--sz-ink); font-size: 11px; }
+.shimadzu-history-table small,
+.shimadzu-history-table > div > span:not(.shimadzu-job-badge) { margin-top: 4px; color: var(--sz-muted); font-size: 9.5px; }
 
 .shimadzu-workflow { padding: 30px 32px 32px; }
 
@@ -691,6 +742,8 @@
   .shimadzu-settings .shimadzu-run-button { grid-column: 1 / -1; }
   .shimadzu-job-bar { grid-template-columns: 1fr 240px; }
   .shimadzu-job-actions { grid-column: 1 / -1; }
+  .shimadzu-account { grid-template-columns: 1fr auto; }
+  .shimadzu-auth-form { grid-column: 1 / -1; justify-content: flex-start; flex-wrap: wrap; }
 }
 
 @media (max-width: 820px) {
@@ -716,6 +769,8 @@
   .shimadzu-job-bar { grid-template-columns: 1fr; }
   .shimadzu-job-actions { grid-column: auto; justify-content: stretch; }
   .shimadzu-job-actions > * { flex: 1; }
+  .shimadzu-history-table > div { grid-template-columns: minmax(0, 1fr) auto; }
+  .shimadzu-history-table button { justify-self: end; }
 }
 
 @media (max-width: 620px) {
@@ -732,7 +787,14 @@
   .shimadzu-workflow,
   .shimadzu-input-region,
   .shimadzu-settings,
-  .shimadzu-stage-detail { padding: 20px; border-radius: 16px; }
+  .shimadzu-stage-detail,
+  .shimadzu-account,
+  .shimadzu-history { padding: 20px; border-radius: 16px; }
+  .shimadzu-account { grid-template-columns: 1fr; }
+  .shimadzu-auth-form { grid-column: auto; display: grid; }
+  .shimadzu-auth-form input { width: 100%; }
+  .shimadzu-approval,
+  .shimadzu-signout { justify-self: start; }
   .shimadzu-method-principles { width: 100%; display: grid; grid-template-columns: 1fr; }
   .shimadzu-method-principles span { justify-content: flex-start; }
   .shimadzu-upload-grid { grid-template-columns: 1fr; }

@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Circle,
   Download,
+  CloudDownload,
   FileCheck2,
   FileSpreadsheet,
   FlaskConical,
@@ -22,10 +23,16 @@ import {
   ShieldCheck,
   TerminalSquare,
   Upload,
+  UserCheck,
+  UserRound,
+  LogOut,
+  History,
 } from 'lucide-react'
 import { createShimadzuApi, getEnginePresentation, getMonitorStageIndex, getStageProgress } from '../../lib/shimadzuApi'
 import { assertWorkbookFile, browserEnginePresentation } from '../../lib/shimadzuBrowserContract'
 import { createShimadzuWorkerClient } from '../../lib/shimadzuWorkerClient'
+import { createShimadzuCloud } from '../../lib/shimadzuCloud'
+import { analyticsEnabled, supabase } from '../../lib/supabase'
 import './ShimadzuAnalysisPage.css'
 
 gsap.registerPlugin(useGSAP, ScrollTrigger)
@@ -45,6 +52,92 @@ const WORKFLOW = [
 const STATUS_LABELS = {
   created: '等待运行', queued: '排队中', running: '处理中', waiting_review: '等待复核', complete: '已完成', failed: '运行失败',
   pending: '未开始', PASS: '通过', WARN: '警告', REVIEW: '需复核', FAIL: '失败',
+}
+
+const APPROVAL_LABELS = { pending: '等待管理员审批', approved: '已获准使用', rejected: '申请未通过', suspended: '账号已停用' }
+
+function AccountPanel({ cloud, session, profile, loading, error, onRefresh }) {
+  const [registering, setRegistering] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [pendingUsers, setPendingUsers] = useState([])
+  const [working, setWorking] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    if (!profile?.is_admin) return
+    cloud.pendingUsers().then(setPendingUsers).catch(value => setMessage(value.message))
+  }, [cloud, profile?.is_admin])
+
+  const authenticate = async event => {
+    event.preventDefault()
+    setWorking(true); setMessage('')
+    try {
+      if (registering) {
+        await cloud.signUp(email.trim(), password, displayName.trim(), window.location.href)
+        setMessage('注册申请已提交。若邮箱验证已启用，请先完成邮件验证；之后等待管理员审批。')
+      } else {
+        await cloud.signIn(email.trim(), password)
+        setMessage('登录成功，正在读取账号权限。')
+      }
+      await onRefresh()
+    } catch (value) { setMessage(value.message) } finally { setWorking(false) }
+  }
+
+  const review = async (userId, status) => {
+    setWorking(true); setMessage('')
+    try {
+      await cloud.reviewUser(userId, status)
+      setPendingUsers(await cloud.pendingUsers())
+      setMessage(status === 'approved' ? '已批准该账号。' : '已拒绝该账号。')
+    } catch (value) { setMessage(value.message) } finally { setWorking(false) }
+  }
+
+  if (!cloud.configured) {
+    return <section className="shimadzu-account local"><ShieldCheck /><div><strong>本地隐私模式</strong><p>当前构建未连接云端账号；仍可在浏览器内计算并立即下载，关闭页面后不保留结果。</p></div></section>
+  }
+
+  if (loading) return <section className="shimadzu-account"><Loader2 className="spin" /><div><strong>正在核验账号</strong><p>读取登录会话与审批状态。</p></div></section>
+
+  if (!session) return (
+    <section className="shimadzu-account shimadzu-reveal" aria-labelledby="account-title">
+      <div className="shimadzu-account-copy"><UserRound /><div><h2 id="account-title">小组账号</h2><p>原始工作簿不会上传。登录并通过管理员审批后，可计算并保留结果 ZIP 7 天、任务记录 90 天。</p></div></div>
+      <form onSubmit={authenticate} className="shimadzu-auth-form">
+        {registering && <input aria-label="姓名" placeholder="姓名或小组内称呼" value={displayName} onChange={event => setDisplayName(event.target.value)} required />}
+        <input aria-label="邮箱" type="email" placeholder="邮箱" value={email} onChange={event => setEmail(event.target.value)} required />
+        <input aria-label="密码" type="password" minLength="6" placeholder="密码（至少 6 位）" value={password} onChange={event => setPassword(event.target.value)} required />
+        <button type="submit" disabled={working}>{working ? <Loader2 className="spin" /> : <UserCheck />}{registering ? '提交注册申请' : '登录'}</button>
+        <button type="button" className="text" onClick={() => { setRegistering(value => !value); setMessage('') }}>{registering ? '已有账号，返回登录' : '没有账号，申请使用'}</button>
+      </form>
+      {(message || error) && <p className="shimadzu-account-message">{message || error}</p>}
+    </section>
+  )
+
+  return (
+    <section className="shimadzu-account signed-in shimadzu-reveal" aria-labelledby="account-title">
+      <div className="shimadzu-account-copy"><UserRound /><div><h2 id="account-title">{profile?.display_name || session.user.email}</h2><p>{session.user.email} · {APPROVAL_LABELS[profile?.approval_status] || '正在建立审批档案'}</p></div></div>
+      <span className={`shimadzu-approval state-${profile?.approval_status || 'pending'}`}>{profile?.is_admin ? '管理员 · ' : ''}{APPROVAL_LABELS[profile?.approval_status] || '待确认'}</span>
+      <button className="shimadzu-signout" type="button" onClick={() => cloud.signOut()}><LogOut />退出</button>
+      {(message || error) && <p className="shimadzu-account-message">{message || error}</p>}
+      {profile?.is_admin && pendingUsers.length > 0 && <div className="shimadzu-approval-queue"><h3>待审批账号</h3>{pendingUsers.map(user => <div key={user.id}><span>{user.display_name || user.id}</span><button type="button" disabled={working} onClick={() => review(user.id, 'approved')}>批准</button><button type="button" disabled={working} onClick={() => review(user.id, 'rejected')}>拒绝</button></div>)}</div>}
+    </section>
+  )
+}
+
+function HistoryPanel({ jobs, onDownload }) {
+  if (!jobs.length) return null
+  return (
+    <section className="shimadzu-history shimadzu-reveal" aria-labelledby="history-title">
+      <div className="shimadzu-region-heading"><div><h2 id="history-title"><History />最近任务</h2><p>任务与 QC 摘要保留 90 天；结果包完成后保留 7 天。</p></div><span>私有记录</span></div>
+      <div className="shimadzu-history-table" role="table">
+        {jobs.map(item => {
+          const downloadable = item.result_path && new Date(item.result_expires_at) > new Date()
+          return <div key={item.id} role="row"><div><strong>{item.name}</strong><small>{new Date(item.created_at).toLocaleString('zh-CN', { hour12: false })}</small></div><span className={`shimadzu-job-badge ${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span><span>步骤 {item.current_stage}/7 · {item.progress}%</span>{downloadable ? <button type="button" onClick={() => onDownload(item)}><CloudDownload />重新下载</button> : <small>{item.status === 'complete' || item.status === 'expired' ? '结果已过期' : '暂无结果'}</small>}</div>
+        })}
+      </div>
+    </section>
+  )
 }
 
 const stageStatus = (job, index) => job?.stages?.[index]?.status || 'pending'
@@ -172,13 +265,16 @@ function LiveMonitor({ job, capabilities, engine: engineOverride }) {
 
 export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, setInterfaceLanguage }) {
   const api = useMemo(() => createShimadzuApi(API_BASE), [])
+  const cloud = useMemo(() => createShimadzuCloud(supabase), [])
   const pageRef = useRef(null)
   const rawInputRef = useRef(null)
   const samplesInputRef = useRef(null)
   const workerClientRef = useRef(null)
   const resultUrlRef = useRef('')
+  const activeJobIdRef = useRef('')
+  const cloudSyncRef = useRef(Promise.resolve())
+  const stageSummaryRef = useRef([])
   const [reducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
-  const [capabilities, setCapabilities] = useState(null)
   const [rawFile, setRawFile] = useState(null)
   const [samplesFile, setSamplesFile] = useState(null)
   const [name, setName] = useState('岛津气质分析')
@@ -186,16 +282,44 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
   const [job, setJob] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [session, setSession] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [history, setHistory] = useState([])
+  const [cloudLoading, setCloudLoading] = useState(analyticsEnabled)
+  const [cloudError, setCloudError] = useState('')
+
+  const refreshCloud = async (knownSession = undefined) => {
+    if (!cloud.configured) return
+    setCloudLoading(true); setCloudError('')
+    try {
+      const activeSession = knownSession === undefined ? await cloud.session() : knownSession
+      setSession(activeSession)
+      if (!activeSession) { setProfile(null); setHistory([]); return }
+      const nextProfile = await cloud.profile(activeSession.user.id)
+      setProfile(nextProfile)
+      setHistory(await cloud.listJobs())
+    } catch (value) {
+      setProfile(null); setHistory([])
+      setCloudError(value.code === 'PGRST205' || value.code === '42P01' ? '云端数据表尚未初始化，管理员需要先应用随本次发布提供的 Supabase 迁移。' : value.message)
+    } finally { setCloudLoading(false) }
+  }
 
   useEffect(() => {
     document.title = '岛津气质分析 | HXQLab'
-    api.capabilities().then(setCapabilities).catch(value => setError(value.message))
     workerClientRef.current = createShimadzuWorkerClient()
     return () => {
       workerClientRef.current?.dispose()
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
     }
   }, [api])
+
+  useEffect(() => {
+    if (!cloud.configured) return undefined
+    refreshCloud()
+    return cloud.onAuthChange(nextSession => refreshCloud(nextSession))
+    // cloud is stable for the lifetime of this page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloud])
 
   useGSAP(() => {
     const revealTargets = gsap.utils.toArray('.shimadzu-reveal')
@@ -233,7 +357,8 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
 
   const progress = getStageProgress(job)
   const engine = browserEnginePresentation()
-  const canStart = rawFile && samplesFile && !submitting
+  const canAnalyze = !cloud.configured || profile?.approval_status === 'approved'
+  const canStart = rawFile && samplesFile && canAnalyze && !submitting
 
   const handleWorkerEvent = event => {
     setJob(current => {
@@ -246,6 +371,20 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
       if (event.type === 'stage-review') return { ...current, stages, status: 'waiting_review', next_stage: event.stage + 1, updated_at: new Date().toISOString() }
       return { ...current, stages, status: event.type === 'stage-start' ? 'running' : current.status, next_stage: Number.isInteger(event.stage) ? event.stage + 1 : current.next_stage, updated_at: new Date().toISOString() }
     })
+    if (cloud.configured && session?.user && activeJobIdRef.current && ['stage-complete', 'stage-review'].includes(event.type)) {
+      const currentStage = Math.min(7, (event.stage ?? 0) + 1)
+      stageSummaryRef.current[event.stage] = { stage: event.stage, status: event.status || 'PASS', counts: event.counts || {} }
+      const patch = {
+        status: event.type === 'stage-review' ? 'waiting_review' : 'running',
+        current_stage: currentStage,
+        progress: Math.round(currentStage / 7 * 100),
+        stage_summary: stageSummaryRef.current.filter(Boolean),
+      }
+      if (event.stage === 5) patch.qc_summary = event.counts || {}
+      cloudSyncRef.current = cloudSyncRef.current
+        .then(() => cloud.updateJob(activeJobIdRef.current, patch))
+        .catch(value => setCloudError(`云端进度同步失败：${value.message}`))
+    }
   }
 
   const submit = async event => {
@@ -260,6 +399,16 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
         id: crypto.randomUUID(), name, status: 'running', next_stage: 0, updated_at: new Date().toISOString(),
         stages: WORKFLOW.map(stage => ({ index: stage.index, status: 'pending', counts: {} })),
       }
+      if (cloud.configured) {
+        if (!session?.user || profile?.approval_status !== 'approved') throw Object.assign(new Error('当前账号尚未通过管理员审批。'), { code: 'ACCOUNT_NOT_APPROVED' })
+        await cloud.createJob({
+          id: created.id, userId: session.user.id, name: name.trim() || '岛津气质分析', mode,
+          sourceNames: { raw: { name: rawFile.name, size: rawFile.size }, sample_info: { name: samplesFile.name, size: samplesFile.size } },
+        })
+      }
+      activeJobIdRef.current = created.id
+      stageSummaryRef.current = []
+      cloudSyncRef.current = Promise.resolve()
       setJob(created)
       const [rawBytes, sampleBytes] = await Promise.all([rawFile.arrayBuffer(), samplesFile.arrayBuffer()])
       const result = await workerClientRef.current.run({
@@ -268,9 +417,20 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
       resultUrlRef.current = URL.createObjectURL(new Blob([result.archiveBytes], { type: 'application/zip' }))
       setJob(current => ({ ...current, status: 'complete', next_stage: 7, updated_at: new Date().toISOString(), downloadUrl: resultUrlRef.current, resultFileName: result.fileName, archiveSha256: result.archiveSha256, archiveSize: result.archiveSize }))
+      if (cloud.configured) {
+        try {
+          await cloudSyncRef.current
+          await cloud.uploadResult({ userId: session.user.id, jobId: created.id, archiveBytes: result.archiveBytes, sha256: result.archiveSha256 })
+          setHistory(await cloud.listJobs())
+        } catch (value) {
+          setCloudError(`分析已完成且可立即下载，但云端结果保存失败：${value.message}`)
+          await cloud.updateJob(created.id, { status: 'complete', current_stage: 7, progress: 100, completed_at: new Date().toISOString() }).catch(() => {})
+        }
+      }
     } catch (value) {
       setError(value.message)
       setJob(current => current ? { ...current, status: value.code === 'ANALYSIS_CANCELLED' ? 'cancelled' : 'failed', error: { code: value.code || 'BROWSER_ANALYSIS_FAILED', message: value.message } } : null)
+      if (cloud.configured && activeJobIdRef.current) cloud.updateJob(activeJobIdRef.current, { status: value.code === 'ANALYSIS_CANCELLED' ? 'cancelled' : 'failed' }).catch(() => {})
     } finally {
       setSubmitting(false)
     }
@@ -280,16 +440,28 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
     setError('')
     workerClientRef.current?.continueReview()
     setJob(current => ({ ...current, status: 'running', updated_at: new Date().toISOString() }))
+    if (cloud.configured && activeJobIdRef.current) cloud.updateJob(activeJobIdRef.current, { status: 'running' }).catch(value => setCloudError(value.message))
   }
 
   const cancelJob = () => {
     workerClientRef.current?.cancel()
   }
 
+  const downloadCloudResult = async item => {
+    setCloudError('')
+    try {
+      const url = await cloud.downloadUrl(item.result_path)
+      window.location.assign(url)
+    } catch (value) { setCloudError(`无法建立下载链接：${value.message}`) }
+  }
+
   const reset = () => {
     workerClientRef.current?.cancel()
     if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
     resultUrlRef.current = ''
+    activeJobIdRef.current = ''
+    stageSummaryRef.current = []
+    cloudSyncRef.current = Promise.resolve()
     setJob(null); setRawFile(null); setSamplesFile(null); setError('')
     if (rawInputRef.current) rawInputRef.current.value = ''
     if (samplesInputRef.current) samplesInputRef.current.value = ''
@@ -332,6 +504,8 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
 
       <main className="shimadzu-main">
         {error && <div className="shimadzu-alert" role="alert"><AlertCircle /><span><strong>当前操作未完成</strong>{error}</span></div>}
+        {cloudError && <div className="shimadzu-alert cloud" role="alert"><AlertCircle /><span><strong>云端服务提示</strong>{cloudError}</span></div>}
+        <AccountPanel cloud={cloud} session={session} profile={profile} loading={cloudLoading} error={cloudError} onRefresh={refreshCloud} />
         <WorkflowMap job={job} />
 
         {!job ? (
@@ -355,8 +529,9 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
               </fieldset>
               <dl className="shimadzu-parameter-list"><div><dt>CV 阈值</dt><dd>30%</dd></div><div><dt>响应因子</dt><dd>1</dd></div><div><dt>内标参数</dt><dd>按样品表</dd></div><div><dt>OAV</dt><dd>关闭</dd></div></dl>
               <button className="shimadzu-run-button" type="submit" disabled={!canStart}>{submitting ? <Loader2 className="spin" /> : <Play />}{submitting ? '正在建立任务' : '开始一站式分析'}</button>
+              {cloud.configured && !canAnalyze && <p className="shimadzu-run-gate"><ShieldCheck />登录且通过管理员审批后开放计算。</p>}
             </aside>
-            <LiveMonitor job={null} capabilities={capabilities} engine={engine} />
+            <LiveMonitor job={null} capabilities={null} engine={engine} />
           </form>
         ) : (
           <div className="shimadzu-job-workspace">
@@ -371,7 +546,7 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
               </div>
             </section>
             {job.error && <div className="shimadzu-inline-error"><AlertCircle /><span><strong>{job.error.code}</strong>{job.error.message}</span></div>}
-            <LiveMonitor job={job} capabilities={capabilities} engine={engine} />
+            <LiveMonitor job={job} capabilities={null} engine={engine} />
             <section className="shimadzu-stage-detail shimadzu-reveal" aria-labelledby="detail-title">
               <div className="shimadzu-region-heading"><div><h2 id="detail-title">步骤状态与处理计数</h2><p>状态来自各步骤 manifest，WARN 与 REVIEW 会保留到报告。</p></div></div>
               <ol>
@@ -384,6 +559,7 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
             </section>
           </div>
         )}
+        <HistoryPanel jobs={history} onDownload={downloadCloudResult} />
       </main>
     </div>
   )

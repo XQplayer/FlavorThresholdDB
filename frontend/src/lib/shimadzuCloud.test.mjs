@@ -21,9 +21,16 @@ test('sets result retention to seven days and records to ninety days', () => {
 
 test('migration enforces approval, RLS, private storage and cleanup', async () => {
   const sql = await readFile(new URL('../../../supabase/migrations/20260803070000_shimadzu_browser_analysis.sql', import.meta.url), 'utf8')
+  const schedule = await readFile(new URL('../../../supabase/migrations/20260803073000_shimadzu_retention_schedule.sql', import.meta.url), 'utf8')
+  const edgeFunction = await readFile(new URL('../../../supabase/functions/shimadzu-retention-cleanup/index.ts', import.meta.url), 'utf8')
   for (const required of [
     'enable row level security', "approval_status = 'approved'", "'shimadzu-results'", 'cleanup_expired_shimadzu_data',
     'result_expires_at', 'record_expires_at', 'review_shimadzu_user',
+    'shimadzu-first-admin', 'first_account',
   ]) assert.match(sql.toLowerCase(), new RegExp(required.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   assert.doesNotMatch(sql, /service[_-]?role[^\n]*frontend/i)
+  assert.match(schedule, /cron\.schedule/)
+  assert.match(schedule, /17 3 \* \* \*/)
+  assert.match(edgeFunction, /storage\.from\('shimadzu-results'\)\.remove/)
+  assert.match(edgeFunction, /SUPABASE_SERVICE_ROLE_KEY/)
 })

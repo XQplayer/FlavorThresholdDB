@@ -10,7 +10,7 @@
     "test:book-search": "node --test src/bookSearch.test.mjs",
     "test:static-routes": "node --test src/staticRoutes.test.mjs",
     "test:shimadzu": "node --test src/shimadzuApi.test.mjs",
-    "test:shimadzu-browser": "node --test src/lib/shimadzuBrowserContract.test.mjs src/shimadzu-core/*.test.mjs src/workers/*.test.mjs",
+    "test:shimadzu-browser": "node --test src/lib/shimadzuBrowserContract.test.mjs src/lib/shimadzuCloud.test.mjs src/lib/shimadzuWorkerClient.test.mjs src/shimadzu-core/*.test.mjs src/workers/*.test.mjs",
     "test:e2e": "node ../scripts/e2e/verify_release_candidate.mjs",
     "preview": "vite preview",
     "predeploy": "npm run build",

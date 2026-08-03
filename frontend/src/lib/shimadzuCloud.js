@@ -34,8 +34,8 @@ export function createShimadzuCloud(client) {
       const { data } = client.auth.onAuthStateChange((_event, session) => callback(session))
       return () => data.subscription.unsubscribe()
     },
-    async signUp(email, password, displayName) {
-      return unwrap(await requireClient(client).auth.signUp({ email, password, options: { data: { display_name: displayName } } }))
+    async signUp(email, password, displayName, redirectTo) {
+      return unwrap(await requireClient(client).auth.signUp({ email, password, options: { data: { display_name: displayName }, emailRedirectTo: redirectTo } }))
     },
     async signIn(email, password) {
       return unwrap(await requireClient(client).auth.signInWithPassword({ email, password }))
@@ -73,9 +73,6 @@ export function createShimadzuCloud(client) {
     },
     async reviewUser(userId, status) {
       return unwrap(await requireClient(client).rpc('review_shimadzu_user', { target_user_id: userId, target_status: status }))
-    },
-    async cleanupExpired() {
-      return unwrap(await requireClient(client).rpc('cleanup_expired_shimadzu_data'))
     },
   }
 }
