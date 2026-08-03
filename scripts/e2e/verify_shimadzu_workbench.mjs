@@ -31,6 +31,12 @@ try {
 
   await page.goto(`${baseUrl}/shimadzu-analysis/`, { waitUntil: 'networkidle' })
   await page.getByRole('heading', { name: '岛津气质数据一站式分析' }).waitFor()
+  if (process.env.SHIMADZU_E2E_EMAIL) {
+    await page.getByLabel('邮箱').fill(process.env.SHIMADZU_E2E_EMAIL)
+    await page.getByLabel('密码').fill(process.env.SHIMADZU_E2E_PASSWORD)
+    await page.getByRole('button', { name: '登录', exact: true }).click()
+    await page.locator('.shimadzu-approval.state-approved').waitFor({ timeout: 30_000 })
+  }
   const workbench = page.locator('.shimadzu-page')
   assert.equal(await workbench.getAttribute('data-ui-revision'), 'instrument-console-v2')
   assert.equal(await workbench.getAttribute('data-motion'), 'full')
@@ -53,7 +59,7 @@ try {
   await fileInputs.nth(0).setInputFiles(path.join(fixtureRoot, 'CT&JX1-3.xlsx'))
   await fileInputs.nth(1).setInputFiles(path.join(fixtureRoot, 'CT&JX1-3样品与内标信息.xlsx'))
   await page.getByRole('button', { name: '开始一站式分析' }).click()
-  await page.locator('.shimadzu-job-badge.complete').waitFor({ timeout: 90_000 })
+  await page.locator('.shimadzu-job-bar .shimadzu-job-badge.complete').waitFor({ timeout: 90_000 })
   const resultLink = page.getByRole('link', { name: '下载结果包' })
   await resultLink.waitFor()
   assert.match(await resultLink.getAttribute('href'), /^blob:/)
