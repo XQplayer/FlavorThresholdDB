@@ -218,7 +218,20 @@ try {
   const rawRecordButton = workbench.getByRole('button', { name: /原始记录/ }).first();
   await rawRecordButton.waitFor({ state: 'visible' });
   assert.equal(await rawRecordButton.getAttribute('aria-expanded'), 'false', 'raw evidence is collapsed by default');
-  await rawRecordButton.focus();
+  for (let remainingChapter = 0; remainingChapter < 6; remainingChapter += 1) {
+    await page.keyboard.press('Tab');
+  }
+  assert.equal(
+    await rawRecordButton.evaluate(element => element === document.activeElement),
+    true,
+    'Tab moves keyboard focus to the disclosure button',
+  );
+  const disclosureFocusStyle = await rawRecordButton.locator('..').evaluate(element => ({
+    boxShadow: getComputedStyle(element).boxShadow,
+    outlineStyle: getComputedStyle(element).outlineStyle,
+  }));
+  assert.match(disclosureFocusStyle.boxShadow, /rgb\(255, 255, 255\)/, 'disclosure boundary has a visible white inner focus ring');
+  assert.match(disclosureFocusStyle.boxShadow, /rgb\(30, 58, 138\)/, 'disclosure boundary has a visible cobalt outer focus ring');
   await page.keyboard.press('Enter');
   assert.equal(await rawRecordButton.getAttribute('aria-expanded'), 'true', 'Enter expands raw evidence');
 

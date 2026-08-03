@@ -359,6 +359,12 @@
   background: #f5fafe;
 }
 
+.evidence-record-disclosure:focus-within {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 5px #1e3a8a;
+}
+
 .evidence-record-disclosure > button {
   display: flex;
   width: 100%;
