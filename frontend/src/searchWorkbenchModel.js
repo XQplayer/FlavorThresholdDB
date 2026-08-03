@@ -38,7 +38,7 @@ export const createDefaultChapterFilters = () => ({
 const asArray = (value) => Array.isArray(value) ? value : value == null ? [] : [value];
 
 const sourceStateValue = (state) => {
-  if (state && typeof state === 'object') return state.state ?? state.status ?? state.phase;
+  if (state && typeof state === 'object') return state.state ?? state.kind ?? state.status ?? state.phase;
   return state;
 };
 
@@ -47,7 +47,9 @@ export function normalizeSourceStatus(state) {
   const value = sourceStateValue(state);
   const normalized = value === undefined
     ? 'not_requested'
-    : value === 'no_data'
+    : ['ready', 'partial', 'failed', 'loading', 'not_requested', 'no_data'].includes(value)
+      ? value
+      : value === 'no_data'
       ? 'no_data'
       : value === 'partial_failure'
         ? 'partial'
@@ -92,10 +94,12 @@ const thresholdSources = (matchedResults, integratedResults) => {
 const toThresholdRecords = (matchedResults, integratedResults) => thresholdSources(matchedResults, integratedResults)
   .flatMap((item) => asArray(item.threshold_data).map((entry) => {
     const parsed = parseThreshold(entry?.threshold ?? entry?.value);
+    const thresholdType = entry?.type ?? entry?.threshold_type ?? item.threshold_type ?? null;
     return {
       cas: item.cas ?? entry?.cas ?? null,
       medium: item.medium ?? entry?.medium ?? null,
-      thresholdType: entry?.type ?? entry?.threshold_type ?? item.threshold_type ?? null,
+      type: thresholdType,
+      thresholdType,
       value: parsed.value,
       unit: entry?.unit ?? parsed.unit,
       source: entry?.reference ?? entry?.source ?? item.reference ?? null,
