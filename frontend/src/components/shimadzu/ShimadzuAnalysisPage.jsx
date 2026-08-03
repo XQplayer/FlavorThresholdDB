@@ -64,6 +64,7 @@ function AccountPanel({ cloud, session, profile, loading, error, onRefresh }) {
   const [pendingUsers, setPendingUsers] = useState([])
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState('')
+  const [bootstrapCode, setBootstrapCode] = useState('')
 
   useEffect(() => {
     if (!profile?.is_admin) return
@@ -94,6 +95,17 @@ function AccountPanel({ cloud, session, profile, loading, error, onRefresh }) {
     } catch (value) { setMessage(value.message) } finally { setWorking(false) }
   }
 
+  const claimAdmin = async event => {
+    event.preventDefault()
+    setWorking(true); setMessage('')
+    try {
+      await cloud.claimFirstAdmin(bootstrapCode.trim())
+      setBootstrapCode('')
+      setMessage('管理员初始化完成。')
+      await onRefresh()
+    } catch (value) { setMessage(value.message) } finally { setWorking(false) }
+  }
+
   if (!cloud.configured) {
     return <section className="shimadzu-account local"><ShieldCheck /><div><strong>本地隐私模式</strong><p>当前构建未连接云端账号；仍可在浏览器内计算并立即下载，关闭页面后不保留结果。</p></div></section>
   }
@@ -120,6 +132,7 @@ function AccountPanel({ cloud, session, profile, loading, error, onRefresh }) {
       <span className={`shimadzu-approval state-${profile?.approval_status || 'pending'}`}>{profile?.is_admin ? '管理员 · ' : ''}{APPROVAL_LABELS[profile?.approval_status] || '待确认'}</span>
       <button className="shimadzu-signout" type="button" onClick={() => cloud.signOut()}><LogOut />退出</button>
       {(message || error) && <p className="shimadzu-account-message">{message || error}</p>}
+      {profile?.approval_status === 'pending' && <form className="shimadzu-bootstrap" onSubmit={claimAdmin}><div><strong>首次部署管理员初始化</strong><p>仅首位管理员使用；初始化成功后该入口不能再次认领管理员。</p></div><input aria-label="管理员初始化码" value={bootstrapCode} onChange={event => setBootstrapCode(event.target.value)} placeholder="管理员初始化码" required /><button type="submit" disabled={working}>认领管理员</button></form>}
       {profile?.is_admin && pendingUsers.length > 0 && <div className="shimadzu-approval-queue"><h3>待审批账号</h3>{pendingUsers.map(user => <div key={user.id}><span>{user.display_name || user.id}</span><button type="button" disabled={working} onClick={() => review(user.id, 'approved')}>批准</button><button type="button" disabled={working} onClick={() => review(user.id, 'rejected')}>拒绝</button></div>)}</div>}
     </section>
   )

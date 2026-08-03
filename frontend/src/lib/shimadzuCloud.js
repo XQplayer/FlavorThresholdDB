@@ -74,5 +74,8 @@ export function createShimadzuCloud(client) {
     async reviewUser(userId, status) {
       return unwrap(await requireClient(client).rpc('review_shimadzu_user', { target_user_id: userId, target_status: status }))
     },
+    async claimFirstAdmin(bootstrapCode) {
+      return unwrap(await requireClient(client).rpc('claim_first_shimadzu_admin', { bootstrap_code: bootstrapCode }))
+    },
   }
 }
