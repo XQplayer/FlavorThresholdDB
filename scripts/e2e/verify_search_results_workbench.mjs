@@ -124,10 +124,25 @@ const structureFixture = {
   sources: { 'RCSB PDB': { status: 'ok' }, 'AlphaFold DB': { status: 'ok' }, GPCRdb: { status: 'no_data' } },
 };
 
+const parseCsvLine = line => {
+  const cells = [];
+  let cell = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (char === '"' && quoted && line[index + 1] === '"') { cell += '"'; index += 1; }
+    else if (char === '"') quoted = !quoted;
+    else if (char === ',' && !quoted) { cells.push(cell); cell = ''; }
+    else cell += char;
+  }
+  cells.push(cell);
+  return cells;
+};
+
 async function verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin }) {
   const coreFixture = readFileSync(path.join(frontendRoot, 'public', 'aroma_data_merged.json'), 'utf8');
   const bookFixture = readFileSync(path.join(frontendRoot, 'public', 'book_flavor_chemistry_index.json'), 'utf8');
-  const successfulCompound = {
+const successfulCompound = {
     pubchem: {
       found: true,
       cid: 8857,
@@ -144,12 +159,15 @@ async function verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin }) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const page = await context.newPage();
     const counts = { core: 0, book: 0, fema: 0, compound: 0 };
+    const requestUrls = { core: [], book: [], fema: [], compound: [] };
     page.on('request', request => {
       const url = new URL(request.url());
-      if (url.pathname.endsWith('/aroma_data_merged.json')) counts.core += 1;
-      if (url.pathname.endsWith('/book_flavor_chemistry_index.json')) counts.book += 1;
+      if (url.pathname.endsWith('/aroma_data_merged.json')) { counts.core += 1; requestUrls.core.push(url); }
+      if (url.pathname.endsWith('/book_flavor_chemistry_index.json')) { counts.book += 1; requestUrls.book.push(url); }
+      if (url.pathname.endsWith('/fema')) requestUrls.fema.push(url);
+      if (url.pathname.endsWith('/compound')) requestUrls.compound.push(url);
     });
-    if (coreHandler) await page.route('**/aroma_data_merged.json', route => coreHandler(route, counts));
+    if (coreHandler) await page.route('**/aroma_data_merged.json*', route => coreHandler(route, counts));
     if (bookHandler) await page.route('**/book_flavor_chemistry_index.json*', route => bookHandler(route, counts));
     await page.route('**/fema?**', route => {
       counts.fema += 1;
@@ -168,7 +186,7 @@ async function verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin }) {
       })))(route, counts);
     });
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-    return { context, page, counts };
+    return { context, page, counts, requestUrls };
   };
 
   const compoundScenario = await openScenario({
@@ -179,7 +197,7 @@ async function verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin }) {
     },
   });
   try {
-    const { page, counts } = compoundScenario;
+    const { page, counts, requestUrls } = compoundScenario;
     await page.getByLabel('化合物名称或 CAS 号').fill('141-78-6');
     const workbench = page.getByTestId('search-results-workbench');
     await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor();
@@ -190,6 +208,18 @@ async function verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin }) {
     const flavordb = summary.getByRole('listitem').filter({ hasText: 'FlavorDB2' });
     await pubchem.getByText('失败', { exact: true }).waitFor();
     await flavordb.getByText('失败', { exact: true }).waitFor();
+    await workbench.getByRole('button', { name: '引用与导出' }).click();
+    const [failedExport] = await Promise.all([
+      page.waitForEvent('download'),
+      workbench.getByRole('button', { name: '导出精简版 CSV' }).click(),
+    ]);
+    const failedCsv = readFileSync(await failedExport.path(), 'utf8');
+    const [failedHeader, failedRow] = failedCsv.replace(/^\uFEFF/, '').split(/\r?\n/);
+    const classificationIndex = parseCsvLine(failedHeader).findIndex(cell => cell.includes('化合物类别'));
+    assert.ok(classificationIndex >= 0, 'failed compound export includes classification column');
+    assert.equal(parseCsvLine(failedRow)[classificationIndex], '', 'failed compound classification exports blank');
+    assert.doesNotMatch(failedRow, /其他类|Others/, 'failed compound classification never falls back to Others');
+    await workbench.getByRole('button', { name: '概览' }).click();
     const beforeRetry = { ...counts };
     assert.deepEqual(beforeRetry, { core: 1, book: 1, fema: 1, compound: 1 }, 'compound scenario starts each source exactly once');
     await pubchem.getByRole('button', { name: '重试', exact: true }).click();
@@ -198,6 +228,8 @@ async function verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin }) {
     assert.match(await local.textContent(), /可用/, 'local thresholds remain visible during compound retry');
     await workbench.getByText('8857', { exact: true }).waitFor({ timeout: 30_000 });
     await pubchem.getByText('可用', { exact: true }).waitFor();
+    assert.equal(await pubchem.evaluate(node => document.activeElement === node), true, 'successful retry restores focus to source status');
+    assert.ok(requestUrls.compound[1].searchParams.has('_retry'), 'compound retry cache-busts its second request');
     assert.doesNotMatch(await summary.textContent(), /PubChem失败|FlavorDB2失败/, 'compound failures clear after retry');
     assert.deepEqual(counts, {
       core: beforeRetry.core,
@@ -250,13 +282,16 @@ async function verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin }) {
 
   const femaScenario = await openScenario({
     femaHandler: async (route, counts) => {
-      if (counts.fema === 1) return route.fulfill({ status: 503, body: 'fixture FEMA failure' });
+      if (counts.fema <= 2) {
+        if (counts.fema === 2) await new Promise(resolve => setTimeout(resolve, 250));
+        return route.fulfill({ status: 503, body: 'fixture FEMA failure' });
+      }
       await new Promise(resolve => setTimeout(resolve, 250));
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ found: true, name: 'Ethyl acetate', flavor_profile: 'fruity' }) });
     },
   });
   try {
-    const { page, counts } = femaScenario;
+    const { page, counts, requestUrls } = femaScenario;
     await page.getByLabel('化合物名称或 CAS 号').fill('141-78-6');
     const workbench = page.getByTestId('search-results-workbench');
     await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor();
@@ -269,11 +304,18 @@ async function verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin }) {
     await fema.getByRole('button', { name: '重试', exact: true }).click();
     await fema.getByRole('button', { name: '重试中…', exact: true }).waitFor();
     assert.equal(await workbench.getByText('8857', { exact: true }).count(), 1, 'compound identity stays visible during FEMA retry');
+    const retainedRetry = fema.getByRole('button', { name: '重试', exact: true });
+    await retainedRetry.waitFor();
+    assert.equal(await retainedRetry.evaluate(node => document.activeElement === node), true, 'failed retry retains and focuses its retry button');
+    assert.ok(requestUrls.fema[1].searchParams.has('_retry'), 'failed FEMA retry cache-busts its second request');
+    await retainedRetry.click();
     await fema.getByText('可用', { exact: true }).waitFor();
+    assert.equal(await fema.evaluate(node => document.activeElement === node), true, 'FEMA retry restores focus to source status');
+    assert.ok(requestUrls.fema[2].searchParams.has('_retry'), 'successful FEMA retry cache-busts its request');
     assert.deepEqual(counts, {
       core: beforeRetry.core,
       book: beforeRetry.book,
-      fema: beforeRetry.fema + 1,
+      fema: beforeRetry.fema + 2,
       compound: beforeRetry.compound,
     }, 'FEMA retry increments only the FEMA endpoint');
     evidence.fema = { ...counts };
@@ -319,7 +361,7 @@ async function verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin }) {
     },
   });
   try {
-    const { page, counts } = coreScenario;
+    const { page, counts, requestUrls } = coreScenario;
     const input = page.getByLabel('化合物名称或 CAS 号');
     await input.fill('141-78-6');
     const error = page.getByTestId('core-search-error');
@@ -331,6 +373,7 @@ async function verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin }) {
     await error.waitFor({ state: 'hidden' });
     await page.getByTestId('classic-search-results').waitFor();
     assert.equal(counts.core, 2, 'core retry reloads the local identity JSON once');
+    assert.ok(requestUrls.core[1].searchParams.has('_retry'), 'core retry cache-busts its second request');
     await page.getByRole('button', { name: '新版档案' }).click();
     await page.getByTestId('search-results-workbench').getByText('CAS 141-78-6', { exact: true }).waitFor();
     await input.fill('definitely missing compound');
@@ -993,6 +1036,8 @@ try {
   assert.equal(requestsBeforeSelection.fema, 0, 'second FEMA candidate is not prefetched');
   await secondCandidate.click();
   await workbench.getByText('CAS 18127-01-0', { exact: true }).waitFor({ state: 'visible' });
+  const selectedDossierHeading = workbench.locator('.compound-identity-header h2');
+  assert.equal(await selectedDossierHeading.evaluate(node => document.activeElement === node), true, 'candidate selection focuses the dossier heading');
   await workbench.getByText('18127010', { exact: true }).waitFor({ state: 'visible' });
   await page.waitForFunction(({ origin }) => {
     const entries = performance.getEntriesByType('resource').map(entry => entry.name);
@@ -1004,6 +1049,14 @@ try {
   };
   assert.equal(requestsAfterSelection.compound, 1, 'selected compound candidate is fetched once');
   assert.equal(requestsAfterSelection.fema, 1, 'selected FEMA candidate is fetched once');
+  const singleMatchMode = page.getByRole('group', { name: '匹配方式' });
+  await singleMatchMode.getByRole('button', { name: '模糊', exact: true }).click();
+  await candidateHeading.waitFor({ state: 'visible' });
+  assert.equal(await workbench.locator('.compound-identity-header').count(), 0, 'changing single-search match mode clears the selected identity');
+  await singleMatchMode.getByRole('button', { name: '精确', exact: true }).click();
+  await candidateHeading.waitFor({ state: 'visible' });
+  await secondCandidate.click();
+  await workbench.getByText('CAS 18127-01-0', { exact: true }).waitFor({ state: 'visible' });
   selectedCandidateRequestEvidence = {
     cas: '18127-01-0',
     beforeSelection: requestsBeforeSelection,
