@@ -34,13 +34,19 @@ export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, co
   const [toleranceMode, setToleranceMode] = useState('da');
   const detailCacheRef = useRef({});
   const detailControllerRef = useRef(null);
+  const detailRequestTokenRef = useRef(0);
+  const comparisonControllerRef = useRef(null);
+  const comparisonRequestTokenRef = useRef(0);
   const mountedRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      detailRequestTokenRef.current += 1;
+      comparisonRequestTokenRef.current += 1;
       detailControllerRef.current?.abort();
+      comparisonControllerRef.current?.abort();
     };
   }, []);
 
@@ -65,60 +71,91 @@ export default function OpenSpectraWorkbench({ apiUrl, cas, inchikey, smiles, co
   const filterOptions = useMemo(() => spectrumFilterOptions(search.records || []), [search.records]);
   const updateFilter = (key, value) => setFilters(current => ({ ...current, [key]: value }));
 
-  async function loadDetail(record) {
+  async function loadDetail(record, signal) {
     const key = `${record.source}:${record.spectrum_id}`;
     if (detailCacheRef.current[key]) return detailCacheRef.current[key];
+    const response = await fetch(`${apiUrl}${spectrumDetailPath(record.source, record.spectrum_id)}`, { signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const detail = await response.json();
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+    detailCacheRef.current[key] = detail;
+    return detail;
+  }
+
+  async function openRecord(record) {
     detailControllerRef.current?.abort();
     const controller = new AbortController();
+    const requestToken = detailRequestTokenRef.current + 1;
+    detailRequestTokenRef.current = requestToken;
     detailControllerRef.current = controller;
+    setSelected({ ...record, loading: true });
     try {
-      const response = await fetch(`${apiUrl}${spectrumDetailPath(record.source, record.spectrum_id)}`, { signal: controller.signal });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const detail = await response.json();
-      if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
-      detailCacheRef.current[key] = detail;
-      return detail;
+      const detail = await loadDetail(record, controller.signal);
+      if (mountedRef.current && detailRequestTokenRef.current === requestToken) setSelected(detail);
+    } catch (error) {
+      if (!isAbortError(error) && mountedRef.current && detailRequestTokenRef.current === requestToken) {
+        setSelected({ ...record, loading: false, error: error.message });
+      }
     } finally {
       if (detailControllerRef.current === controller) detailControllerRef.current = null;
     }
   }
 
-  async function openRecord(record) {
-    setSelected({ ...record, loading: true });
-    try {
-      const detail = await loadDetail(record);
-      if (mountedRef.current) setSelected(detail);
-    } catch (error) {
-      if (!isAbortError(error) && mountedRef.current) setSelected({ ...record, loading: false, error: error.message });
-    }
-  }
-
   async function addToComparison(record) {
-    setComparison({ loading: true });
+    comparisonControllerRef.current?.abort();
+    const controller = new AbortController();
+    const requestToken = comparisonRequestTokenRef.current + 1;
+    comparisonRequestTokenRef.current = requestToken;
+    comparisonControllerRef.current = controller;
+    setComparison({ loading: true, phase: 'detail' });
     try {
-      const detail = await loadDetail(record);
-      if (!mountedRef.current) return;
+      const detail = await loadDetail(record, controller.signal);
+      if (!mountedRef.current || comparisonRequestTokenRef.current !== requestToken) return;
       setComparison(null);
       setSlots(current => assignComparisonSlot(current, detail));
     } catch (error) {
-      if (!isAbortError(error) && mountedRef.current) setComparison({ error: error.message, phase: 'detail' });
+      if (!isAbortError(error) && mountedRef.current && comparisonRequestTokenRef.current === requestToken) {
+        setComparison({ error: error.message, phase: 'detail' });
+      }
     } finally {
-      if (mountedRef.current) setComparison(current => current?.loading ? null : current);
+      if (comparisonControllerRef.current === controller) comparisonControllerRef.current = null;
+      if (mountedRef.current && comparisonRequestTokenRef.current === requestToken) {
+        setComparison(current => current?.loading && current.phase === 'detail' ? null : current);
+      }
     }
   }
 
   useEffect(() => {
     if (!slots.a || !slots.b) return;
+    comparisonControllerRef.current?.abort();
     const controller = new AbortController();
+    const requestToken = comparisonRequestTokenRef.current + 1;
+    comparisonRequestTokenRef.current = requestToken;
+    comparisonControllerRef.current = controller;
     fetch(`${apiUrl}/spectra/compare`, {
       signal: controller.signal,
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ a_source: slots.a.source, a_id: slots.a.spectrum_id, b_source: slots.b.source, b_id: slots.b.spectrum_id, tolerance: Number(tolerance), tolerance_mode: toleranceMode }),
     })
       .then(response => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
-      .then(data => { if (!controller.signal.aborted) setComparison(data); })
-      .catch(error => { if (!isAbortError(error)) setComparison({ error: error.message, phase: 'compare' }); });
-    return () => controller.abort();
+      .then(data => {
+        if (mountedRef.current && comparisonRequestTokenRef.current === requestToken) setComparison(data);
+      })
+      .catch(error => {
+        if (!isAbortError(error) && mountedRef.current && comparisonRequestTokenRef.current === requestToken) {
+          setComparison({ error: error.message, phase: 'compare' });
+        }
+      })
+      .finally(() => {
+        if (comparisonControllerRef.current === controller) comparisonControllerRef.current = null;
+      });
+    return () => {
+      controller.abort();
+      if (comparisonControllerRef.current === controller) {
+        comparisonControllerRef.current = null;
+        comparisonRequestTokenRef.current += 1;
+      }
+    };
   }, [apiUrl, slots, tolerance, toleranceMode]);
 
   if (!inchikey && !cas) return null;

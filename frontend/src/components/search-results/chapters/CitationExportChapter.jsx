@@ -14,20 +14,37 @@ const locatorText = (raw, isEnglish) => {
 export default function CitationExportChapter({ citationExampleText, records = [], onExportCompact, onExportDetailed, isEnglish = false }) {
   const [copyState, setCopyState] = useState('idle');
   const copyTimerRef = useRef(null);
+  const copyRequestTokenRef = useRef(0);
+  const mountedRef = useRef(false);
 
-  useEffect(() => () => {
-    if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      copyRequestTokenRef.current += 1;
+      if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    };
   }, []);
 
   const copyCitation = async () => {
-    if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
+    const requestToken = copyRequestTokenRef.current + 1;
+    copyRequestTokenRef.current = requestToken;
+    if (copyTimerRef.current) {
+      window.clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = null;
+    }
     try {
       await navigator.clipboard.writeText(citationExampleText || '');
+      if (!mountedRef.current || copyRequestTokenRef.current !== requestToken) return;
       setCopyState('success');
     } catch {
+      if (!mountedRef.current || copyRequestTokenRef.current !== requestToken) return;
       setCopyState('error');
     }
+    if (!mountedRef.current || copyRequestTokenRef.current !== requestToken) return;
     copyTimerRef.current = window.setTimeout(() => {
+      if (!mountedRef.current || copyRequestTokenRef.current !== requestToken) return;
       setCopyState('idle');
       copyTimerRef.current = null;
     }, 2000);

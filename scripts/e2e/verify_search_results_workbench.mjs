@@ -243,7 +243,7 @@ try {
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
-      records: [1, 2].map(index => ({
+      records: [1, 2, 3].map(index => ({
         source: 'MassBank',
         spectrum_id: `MB-FIXTURE-${index}`,
         spectrum_type: 'EI',
@@ -251,7 +251,7 @@ try {
         instrument: 'GC-EI-MS',
         source_url: `https://massbank.eu/MassBank/RecordDisplay?id=MB-FIXTURE-${index}`,
       })),
-      summary: { total: 2, massbank: 2, gnps: 0, ei: 2, ms2: 0 },
+      summary: { total: 3, massbank: 3, gnps: 0, ei: 3, ms2: 0 },
       sources: { MassBank: { status: 'ok' }, GNPS: { status: 'no_data' } },
     }),
   }));
@@ -260,8 +260,8 @@ try {
     const spectrumId = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1));
     const requestCount = (detailRequestCounts.get(spectrumId) || 0) + 1;
     detailRequestCounts.set(spectrumId, requestCount);
-    if (spectrumId === 'MB-FIXTURE-1' && requestCount === 1) {
-      await new Promise(resolve => setTimeout(resolve, 1_000));
+    if (spectrumId === 'MB-FIXTURE-1' && requestCount <= 2) {
+      await new Promise(resolve => setTimeout(resolve, requestCount === 1 ? 800 : 400));
     }
     if (spectrumId === 'MB-FIXTURE-2' && requestCount === 1) {
       try {
@@ -270,6 +270,9 @@ try {
         // The browser may abort the routed request while switching chapters.
       }
       return;
+    }
+    if (spectrumId === 'MB-FIXTURE-3') {
+      await new Promise(resolve => setTimeout(resolve, 1_000));
     }
     try {
       await route.fulfill({
@@ -384,15 +387,20 @@ try {
   const detailRequestStarted = page.waitForRequest(request => new URL(request.url()).pathname === '/spectra/MassBank/MB-FIXTURE-1');
   await workbench.locator('.spectrum-record-main').first().click();
   await detailRequestStarted;
-  const detailAbortObserved = page.waitForEvent('requestfailed', {
-    predicate: request => new URL(request.url()).pathname === '/spectra/MassBank/MB-FIXTURE-1',
-    timeout: 2_500,
-  }).then(() => true).catch(() => false);
+  const comparisonDetailStarted = page.waitForRequest(request => new URL(request.url()).pathname === '/spectra/MassBank/MB-FIXTURE-1');
+  await workbench.getByRole('button', { name: '加入比较' }).first().click();
+  await comparisonDetailStarted;
+  await workbench.getByText(/A · MassBank · MB-FIXTURE-1/).waitFor({ state: 'visible', timeout: 5_000 });
+  await workbench.getByRole('region', { name: '可滚动谱图峰表' }).waitFor({ state: 'visible', timeout: 5_000 });
+  assert.equal(await workbench.getByText('正在加载峰表…', { exact: true }).count(), 0, 'comparison detail does not leave the record detail loading');
+  assert.equal(
+    failedScientificRequests.filter(request => request.path === '/spectra/MassBank/MB-FIXTURE-1').length,
+    0,
+    'record detail and comparison detail complete independently',
+  );
 
   const biochemistryChapter = chapterNavigation.getByRole('button', { name: /生化关系/ });
   await biochemistryChapter.click();
-  const detailWasAborted = await detailAbortObserved;
-  assert.equal(detailWasAborted, true, 'leaving spectra aborts a pending detail request');
   assert.equal(await page.getByTestId('spectrum-workbench').count(), 0, 'leaving spectra unmounts the spectrum workbench');
   await workbench.getByText('RHEA:10020', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
   await workbench.getByText('ATF2', { exact: true }).waitFor({ state: 'visible' });
@@ -452,22 +460,58 @@ try {
     predicate: request => new URL(request.url()).pathname === '/spectra/compare',
     timeout: 2_500,
   }).then(() => true).catch(() => false);
+  const unmountDetailStarted = page.waitForRequest(request => new URL(request.url()).pathname === '/spectra/MassBank/MB-FIXTURE-3');
+  await workbench.locator('.spectrum-record-main').nth(2).click();
+  await unmountDetailStarted;
+  const detailAbortObserved = page.waitForEvent('requestfailed', {
+    predicate: request => new URL(request.url()).pathname === '/spectra/MassBank/MB-FIXTURE-3',
+    timeout: 2_500,
+  }).then(() => true).catch(() => false);
 
   const citationChapter = chapterNavigation.getByRole('button', { name: /引用与导出/ });
   await citationChapter.click();
-  const compareWasAborted = await compareAbortObserved;
+  const [detailWasAborted, compareWasAborted] = await Promise.all([detailAbortObserved, compareAbortObserved]);
+  assert.equal(detailWasAborted, true, 'leaving spectra aborts a pending record detail request');
   assert.equal(compareWasAborted, true, 'leaving spectra aborts a pending comparison request');
   await workbench.getByRole('heading', { name: '引用与导出', level: 4 }).waitFor({ state: 'visible' });
-  await workbench.getByRole('button', { name: '复制引用' }).click();
-  await workbench.getByRole('button', { name: '已复制' }).waitFor({ state: 'visible' });
   await page.evaluate(() => {
+    window.__clipboardFixture = { pending: [], resetTimerCreations: 0 };
     Object.defineProperty(navigator.clipboard, 'writeText', {
       configurable: true,
-      value: () => Promise.reject(new Error('clipboard denied by fixture')),
+      value: () => new Promise((resolve, reject) => window.__clipboardFixture.pending.push({ resolve, reject })),
     });
   });
-  await workbench.getByRole('button', { name: '已复制' }).click();
+  await workbench.getByRole('button', { name: '复制引用' }).click();
+  await workbench.getByRole('button', { name: '复制引用' }).click();
+  await page.waitForFunction(() => window.__clipboardFixture.pending.length === 2);
+  await page.evaluate(() => window.__clipboardFixture.pending[1].reject(new Error('latest clipboard request denied')));
   await workbench.getByText('复制失败', { exact: true }).waitFor({ state: 'visible' });
+  await page.evaluate(() => window.__clipboardFixture.pending[0].resolve());
+  await page.waitForTimeout(50);
+  assert.equal(await workbench.getByText('复制失败', { exact: true }).count(), 1, 'an older clipboard promise cannot overwrite the latest failure');
+  assert.equal(await workbench.getByText('引用已复制', { exact: true }).count(), 0, 'stale clipboard success remains ignored');
+
+  await workbench.getByRole('button', { name: '复制引用' }).click();
+  await page.waitForFunction(() => window.__clipboardFixture.pending.length === 3);
+  await page.evaluate(() => window.__clipboardFixture.pending[2].resolve());
+  await workbench.getByRole('button', { name: '已复制' }).waitFor({ state: 'visible' });
+
+  await page.evaluate(() => {
+    const nativeSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = (callback, delay, ...args) => {
+      if (delay === 2_000) window.__clipboardFixture.resetTimerCreations += 1;
+      return nativeSetTimeout(callback, delay, ...args);
+    };
+  });
+  await workbench.getByRole('button', { name: '已复制' }).click();
+  await page.waitForFunction(() => window.__clipboardFixture.pending.length === 4);
+  const thresholdChapterForClipboardUnmount = chapterNavigation.getByRole('button', { name: /阈值/ });
+  await thresholdChapterForClipboardUnmount.click();
+  await page.evaluate(() => window.__clipboardFixture.pending[3].resolve());
+  await page.waitForTimeout(50);
+  assert.equal(await page.evaluate(() => window.__clipboardFixture.resetTimerCreations), 0, 'a clipboard promise settling after unmount creates no reset timer');
+  await citationChapter.click();
+  await workbench.getByRole('heading', { name: '引用与导出', level: 4 }).waitFor({ state: 'visible' });
   const captureDownload = async click => {
     const [download] = await Promise.all([page.waitForEvent('download'), click()]);
     return {
@@ -655,6 +699,7 @@ try {
       '/nist-webbook',
       '/spectra/MassBank/MB-FIXTURE-1',
       '/spectra/MassBank/MB-FIXTURE-2',
+      '/spectra/MassBank/MB-FIXTURE-3',
       '/spectra/compare',
       '/spectra/search',
       '/structures/resolve',
@@ -810,11 +855,12 @@ try {
     },
     scientificQueryParams: expectedScientificQueries,
     abortEvidence: {
+      detailComparisonRace: 'completed',
       detail: detailWasAborted,
       compare: compareWasAborted,
       failures: failedScientificRequests,
     },
-    copyFeedback: { success: true, error: true },
+    copyFeedback: { success: true, error: true, stalePromiseIgnored: true, unmountTimerCreations: 0 },
     exportComparison: {
       compact: 'byte-identical',
       detailed: 'byte-identical',
