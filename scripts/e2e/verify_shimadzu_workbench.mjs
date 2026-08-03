@@ -35,6 +35,10 @@ try {
     await page.getByLabel('邮箱').fill(process.env.SHIMADZU_E2E_EMAIL)
     await page.getByLabel('密码').fill(process.env.SHIMADZU_E2E_PASSWORD)
     await page.getByRole('button', { name: '登录', exact: true }).click()
+    if (process.env.SHIMADZU_E2E_ADMIN_CODE) {
+      await page.getByLabel('管理员初始化码').fill(process.env.SHIMADZU_E2E_ADMIN_CODE)
+      await page.getByRole('button', { name: '认领管理员' }).click()
+    }
     await page.locator('.shimadzu-approval.state-approved').waitFor({ timeout: 30_000 })
   }
   const workbench = page.locator('.shimadzu-page')
