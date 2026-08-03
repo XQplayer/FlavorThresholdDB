@@ -90,8 +90,11 @@ The controller uses one hidden project-owned process per service and checks both
 
 ```text
 http://127.0.0.1:5174/FlavorThresholdDB/aroma-threshold/
+http://127.0.0.1:5174/FlavorThresholdDB/shimadzu-analysis/
 http://127.0.0.1:8787/health
 ```
+
+The local Shimadzu GC-MS workbench accepts one raw `.xlsx` workbook and one sample/internal-standard `.xlsx` workbook. Matching example workbooks can be downloaded beside each upload control. It runs the verified Stage 0-6 workflow in continuous or step-review mode, maps the seven scientific stages to a persistent process diagram, streams the current command log into a 1.5-second monitor, and exposes the result ZIP only after completeness verification passes. OAV calculation is intentionally disabled in this integration. Uploaded files and generated jobs stay under ignored `_local/shimadzu/` storage and are not part of the public GitHub Pages deployment.
 
 Check or stop only confirmed FlavorThresholdDB processes with:
 
@@ -106,8 +109,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\local_runtime.ps1 
 cd frontend
 pnpm run lint
 pnpm run build
+pnpm run test:shimadzu
 pnpm audit --prod
 pnpm run test:e2e
+```
+
+The focused Shimadzu backend and browser checks are:
+
+```powershell
+python -m unittest scripts.tests.test_shimadzu_analysis_service scripts.tests.test_shimadzu_proxy -v
+node .\scripts\e2e\verify_shimadzu_workbench.mjs
 ```
 
 The deployment workflow also creates `dist/404.html` so routed pages can load through GitHub Pages.

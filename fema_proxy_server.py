@@ -8,6 +8,8 @@ import socket
 import threading
 import time
 import tempfile
+from email import policy
+from email.parser import BytesParser
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -26,6 +28,7 @@ from spectra_massbank import fetch_massbank_record, query_massbank_records
 from spectra_cache import OpenSpectraCache
 from spectra_index_distribution import install_public_index
 from spectra_service import compare_spectra, serialize_spectrum
+from shimadzu_analysis_service import ShimadzuAnalysisError, ShimadzuAnalysisService
 
 
 HOST = os.environ.get("HOST", "0.0.0.0")
@@ -34,6 +37,7 @@ BASE_URL = "https://www.femaflavor.org"
 PUBCHEM_BASE_URL = "https://pubchem.ncbi.nlm.nih.gov"
 FLAVORDB_BASE_URL = "https://cosylab.iiitd.edu.in/flavordb2"
 PROJECT_ROOT = Path(__file__).resolve().parent
+SHIMADZU_SERVICE = ShimadzuAnalysisService(PROJECT_ROOT / "_local" / "shimadzu")
 CACHE_PATH = Path(
     os.environ.get(
         "FLAVOR_CACHE_PATH",
@@ -53,6 +57,30 @@ _PUBLIC_INDEX_STATUS_LOCK = threading.RLock()
 _PUBLIC_INDEX_STATUS = {"status": "missing", "degraded": True, "index_path": str(PUBLIC_SPECTRUM_RUNTIME_DIR / "public_spectrum_index.sqlite")}
 NIST_CACHE_SCHEMA_VERSION = 1
 NIST_CACHE_TTL = timedelta(days=7)
+
+
+def parse_multipart_form(content_type: str, body: bytes) -> tuple[dict[str, str], dict[str, tuple[str, bytes]]]:
+    """Parse the two-workbook local upload without the deprecated cgi module."""
+    if "multipart/form-data" not in content_type.lower() or "boundary=" not in content_type.lower():
+        raise ShimadzuAnalysisError("INVALID_CONTENT_TYPE", "multipart/form-data is required")
+    message = BytesParser(policy=policy.default).parsebytes(
+        f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8") + body
+    )
+    if not message.is_multipart():
+        raise ShimadzuAnalysisError("INVALID_MULTIPART", "upload body is not valid multipart data")
+    fields: dict[str, str] = {}
+    files: dict[str, tuple[str, bytes]] = {}
+    for part in message.iter_parts():
+        name = part.get_param("name", header="content-disposition")
+        if not name:
+            continue
+        payload = part.get_payload(decode=True) or b""
+        filename = part.get_filename()
+        if filename is None:
+            fields[name] = payload.decode(part.get_content_charset() or "utf-8")
+        else:
+            files[name] = (Path(filename).name, payload)
+    return fields, files
 
 
 def build_health_payload() -> dict:
@@ -1052,6 +1080,9 @@ def query_flavordb(cid: int | str) -> dict:
 class Handler(BaseHTTPRequestHandler):
     cache = load_cache()
 
+    def send_service_error(self, error: ShimadzuAnalysisError) -> None:
+        self.send_json(error.status, {"error": error.message, "code": error.code})
+
     def send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
@@ -1080,11 +1111,50 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_download(self, path: Path, content_type: str = "application/zip") -> None:
+        size = path.stat().st_size
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Disposition", f'attachment; filename="{path.name}"')
+        self.send_header("Content-Length", str(size))
+        self.end_headers()
+        with path.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                self.wfile.write(chunk)
+
     def do_OPTIONS(self) -> None:
         self.send_json(200, {"ok": True})
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        template_parts = parsed.path.strip("/").split("/")
+        if len(template_parts) == 3 and template_parts[:2] == ["shimadzu", "templates"]:
+            try:
+                self.send_download(
+                    SHIMADZU_SERVICE.get_template_path(unquote(template_parts[2])),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            except ShimadzuAnalysisError as exc:
+                self.send_service_error(exc)
+            return
+        if parsed.path == "/shimadzu/capabilities":
+            self.send_json(200, SHIMADZU_SERVICE.capabilities())
+            return
+        shimadzu_parts = parsed.path.strip("/").split("/")
+        if len(shimadzu_parts) == 3 and shimadzu_parts[:2] == ["shimadzu", "jobs"]:
+            try:
+                self.send_json(200, SHIMADZU_SERVICE.get_job(unquote(shimadzu_parts[2])))
+            except ShimadzuAnalysisError as exc:
+                self.send_service_error(exc)
+            return
+        if len(shimadzu_parts) == 4 and shimadzu_parts[:2] == ["shimadzu", "jobs"] and shimadzu_parts[3] == "download":
+            try:
+                self.send_download(SHIMADZU_SERVICE.get_download_path(unquote(shimadzu_parts[2])))
+            except ShimadzuAnalysisError as exc:
+                self.send_service_error(exc)
+            return
         if parsed.path == "/health":
             self.send_json(200, build_health_payload())
             return
@@ -1496,6 +1566,49 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/shimadzu/jobs":
+            try:
+                content_length = int(self.headers.get("Content-Length", "0"))
+                if content_length <= 0:
+                    raise ShimadzuAnalysisError("INVALID_UPLOAD", "upload body is empty")
+                if content_length > 210 * 1024 * 1024:
+                    raise ShimadzuAnalysisError("UPLOAD_TOO_LARGE", "combined upload must be 210 MB or smaller", 413)
+                fields, files = parse_multipart_form(
+                    self.headers.get("Content-Type", ""), self.rfile.read(content_length)
+                )
+                if "raw" not in files or "samples" not in files:
+                    raise ShimadzuAnalysisError("INVALID_UPLOAD", "raw and samples workbooks are required")
+                try:
+                    options = json.loads(fields.get("options") or "{}")
+                except json.JSONDecodeError as exc:
+                    raise ShimadzuAnalysisError("INVALID_OPTIONS", str(exc)) from exc
+                raw_name, raw_bytes = files["raw"]
+                samples_name, samples_bytes = files["samples"]
+                self.send_json(
+                    201,
+                    SHIMADZU_SERVICE.create_job(
+                        raw_name, raw_bytes, samples_name, samples_bytes, options
+                    ),
+                )
+            except (ValueError, ShimadzuAnalysisError) as exc:
+                error = exc if isinstance(exc, ShimadzuAnalysisError) else ShimadzuAnalysisError("INVALID_UPLOAD", str(exc))
+                self.send_service_error(error)
+            return
+        shimadzu_parts = parsed.path.strip("/").split("/")
+        if len(shimadzu_parts) == 4 and shimadzu_parts[:2] == ["shimadzu", "jobs"]:
+            try:
+                job_id = unquote(shimadzu_parts[2])
+                if shimadzu_parts[3] == "run":
+                    payload = SHIMADZU_SERVICE.start(job_id)
+                elif shimadzu_parts[3] == "continue":
+                    payload = SHIMADZU_SERVICE.continue_job(job_id)
+                else:
+                    self.send_json(404, {"error": "Not found"})
+                    return
+                self.send_json(202, payload)
+            except ShimadzuAnalysisError as exc:
+                self.send_service_error(exc)
+            return
         if parsed.path != "/spectra/compare":
             self.send_json(404, {"error": "Not found"})
             return
