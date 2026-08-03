@@ -10,14 +10,15 @@ export default function NistWebbookPresence({ apiUrl, cas, isEnglish, onStatusCh
   const [state, setState] = useState({ loading: true, sections: [] });
   const [retryNonce, setRetryNonce] = useState(0);
   const generationRef = useRef(0);
+  const requestKeyRef = useRef(null);
   useEffect(() => {
     if (!cas) return;
     const generation = generationRef.current + 1;
     generationRef.current = generation;
     const controller = new AbortController();
     // A changed CAS owns a new result set; old sections must never appear under it.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setState(previous => retryNonce ? { ...previous, loading: true } : { loading: true, sections: [] });
+    const requestKey = String(cas); const sameIdentity = requestKeyRef.current === requestKey; requestKeyRef.current = requestKey;
+    setState(previous => sameIdentity ? { ...previous, loading: true } : { loading: true, sections: [] });
     fetch(`${apiUrl}/nist-webbook?cas=${encodeURIComponent(cas)}`, { signal: controller.signal })
       .then(async response => ({ ok: response.ok, data: await response.json() }))
       .then(({ ok, data }) => { if (generationRef.current === generation) setState({ ...data, loading: false, requestFailed: !ok }); })
@@ -27,8 +28,8 @@ export default function NistWebbookPresence({ apiUrl, cas, isEnglish, onStatusCh
   const sections = useMemo(() => normalizeNistSections(state.sections), [state.sections]);
   useEffect(() => {
     const failed = state.status === 'upstream_unavailable' || state.requestFailed;
-    onStatusChange?.(state.loading ? 'loading' : failed && sections.length ? 'partial' : failed ? 'failed' : 'available');
-  }, [onStatusChange, sections.length, state.loading, state.requestFailed, state.status]);
+    onStatusChange?.(!cas ? 'no_data' : state.loading ? 'loading' : failed && sections.length ? 'partial' : failed ? 'failed' : sections.length ? 'available' : 'no_data');
+  }, [cas, onStatusChange, sections.length, state.loading, state.requestFailed, state.status]);
   if (!cas) return null;
   return <section className="nist-webbook-presence" aria-label="NIST Chemistry WebBook">
     <header><div><span>NIST CHEMISTRY WEBBOOK</span><h4>{isEnglish ? 'Original-site availability' : '原始网站数据可用性'}</h4></div>{state.url && <a href={state.url} target="_blank" rel="noopener noreferrer">{isEnglish ? 'View at NIST' : '前往 NIST 查看'}</a>}</header>

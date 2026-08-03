@@ -12,7 +12,8 @@ export function BiochemistryChapter({ apiUrl, cas, inchikey, name, isEnglish = f
     const values = Object.values(sourceStatuses);
     const status = values.includes('loading') ? 'loading'
       : values.every(value => value === 'failed') ? 'failed'
-        : values.some(value => ['failed', 'partial'].includes(value)) ? 'partial' : 'available';
+        : values.every(value => value === 'no_data') ? 'no_data'
+          : values.some(value => ['failed', 'partial', 'no_data'].includes(value)) ? 'partial' : 'available';
     onStatusChange?.(status);
   }, [onStatusChange, sourceStatuses]);
   return (

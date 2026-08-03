@@ -9,14 +9,18 @@ export default function BioactivityEvidence({ apiUrl, cid, inchikey, smiles, isE
   const [payload, setPayload] = useState({ loading: true });
   const [retryNonce, setRetryNonce] = useState(0);
   const generationRef = useRef(0);
+  const requestKeyRef = useRef(null);
+  const requestKey = JSON.stringify([cid || null, inchikey || null, smiles || null]);
+  const canRequest = Boolean(cid || inchikey || smiles);
   const [active, setActive] = useState('pubchem');
   useEffect(() => {
-    if (!cid && !inchikey && !smiles) return;
+    if (!canRequest) return;
     const generation = generationRef.current + 1;
     generationRef.current = generation;
     const controller = new AbortController();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPayload(previous => retryNonce ? { ...previous, loading: true } : { loading: true });
+    const sameIdentity = requestKeyRef.current === requestKey;
+    requestKeyRef.current = requestKey;
+    setPayload(previous => sameIdentity ? { ...previous, loading: true } : { loading: true });
     const query = new URLSearchParams();
     if (cid) query.set('cid', cid);
     if (inchikey) query.set('inchikey', inchikey);
@@ -26,15 +30,16 @@ export default function BioactivityEvidence({ apiUrl, cid, inchikey, smiles, isE
       .then(({ ok, data }) => { if (generationRef.current === generation) setPayload(previous => ({ ...previous, ...data, loading: false, requestFailed: !ok })); })
       .catch(error => { if (error.name !== 'AbortError' && generationRef.current === generation) setPayload(previous => ({ ...previous, loading: false, requestFailed: true })); });
     return () => controller.abort();
-  }, [apiUrl, cid, inchikey, smiles, retryNonce]);
+  }, [apiUrl, canRequest, cid, inchikey, requestKey, retryNonce, smiles]);
   const data = useMemo(() => normalizeBioactivity(payload), [payload]);
   const hasData = Object.values(data).some(value => Array.isArray(value) && value.length > 0);
+  const sourceStatuses = useMemo(() => Object.values(payload.sources || {}).map(source => typeof source === 'string' ? source : source?.status).filter(Boolean), [payload.sources]);
+  const hasSourceFailure = payload.requestFailed || sourceStatuses.some(status => ['failed', 'partial_failure', 'upstream_unavailable', 'error'].includes(status));
+  const allNoData = sourceStatuses.length > 0 && sourceStatuses.every(status => ['no_data', 'not_requested'].includes(status));
   useEffect(() => {
-    const statuses = Object.values(payload.sources || {}).map(source => typeof source === 'string' ? source : source?.status);
-    const failed = payload.requestFailed || statuses.some(status => ['failed', 'partial_failure', 'upstream_unavailable', 'error'].includes(status));
-    const available = hasData || statuses.some(status => ['ok', 'ready', 'available'].includes(status));
-    onStatusChange?.(payload.loading ? 'loading' : failed && available ? 'partial' : failed ? 'failed' : 'available');
-  }, [hasData, onStatusChange, payload.loading, payload.requestFailed, payload.sources]);
+    const available = hasData || sourceStatuses.some(status => ['ok', 'ready', 'available'].includes(status));
+    onStatusChange?.(!canRequest ? 'no_data' : payload.loading ? 'loading' : hasSourceFailure && available ? 'partial' : hasSourceFailure ? 'failed' : allNoData || !available ? 'no_data' : 'available');
+  }, [allNoData, canRequest, hasData, hasSourceFailure, onStatusChange, payload.loading, sourceStatuses]);
   const rows = data[active] || [];
   if (!cid && !inchikey && !smiles) return null;
   return <section className="bioactivity-evidence" aria-label={isEnglish ? 'Bioactivity evidence' : '生物活性证据'}>
@@ -57,7 +62,7 @@ export default function BioactivityEvidence({ apiUrl, cid, inchikey, smiles, isE
         {active === 'gtopdb' && (isEnglish ? 'GtoPdb uses an exact ligand identifier before requesting interactions.' : 'GtoPdb 先核验精确配体标识，再查询相互作用。')}
       </div>
     </>}
-    {payload.requestFailed && hasData && <button type="button" onClick={() => setRetryNonce(value => value + 1)}>{isEnglish ? 'Retry failed activity sources' : '重试失败的活性来源'}</button>}
+    {hasSourceFailure && hasData && <button type="button" onClick={() => setRetryNonce(value => value + 1)}>{isEnglish ? 'Retry the bioactivity endpoint for failed sources' : '重试活性聚合端点中失败的来源'}</button>}
     <footer>{isEnglish ? 'Database activity is assay-specific evidence, not proof of physiological effect, aroma perception, or causality.' : '数据库活性是特定实验条件下的证据，不等同于生理效应、香气感知或因果关系。'}</footer>
   </section>;
 }

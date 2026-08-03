@@ -12,12 +12,15 @@ export default function BiochemicalRelationships({ apiUrl, cas, inchikey, compou
   const [payload, setPayload] = useState({ loading: true });
   const [retryNonce, setRetryNonce] = useState(0);
   const generationRef = useRef(0);
+  const requestKeyRef = useRef(null);
+  const requestKey = JSON.stringify([cas || null, inchikey || null, compoundName || null]);
+  const canRequest = Boolean(cas || inchikey || compoundName);
   useEffect(() => {
-    if (!cas && !inchikey && !compoundName) return;
+    if (!canRequest) return;
     const generation = generationRef.current + 1; generationRef.current = generation;
     const controller = new AbortController();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPayload(previous => retryNonce ? { ...previous, loading: true } : { loading: true });
+    const sameIdentity = requestKeyRef.current === requestKey; requestKeyRef.current = requestKey;
+    setPayload(previous => sameIdentity ? { ...previous, loading: true } : { loading: true });
     const query = new URLSearchParams();
     if (inchikey) query.set('inchikey', inchikey);
     if (cas) query.set('cas', cas);
@@ -27,14 +30,15 @@ export default function BiochemicalRelationships({ apiUrl, cas, inchikey, compou
       .then(({ ok, data }) => { if (generationRef.current === generation) setPayload(previous => ({ ...previous, ...data, loading: false, requestFailed: !ok })); })
       .catch(error => { if (error.name !== 'AbortError' && generationRef.current === generation) setPayload(previous => ({ ...previous, loading: false, requestFailed: true })); });
     return () => controller.abort();
-  }, [apiUrl, cas, inchikey, compoundName, retryNonce]);
+  }, [apiUrl, canRequest, cas, inchikey, compoundName, requestKey, retryNonce]);
   const graph = useMemo(() => normalizeBiochemicalGraph(payload), [payload]);
   const sourceStates = useMemo(() => summarizeBiochemicalSources(payload.sources), [payload.sources]);
   useEffect(() => {
     const hasFailure = payload.requestFailed || sourceStates.some(source => ['partial_failure', 'upstream_unavailable', 'invalid_response'].includes(source.status));
     const hasAvailable = sourceStates.some(source => source.status === 'ok');
-    onStatusChange?.(payload.loading ? 'loading' : hasFailure && hasAvailable ? 'partial' : hasFailure ? 'failed' : 'available');
-  }, [onStatusChange, payload.loading, payload.requestFailed, sourceStates]);
+    const allNoData = sourceStates.length > 0 && sourceStates.every(source => ['no_data', 'not_requested'].includes(source.status));
+    onStatusChange?.(!canRequest ? 'no_data' : payload.loading ? 'loading' : hasFailure && hasAvailable ? 'partial' : hasFailure ? 'failed' : allNoData || !hasAvailable ? 'no_data' : 'available');
+  }, [canRequest, onStatusChange, payload.loading, payload.requestFailed, sourceStates]);
   if (!cas && !inchikey && !compoundName) return null;
   const unavailable = !graph.chebi;
   return <section className="biochemical-relationships" aria-label={isEnglish ? 'Biochemical relationships' : '生化关系证据'}>

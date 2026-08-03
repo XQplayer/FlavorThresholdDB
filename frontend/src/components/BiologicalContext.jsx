@@ -11,12 +11,15 @@ export default function BiologicalContext({ apiUrl, cas, inchikey, compoundName,
   const [payload, setPayload] = useState({ loading: true });
   const [retryNonce, setRetryNonce] = useState(0);
   const generationRef = useRef(0);
+  const requestKeyRef = useRef(null);
+  const requestKey = JSON.stringify([cas || null, inchikey || null, compoundName || null]);
+  const canRequest = Boolean(cas || inchikey || compoundName);
   useEffect(() => {
-    if (!cas && !inchikey && !compoundName) return;
+    if (!canRequest) return;
     const generation = generationRef.current + 1; generationRef.current = generation;
     const controller = new AbortController();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPayload(previous => retryNonce ? { ...previous, loading: true } : { loading: true });
+    const sameIdentity = requestKeyRef.current === requestKey; requestKeyRef.current = requestKey;
+    setPayload(previous => sameIdentity ? { ...previous, loading: true } : { loading: true });
     const query = new URLSearchParams();
     if (inchikey) query.set('inchikey', inchikey);
     if (cas) query.set('cas', cas);
@@ -26,15 +29,16 @@ export default function BiologicalContext({ apiUrl, cas, inchikey, compoundName,
       .then(({ ok, data }) => { if (generationRef.current === generation) setPayload(previous => ({ ...previous, ...data, loading: false, requestFailed: !ok })); })
       .catch(error => { if (error.name !== 'AbortError' && generationRef.current === generation) setPayload(previous => ({ ...previous, loading: false, requestFailed: true })); });
     return () => controller.abort();
-  }, [apiUrl, cas, inchikey, compoundName, retryNonce]);
+  }, [apiUrl, canRequest, cas, inchikey, compoundName, requestKey, retryNonce]);
   const context = useMemo(() => normalizeBiologicalContext(payload), [payload]);
   const hasData = context.genes.length + context.taxa.length + context.studies.length > 0;
+  const sourceStatuses = useMemo(() => Object.values(context.sources || {}).map(source => source?.status).filter(Boolean), [context.sources]);
+  const hasSourceFailure = payload.requestFailed || sourceStatuses.some(status => ['partial_failure', 'upstream_unavailable', 'failed'].includes(status));
+  const allNoData = sourceStatuses.length > 0 && sourceStatuses.every(status => ['no_data', 'not_requested'].includes(status));
   useEffect(() => {
-    const states = Object.values(context.sources || {}).map(source => source?.status);
-    const hasFailure = payload.requestFailed || states.some(status => ['partial_failure', 'upstream_unavailable'].includes(status));
-    const hasAvailable = states.includes('ok');
-    onStatusChange?.(payload.loading ? 'loading' : hasFailure && (hasAvailable || hasData) ? 'partial' : hasFailure ? 'failed' : 'available');
-  }, [context.sources, hasData, onStatusChange, payload.loading, payload.requestFailed]);
+    const hasAvailable = sourceStatuses.includes('ok') || hasData;
+    onStatusChange?.(!canRequest ? 'no_data' : payload.loading ? 'loading' : hasSourceFailure && hasAvailable ? 'partial' : hasSourceFailure ? 'failed' : allNoData || !hasAvailable ? 'no_data' : 'available');
+  }, [allNoData, canRequest, hasData, hasSourceFailure, onStatusChange, payload.loading, sourceStatuses]);
   if (!cas && !inchikey && !compoundName) return null;
   return <section className="biological-context" aria-label={isEnglish ? 'Biological context' : '生物学上下文'}>
     <header>
@@ -58,7 +62,7 @@ export default function BiologicalContext({ apiUrl, cas, inchikey, compoundName,
         {context.hmdb?.source_url && <a href={context.hmdb.source_url} target="_blank" rel="noopener noreferrer">HMDB · {isEnglish ? 'link-only search' : '仅链接检索'}</a>}
       </div>
     </>}
-    {payload.requestFailed && hasData && <button type="button" onClick={() => setRetryNonce(value => value + 1)}>{isEnglish ? 'Retry failed biological sources' : '重试失败的生物学来源'}</button>}
+    {hasSourceFailure && hasData && <button type="button" onClick={() => setRetryNonce(value => value + 1)}>{isEnglish ? 'Retry the biological-context endpoint for failed sources' : '重试生物学聚合端点中失败的来源'}</button>}
     <footer>{isEnglish ? 'Gene and organism entries are shown only when supported by the ChEBI–Rhea–UniProt chain. HMDB remains link-only under its redistribution terms.' : '基因和物种仅沿 ChEBI–Rhea–UniProt 证据链展示；HMDB 按再分发限制仅提供原站链接。'}</footer>
   </section>;
 }

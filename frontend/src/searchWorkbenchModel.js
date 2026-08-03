@@ -394,7 +394,10 @@ const thresholdSignature = (record) => [
 
 const inferredThresholdUnit = (medium) => {
   const text = normaliseText(medium);
-  return text.includes('空气') || text === 'air' ? 'mg/m3' : 'mg/kg';
+  if (/^(?:air|空气|空氣)$/.test(text)) return 'mg/m3';
+  if (/^(?:water|水|其他介质|other media)$/.test(text)
+    || /(?:oil|油|ethanol|乙醇|alcohol|酒精|wine|葡萄酒|beer|啤酒)/.test(text)) return 'mg/kg';
+  return null;
 };
 
 const foreignCasReferences = (entry, currentCas) => [

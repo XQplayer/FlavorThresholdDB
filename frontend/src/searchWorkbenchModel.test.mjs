@@ -923,6 +923,16 @@ test('assigns classic medium units while preserving raw threshold evidence', () 
   assert.equal(air.raw, air.originalText);
 });
 
+test('infers units only for known classic media and leaves unknown media unset', () => {
+  const records = buildCompoundDossier({ matchedResults: [
+    { cas: '1-11-1', medium: 'Air', threshold_data: ['Source d 1'] },
+    { cas: '2-22-2', medium: '橄榄油', threshold_data: ['Source d 2'] },
+    { cas: '3-33-3', medium: 'mystery matrix', threshold_data: ['Source d 3'] },
+    { cas: '4-44-4', medium: null, threshold_data: ['Source d 4'] },
+  ] }).thresholds.records;
+  assert.deepEqual(records.map(record => record.unit), ['mg/m3', 'mg/kg', null, null]);
+});
+
 test('uses actual matched names for fuzzy batch candidates while exact mode keeps full matches', () => {
   const candidates = [
     { cas: '141-78-6', english_name: 'Ethyl acetate', threshold_data: [] },

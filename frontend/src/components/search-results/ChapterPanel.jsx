@@ -1,6 +1,8 @@
 import SourceStatusSummary from './SourceStatusSummary';
 
 const STATUS_LABELS = {
+  idle: { zh: '未加载', en: 'Idle' },
+  available: { zh: '可用', en: 'Available' },
   ready: { zh: '有数据', en: 'Ready' },
   no_data: { zh: '暂无数据', en: 'No data' },
   loading: { zh: '载入中', en: 'Loading' },
