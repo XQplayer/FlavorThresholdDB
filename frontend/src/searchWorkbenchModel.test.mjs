@@ -31,6 +31,88 @@ const integrated = {
   profile: { pubchem: { cid: 8857, molecular_formula: 'C4H8O2' } },
 };
 
+test('groups dossier inputs by stable entity key without cross-contaminating evidence', () => {
+  assert.equal(typeof searchWorkbenchModel.groupDossierInputsByEntity, 'function');
+  const second = {
+    cas: '18127-01-0',
+    chinese_name: '对叔丁基苯甲醛',
+    english_name: 'Bourgeonal',
+    medium: '空气',
+    threshold_data: ['Second source d 2 μg/m3'],
+  };
+  const groups = searchWorkbenchModel.groupDossierInputsByEntity({
+    matchedResults: [threshold, second],
+    integratedResults: [
+      integrated,
+      { item: second, profile: { pubchem: { cid: 222 } } },
+    ],
+    bookResults: [
+      { id: 'book-a', matched_entity_cas: threshold.cas },
+      { id: 'book-b', entity: { cas: second.cas } },
+    ],
+  });
+
+  assert.deepEqual(groups.map(group => group.entityKey), ['cas:141-78-6', 'cas:18127-01-0']);
+  for (const group of groups) {
+    assert.ok(group.matchedResults.every(item => `cas:${item.cas}` === group.entityKey));
+    assert.ok(group.integratedResults.every(entry => `cas:${entry.item.cas}` === group.entityKey));
+    assert.ok(group.bookResults.every(record => (
+      record.matched_entity_cas === group.cas || record.entity?.cas === group.cas
+    )));
+  }
+  assert.deepEqual(groups.map(group => group.recordCount), [1, 1]);
+});
+
+test('does not assign an ambiguous name-only book hit to multiple entities', () => {
+  const sharedName = '共享化合物名';
+  const groups = searchWorkbenchModel.groupDossierInputsByEntity({
+    matchedResults: [
+      { ...threshold, chinese_name: sharedName, english_name: 'First entity' },
+      { ...threshold, cas: '222-22-2', chinese_name: sharedName, english_name: 'Second entity' },
+    ],
+    bookResults: [{ id: 'ambiguous-book', subject_label: sharedName }],
+  });
+  assert.deepEqual(groups.map(group => group.bookResults.length), [0, 0]);
+});
+
+test('does not override an explicit mismatched book CAS with a name match', () => {
+  const groups = searchWorkbenchModel.groupDossierInputsByEntity({
+    matchedResults: [threshold],
+    bookResults: [{
+      id: 'mismatched-book',
+      matched_entity_cas: '18127-01-0',
+      subject_label: threshold.chinese_name,
+    }],
+  });
+  assert.equal(groups[0].bookResults.length, 0);
+});
+
+test('builds unfiltered workbench integrated inputs from raw profile state', () => {
+  assert.equal(typeof searchWorkbenchModel.buildWorkbenchIntegratedResults, 'function');
+  const missingProfile = { ...threshold, cas: '222-22-2' };
+  const entries = searchWorkbenchModel.buildWorkbenchIntegratedResults({
+    matchedResults: [threshold, { ...threshold, medium: '空气' }, missingProfile],
+    femaProfiles: { [threshold.cas]: { found: false } },
+    compoundProfiles: { [threshold.cas]: { pubchem: { found: false }, flavordb: { found: false } } },
+  });
+
+  assert.equal(entries.length, 2);
+  assert.deepEqual(entries[0].fema, { found: false });
+  assert.deepEqual(entries[0].profile, { pubchem: { found: false }, flavordb: { found: false } });
+  assert.deepEqual(entries[1].profile, {});
+});
+
+test('summarizes chapter status from records and source outcomes', () => {
+  assert.equal(typeof searchWorkbenchModel.summarizeChapterStatus, 'function');
+  const status = searchWorkbenchModel.summarizeChapterStatus;
+  assert.equal(status({ recordCount: 2, sourceStates: [{ status: 'loading' }, { status: 'ready' }] }), 'loading');
+  assert.equal(status({ recordCount: 1, sourceStates: [{ status: 'ready' }, { status: 'failed' }] }), 'partial');
+  assert.equal(status({ recordCount: 0, sourceStates: [{ status: 'failed' }, { status: 'failed' }] }), 'failed');
+  assert.equal(status({ recordCount: 0, sourceStates: [{ status: 'not_requested' }] }), 'not_requested');
+  assert.equal(status({ recordCount: 0, sourceStates: [{ status: 'no_data' }] }), 'no_data');
+  assert.equal(status({ recordCount: 2, sourceStates: [{ status: 'ready' }] }), 'ready');
+});
+
 test('derives dossier source states from observed local and upstream data', () => {
   assert.equal(typeof searchWorkbenchModel.deriveDossierSourceStates, 'function');
   const states = searchWorkbenchModel.deriveDossierSourceStates({
@@ -42,6 +124,7 @@ test('derives dossier source states from observed local and upstream data', () =
       pubchem: { found: true },
       flavordb: { found: false },
     },
+    bookResults: [{ id: 'book-ready' }],
   });
 
   assert.deepEqual(Object.fromEntries(Object.entries(states).map(([name, state]) => [name, state.status])), {
@@ -49,9 +132,11 @@ test('derives dossier source states from observed local and upstream data', () =
     fema: 'no_data',
     pubchem: 'ready',
     flavordb: 'no_data',
+    book: 'ready',
   });
   assert.equal(states.local_thresholds.labelZh, '本地阈值');
   assert.equal(states.flavordb.labelEn, 'FlavorDB2');
+  assert.equal(states.book.labelZh, '书籍证据');
 });
 
 test('keeps pending, failed, and indeterminate source states distinct', () => {
@@ -66,6 +151,7 @@ test('keeps pending, failed, and indeterminate source states distinct', () => {
     fema: 'loading',
     pubchem: 'loading',
     flavordb: 'loading',
+    book: 'loading',
   });
 
   const failed = searchWorkbenchModel.deriveDossierSourceStates({
@@ -79,12 +165,20 @@ test('keeps pending, failed, and indeterminate source states distinct', () => {
     fema: 'failed',
     pubchem: 'failed',
     flavordb: 'failed',
+    book: 'no_data',
   });
 
   const notRequested = searchWorkbenchModel.deriveDossierSourceStates();
   assert.equal(notRequested.fema.status, 'not_requested');
   assert.equal(notRequested.pubchem.status, 'not_requested');
   assert.equal(notRequested.flavordb.status, 'not_requested');
+  assert.equal(notRequested.book.status, 'not_requested');
+  const emptyFema = searchWorkbenchModel.deriveDossierSourceStates({
+    currentCas: threshold.cas,
+    femaProfile: {},
+    compoundProfile: {},
+  });
+  assert.equal(emptyFema.fema.status, 'not_requested');
 });
 
 test('defines eight bilingual compound-dossier chapters', () => {
@@ -253,7 +347,7 @@ test('normalizes requested source states while retaining state fields', () => {
   assert.equal(normalizeSourceStatus({ state: 'partial_failure' }).status, 'partial');
   assert.equal(normalizeSourceStatus({ state: 'timeout' }).status, 'failed');
   assert.equal(normalizeSourceStatus({ state: 'ok' }).status, 'ready');
-  assert.equal(normalizeSourceStatus({ state: 'fetching' }).status, 'loading');
+  assert.equal(normalizeSourceStatus({ state: 'fetching' }).status, 'not_requested');
 });
 
 test('keeps canonical source status kinds stable across repeated normalization', () => {

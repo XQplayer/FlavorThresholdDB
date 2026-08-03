@@ -245,6 +245,29 @@ try {
       dimensions.scrollWidth <= dimensions.clientWidth,
       `${width}px viewport has no page-level horizontal overflow (${dimensions.scrollWidth} <= ${dimensions.clientWidth})`,
     );
+    if (width === 375) {
+      const switchHeights = await page.locator('.result-view-switch button').evaluateAll(
+        buttons => buttons.map(button => button.getBoundingClientRect().height),
+      );
+      assert.ok(switchHeights.every(height => height >= 44), 'mobile result-view controls are at least 44px high');
+      const chapterHeights = await chapterButtons.evaluateAll(
+        buttons => buttons.map(button => button.getBoundingClientRect().height),
+      );
+      assert.ok(chapterHeights.every(height => height >= 44), 'mobile chapter controls are at least 44px high');
+      const workbenchDimensions = await workbench.evaluate(element => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+      }));
+      assert.ok(
+        workbenchDimensions.scrollWidth <= workbenchDimensions.clientWidth,
+        'mobile workbench contains horizontal scrolling within its chapter selector',
+      );
+      const mobileDisclosureShadow = await rawRecordButton.locator('..').evaluate(
+        element => getComputedStyle(element).boxShadow,
+      );
+      assert.match(mobileDisclosureShadow, /rgb\(255, 255, 255\)/, 'mobile disclosure focus keeps its white inner ring');
+      assert.match(mobileDisclosureShadow, /rgb\(30, 58, 138\)/, 'mobile disclosure focus keeps its cobalt outer ring');
+    }
   };
   await assertNoPageOverflow(1440);
   await assertNoPageOverflow(375);
@@ -268,12 +291,47 @@ try {
   const classicRequestsAfterMount = apiRequests.filter(isClassicRequest);
   assert.ok(classicRequestsAfterMount.length > 0, 'classic-only requests begin when the classic tree is first mounted');
   assert.deepEqual(sharedCounts(), sharedBeforeClassic, 'switching to classic does not repeat App-level shared lookups');
+  const pubchemFilter = page.locator('[data-filter-key="pubchem"]');
+  const bookFilter = page.locator('[data-filter-key="book"]');
+  assert.equal(await pubchemFilter.getAttribute('aria-pressed'), 'true', 'classic PubChem filter starts enabled');
+  assert.equal(await bookFilter.getAttribute('aria-pressed'), 'true', 'classic book filter starts enabled');
+  await pubchemFilter.click();
+  await bookFilter.click();
 
   await newButton.click();
   await workbench.waitFor();
+  await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await workbench.getByText('8857', { exact: true }).count(), 1, 'new dossier keeps PubChem identity when the classic filter is disabled');
+  const citationCount = Number(await workbench
+    .getByRole('button', { name: /引文/ })
+    .locator('.chapter-navigation__meta span')
+    .first()
+    .textContent());
+  assert.ok(citationCount > 0, 'new dossier keeps book evidence when the classic filter is disabled');
   assert.equal(await page.getByTestId('classic-search-results').count(), 0, 'classic result marker is removed after returning to the new dossier');
   assert.equal(await page.locator('.open-spectra-workbench').count(), 0, 'classic-only components are removed after returning to the new dossier');
   assert.deepEqual(sharedCounts(), sharedBeforeClassic, 'returning to the new dossier does not repeat App-level shared lookups');
+
+  await input.fill('对叔丁基苯甲醛');
+  const candidateHeading = workbench.getByRole('heading', { name: '请选择匹配实体' });
+  await candidateHeading.waitFor({ state: 'visible', timeout: 30_000 });
+  assert.equal(await workbench.locator('.compound-identity-header').count(), 0, 'ambiguous matches do not render an identity before selection');
+  assert.equal(await workbench.getByRole('navigation', { name: '档案章节' }).count(), 0, 'ambiguous matches do not render chapters before selection');
+  const firstCandidate = workbench.getByRole('button', { name: /939-97-9/ });
+  const secondCandidate = workbench.getByRole('button', { name: /18127-01-0/ });
+  assert.equal(await firstCandidate.count(), 1, 'first CAS candidate is listed');
+  assert.equal(await secondCandidate.count(), 1, 'second CAS candidate is listed');
+  await firstCandidate.click();
+  await workbench.getByText('CAS 939-97-9', { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await workbench.getByText('CAS 18127-01-0', { exact: true }).count(), 0, 'selected dossier excludes the other entity identity');
+  await workbench.getByRole('button', { name: /阈值/ }).click();
+  assert.equal(await workbench.getByText('18127-01-0', { exact: false }).count(), 0, 'selected threshold chapter excludes the other entity CAS');
+
+  await input.fill('141-78-6');
+  await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor({ state: 'visible' });
+  await input.fill('对叔丁基苯甲醛');
+  await candidateHeading.waitFor({ state: 'visible' });
+  assert.equal(await workbench.locator('.compound-identity-header').count(), 0, 'a new query clears the previous candidate selection');
   await classicButton.click();
 
   await page.reload({ waitUntil: 'domcontentloaded' });

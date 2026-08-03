@@ -57,7 +57,7 @@ export function normalizeSourceStatus(state) {
           ? 'failed'
           : value === 'ok'
             ? 'ready'
-            : 'loading';
+            : 'not_requested';
   return { ...source, status: normalized };
 }
 
@@ -83,10 +83,14 @@ export function deriveDossierSourceStates({
   currentCas = null,
   femaProfile,
   compoundProfile,
+  bookResults = [],
 } = {}) {
-  const hasLocalThresholds = asArray(matchedResults)
+  const matched = asArray(matchedResults);
+  const hasEntity = Boolean(currentCas) || matched.length > 0;
+  const hasLocalThresholds = matched
     .some((item) => asArray(item?.threshold_data).length > 0);
   const localStatus = loading ? 'loading' : hasLocalThresholds ? 'ready' : 'no_data';
+  const hasObservedFema = femaProfile && Object.keys(femaProfile).some(key => key !== 'loading');
   const femaStatus = !currentCas
     ? 'not_requested'
     : !femaProfile || femaProfile.loading
@@ -95,13 +99,23 @@ export function deriveDossierSourceStates({
         ? 'failed'
         : femaProfile.found === false
           ? 'no_data'
-          : 'ready';
+          : hasObservedFema
+            ? 'ready'
+            : 'not_requested';
+  const bookStatus = loading
+    ? 'loading'
+    : !hasEntity
+      ? 'not_requested'
+      : asArray(bookResults).length > 0
+        ? 'ready'
+        : 'no_data';
 
   return {
     local_thresholds: sourceState(localStatus, '本地阈值', 'Local thresholds'),
     fema: sourceState(femaStatus, 'FEMA', 'FEMA'),
     pubchem: sourceState(compoundSourceStatus(currentCas, compoundProfile, 'pubchem'), 'PubChem', 'PubChem'),
     flavordb: sourceState(compoundSourceStatus(currentCas, compoundProfile, 'flavordb'), 'FlavorDB2', 'FlavorDB2'),
+    book: sourceState(bookStatus, '书籍证据', 'Book evidence'),
   };
 }
 
@@ -118,6 +132,120 @@ const getFlavorDb = (entry) => {
   const profile = getProfile(entry);
   return profile.flavordb ?? entry?.flavordb ?? {};
 };
+
+export function compoundEntityKey(item) {
+  const entity = getItem(item);
+  const cas = normaliseCas(entity?.cas);
+  if (cas) return `cas:${cas}`;
+  const name = entity?.english_name
+    ?? entity?.englishName
+    ?? entity?.common_english_name
+    ?? entity?.chinese_name
+    ?? entity?.chineseName;
+  return `name:${normaliseText(name)}`;
+}
+
+export function buildWorkbenchIntegratedResults({
+  matchedResults = [],
+  femaProfiles = {},
+  compoundProfiles = {},
+} = {}) {
+  const seen = new Set();
+  return asArray(matchedResults).filter(Boolean).flatMap((item) => {
+    const entityKey = compoundEntityKey(item);
+    if (entityKey === 'name:' || seen.has(entityKey)) return [];
+    seen.add(entityKey);
+    return [{
+      item,
+      fema: item.cas ? femaProfiles[item.cas] || {} : {},
+      profile: item.cas ? compoundProfiles[item.cas] || {} : {},
+    }];
+  });
+}
+
+const bookRecordValues = (record, field) => [
+  record?.[field],
+  record?.entity?.[field],
+  ...asArray(record?.source_hits).flatMap(hit => [hit?.[field], hit?.entity?.[field]]),
+].filter(Boolean);
+
+const groupNames = group => [group.chineseName, group.englishName].map(normaliseText).filter(Boolean);
+
+const bookBelongsToGroup = (record, group, nameOwners) => {
+  const casValues = [
+    ...bookRecordValues(record, 'matched_entity_cas'),
+    ...bookRecordValues(record, 'entity_cas'),
+    ...bookRecordValues(record, 'cas'),
+    ...asArray(record?.entity_cas_list),
+  ].map(normaliseCas).filter(Boolean);
+  if (casValues.length > 0) return Boolean(group.cas) && casValues.includes(group.cas);
+  const normalizedGroupNames = new Set(groupNames(group));
+  const bookNames = [
+    ...bookRecordValues(record, 'matched_subject_label'),
+    ...bookRecordValues(record, 'subject_label'),
+    ...bookRecordValues(record, 'name'),
+  ].map(normaliseText).filter(Boolean);
+  return bookNames.some(name => normalizedGroupNames.has(name) && nameOwners.get(name)?.size === 1);
+};
+
+export function groupDossierInputsByEntity({
+  matchedResults = [],
+  integratedResults = [],
+  bookResults = [],
+} = {}) {
+  const groups = new Map();
+  asArray(matchedResults).filter(Boolean).forEach((item) => {
+    const entityKey = compoundEntityKey(item);
+    if (entityKey === 'name:') return;
+    if (!groups.has(entityKey)) {
+      groups.set(entityKey, {
+        entityKey,
+        cas: normaliseCas(item.cas) || null,
+        chineseName: item.chinese_name ?? item.chineseName ?? null,
+        englishName: item.english_name ?? item.englishName ?? item.common_english_name ?? null,
+        matchReason: item.cas ? 'cas' : 'name',
+        matchedResults: [],
+      });
+    }
+    groups.get(entityKey).matchedResults.push(item);
+  });
+
+  const nameOwners = new Map();
+  for (const group of groups.values()) {
+    for (const name of groupNames(group)) {
+      if (!nameOwners.has(name)) nameOwners.set(name, new Set());
+      nameOwners.get(name).add(group.entityKey);
+    }
+  }
+
+  return [...groups.values()].map(group => ({
+    ...group,
+    recordCount: group.matchedResults.reduce(
+      (total, item) => total + asArray(item.threshold_data).length,
+      0,
+    ),
+    integratedResults: asArray(integratedResults)
+      .filter(entry => compoundEntityKey(getItem(entry)) === group.entityKey),
+    bookResults: asArray(bookResults).filter(record => bookBelongsToGroup(record, group, nameOwners)),
+  }));
+}
+
+export function summarizeChapterStatus({ recordCount = 0, sourceStates = [] } = {}) {
+  const statuses = asArray(sourceStates).map(state => normalizeSourceStatus(state).status);
+  if (statuses.includes('loading')) return 'loading';
+  if (statuses.length === 0) return recordCount > 0 ? 'ready' : 'not_requested';
+  if (statuses.every(status => status === 'failed')) return 'failed';
+  if (statuses.every(status => status === 'not_requested')) return recordCount > 0 ? 'ready' : 'not_requested';
+  if (recordCount === 0 && statuses.every(status => status === 'no_data')) return 'no_data';
+
+  const hasReady = recordCount > 0 || statuses.includes('ready');
+  const hasLimited = statuses.some(status => ['partial', 'failed', 'no_data'].includes(status));
+  if (statuses.includes('partial') || (hasReady && hasLimited)) return 'partial';
+  if (hasReady) return 'ready';
+  if (statuses.includes('failed')) return statuses.includes('no_data') ? 'partial' : 'failed';
+  if (statuses.includes('no_data')) return 'no_data';
+  return 'not_requested';
+}
 
 const chapter = (records = []) => ({ records });
 

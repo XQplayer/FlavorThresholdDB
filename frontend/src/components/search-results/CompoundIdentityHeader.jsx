@@ -1,4 +1,9 @@
-export default function CompoundIdentityHeader({ identity, coveredChapterCount = 0, isEnglish = false }) {
+export default function CompoundIdentityHeader({
+  identity,
+  coveredChapterCount = 0,
+  totalChapterCount = 0,
+  isEnglish = false,
+}) {
   if (!identity) return null;
 
   const englishName = String(identity.englishName || '').trim();
@@ -45,7 +50,10 @@ export default function CompoundIdentityHeader({ identity, coveredChapterCount =
         {facts.map(({ label, value, combined }) => (
           <div key={label}>
             {combined ? (
-              <dd>{label} {value}</dd>
+              <>
+                <dt className="compound-identity-header__sr-only">{label}</dt>
+                <dd>{label} {value}</dd>
+              </>
             ) : (
               <>
                 <dt>{label}</dt>
@@ -60,7 +68,11 @@ export default function CompoundIdentityHeader({ identity, coveredChapterCount =
         </div>
         <div>
           <dt>{isEnglish ? 'Chapter coverage' : '章节覆盖'}</dt>
-          <dd>{isEnglish ? `${coveredChapterCount} of 8` : `${coveredChapterCount}/8 章`}</dd>
+          <dd>
+            {isEnglish
+              ? `${coveredChapterCount} of ${totalChapterCount}`
+              : `${coveredChapterCount}/${totalChapterCount} 章`}
+          </dd>
         </div>
       </dl>
     </header>

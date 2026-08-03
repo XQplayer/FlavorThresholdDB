@@ -1,24 +1,88 @@
 import { useMemo, useState } from 'react';
-import { CHAPTERS } from '../../searchWorkbenchModel';
+import { CHAPTERS, summarizeChapterStatus } from '../../searchWorkbenchModel';
 import ChapterNavigation from './ChapterNavigation';
 import ChapterPanel from './ChapterPanel';
 import CompoundIdentityHeader from './CompoundIdentityHeader';
 import EvidenceRecordDisclosure from './EvidenceRecordDisclosure';
 import './SearchResultsWorkbench.css';
 
-export default function SearchResultsWorkbench({ query, loading, matchCount = 0, dossier, isEnglish = false }) {
-  const entityKey = dossier?.identity?.entityKey ?? null;
+const CHAPTER_SOURCE_KEYS = {
+  overview: ['local_thresholds', 'fema', 'pubchem', 'flavordb', 'book'],
+  sensory: ['fema', 'flavordb'],
+  thresholds: ['local_thresholds'],
+  spectra: ['pubchem'],
+  structures: ['pubchem'],
+  citation: ['book'],
+};
+
+export default function SearchResultsWorkbench({ query, loading, matchCount = 0, candidates = [], isEnglish = false }) {
+  const queryKey = String(query || '').trim().toLowerCase();
+  const [candidateSelection, setCandidateSelection] = useState({ queryKey, entityKey: null });
+  const selectedCandidate = candidates.length === 1
+    ? candidates[0]
+    : candidateSelection.queryKey === queryKey
+      ? candidates.find(candidate => candidate.entityKey === candidateSelection.entityKey)
+      : null;
+  const dossier = selectedCandidate?.dossier;
+  const entityKey = selectedCandidate?.entityKey ?? null;
   const [chapterSelection, setChapterSelection] = useState({ entityKey, id: 'overview' });
   const hasQuery = Boolean(query?.trim());
   const hasIdentity = Boolean(entityKey);
   const activeChapterId = chapterSelection.entityKey === entityKey ? chapterSelection.id : 'overview';
   const chapters = useMemo(() => CHAPTERS.map((chapter) => {
     const count = dossier?.[chapter.id]?.records?.length || 0;
-    return { ...chapter, count, status: count > 0 ? 'ready' : 'no_data' };
+    const sourceStates = (CHAPTER_SOURCE_KEYS[chapter.id] || [])
+      .map(key => dossier?.sourceStates?.[key])
+      .filter(Boolean);
+    return { ...chapter, count, status: summarizeChapterStatus({ recordCount: count, sourceStates }) };
   }), [dossier]);
+
+  if (candidateSelection.queryKey !== queryKey) {
+    setCandidateSelection({ queryKey, entityKey: null });
+  }
 
   if (chapterSelection.entityKey !== entityKey) {
     setChapterSelection({ entityKey, id: 'overview' });
+  }
+
+  if (hasQuery && !loading && candidates.length > 1 && !selectedCandidate) {
+    return (
+      <section className="search-results-workbench search-results-workbench--candidates" data-testid="search-results-workbench">
+        <span className="search-results-workbench__eyebrow">
+          {isEnglish ? 'Compound dossier' : '化合物档案'}
+        </span>
+        <h2>{isEnglish ? 'Choose a matching entity' : '请选择匹配实体'}</h2>
+        <p>
+          {isEnglish
+            ? 'Multiple chemical identities matched this query. Select one before reviewing evidence.'
+            : '该查询命中多个化学身份，请先选择一个实体再查看证据。'}
+        </p>
+        <ul className="dossier-candidate-list">
+          {candidates.map(candidate => {
+            const preferredName = (isEnglish ? candidate.englishName : candidate.chineseName)
+              || candidate.englishName
+              || candidate.chineseName
+              || (isEnglish ? 'Unnamed compound' : '未命名化合物');
+            const reason = candidate.matchReason === 'cas'
+              ? (isEnglish ? 'CAS match' : 'CAS 匹配')
+              : (isEnglish ? 'Name match' : '名称匹配');
+            return (
+              <li key={candidate.entityKey}>
+                <button
+                  type="button"
+                  onClick={() => setCandidateSelection({ queryKey, entityKey: candidate.entityKey })}
+                >
+                  <strong>{preferredName}</strong>
+                  {candidate.cas && <span>CAS {candidate.cas}</span>}
+                  <span>{reason}</span>
+                  <span>{isEnglish ? `${candidate.recordCount} records` : `${candidate.recordCount} 条记录`}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    );
   }
 
   if (hasQuery && !loading && hasIdentity) {
@@ -37,6 +101,7 @@ export default function SearchResultsWorkbench({ query, loading, matchCount = 0,
         <CompoundIdentityHeader
           identity={dossier.identity}
           coveredChapterCount={coveredChapterCount}
+          totalChapterCount={CHAPTERS.length}
           isEnglish={isEnglish}
         />
         <div className="search-results-workbench__layout">

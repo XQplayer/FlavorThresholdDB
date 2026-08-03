@@ -13,7 +13,12 @@ import BioactivityEvidence from './components/BioactivityEvidence';
 import StructureEvidence from './components/StructureEvidence';
 import ResultViewSwitch from './components/search-results/ResultViewSwitch';
 import SearchResultsWorkbench from './components/search-results/SearchResultsWorkbench';
-import { buildCompoundDossier, deriveDossierSourceStates } from './searchWorkbenchModel';
+import {
+  buildCompoundDossier,
+  buildWorkbenchIntegratedResults,
+  deriveDossierSourceStates,
+  groupDossierInputsByEntity,
+} from './searchWorkbenchModel';
 import { recordCompoundSearch } from './lib/supabase';
 import { classifyCompoundBySmarts } from './lib/compoundClassification';
 import { loadResultView, saveResultView } from './resultViewPreference';
@@ -539,8 +544,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     return undefined;
   }, [queryMatchedResults, searchMode]);
 
-  const bookResults = useMemo(() => {
-    if (!includeBookResults) return [];
+  const workbenchBookResults = useMemo(() => {
     if (!bookIndex.length) return [];
     const rawQueries = searchMode === 'single' ? [deferredSingleQuery] : deferredBulkQuery.split('\n');
     const hits = searchBookIndex({
@@ -552,7 +556,12 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       limit: 20,
     });
     return mergeBookHitsByEntity(hits);
-  }, [bookIndex, bookEntities, deferredSingleQuery, deferredBulkQuery, searchMode, includeBookResults, queryMatchedResults, exactMatch]);
+  }, [bookIndex, bookEntities, deferredSingleQuery, deferredBulkQuery, searchMode, queryMatchedResults, exactMatch]);
+
+  const bookResults = useMemo(
+    () => includeBookResults ? workbenchBookResults : [],
+    [includeBookResults, workbenchBookResults],
+  );
 
   const getFilterOrderIndex = (key) => {
     const index = filterOrder.indexOf(key);
@@ -621,23 +630,53 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       });
   }, [queryMatchedResults, femaProfiles, compoundProfiles, includeFlavorDescriptions, includePubChem, includeFlavorDB]);
 
-  const dossierSourceStates = useMemo(() => {
-    const currentCas = queryMatchedResults.find(item => item.cas)?.cas ?? null;
-    return deriveDossierSourceStates({
-      loading,
-      matchedResults: queryMatchedResults,
-      currentCas,
-      femaProfile: currentCas ? femaProfiles[currentCas] : undefined,
-      compoundProfile: currentCas ? compoundProfiles[currentCas] : undefined,
-    });
-  }, [loading, queryMatchedResults, femaProfiles, compoundProfiles]);
-
-  const compoundDossier = useMemo(() => buildCompoundDossier({
+  const workbenchIntegratedResults = useMemo(() => buildWorkbenchIntegratedResults({
     matchedResults: queryMatchedResults,
-    integratedResults: integratedCompoundResults,
-    bookResults,
-    sourceStates: dossierSourceStates,
-  }), [queryMatchedResults, integratedCompoundResults, bookResults, dossierSourceStates]);
+    femaProfiles,
+    compoundProfiles,
+  }), [queryMatchedResults, femaProfiles, compoundProfiles]);
+
+  const compoundDossierCandidates = useMemo(() => {
+    const queryValues = searchMode === 'single'
+      ? [deferredSingleQuery]
+      : deferredBulkQuery.split('\n');
+    const normalizedQueries = new Set(queryValues.map(value => value.trim().toLowerCase()).filter(Boolean));
+    const groups = groupDossierInputsByEntity({
+      matchedResults: queryMatchedResults,
+      integratedResults: workbenchIntegratedResults,
+      bookResults: workbenchBookResults,
+    });
+    return groups.map(group => {
+      const sourceStates = deriveDossierSourceStates({
+        loading,
+        matchedResults: group.matchedResults,
+        currentCas: group.cas,
+        femaProfile: group.cas ? femaProfiles[group.cas] : undefined,
+        compoundProfile: group.cas ? compoundProfiles[group.cas] : undefined,
+        bookResults: group.bookResults,
+      });
+      return {
+        ...group,
+        matchReason: group.cas && normalizedQueries.has(group.cas.toLowerCase()) ? 'cas' : 'name',
+        dossier: buildCompoundDossier({
+          matchedResults: group.matchedResults,
+          integratedResults: group.integratedResults,
+          bookResults: group.bookResults,
+          sourceStates,
+        }),
+      };
+    });
+  }, [
+    searchMode,
+    deferredSingleQuery,
+    deferredBulkQuery,
+    queryMatchedResults,
+    workbenchIntegratedResults,
+    workbenchBookResults,
+    loading,
+    femaProfiles,
+    compoundProfiles,
+  ]);
 
   useEffect(() => {
     if (!queryMatchedResults.length) return;
@@ -1552,7 +1591,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
             query={searchMode === 'single' ? singleQuery : bulkQuery}
             loading={loading}
             matchCount={queryMatchedResults.length}
-            dossier={compoundDossier}
+            candidates={compoundDossierCandidates}
             isEnglish={isEnglish}
           />
         ) : (
