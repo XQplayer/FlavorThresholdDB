@@ -32,6 +32,7 @@ import { createShimadzuApi, getEnginePresentation, getMonitorStageIndex, getStag
 import { assertWorkbookFile, browserEnginePresentation } from '../../lib/shimadzuBrowserContract'
 import { createShimadzuWorkerClient } from '../../lib/shimadzuWorkerClient'
 import { authCallbackMessage, createShimadzuCloud, shimadzuAuthRedirect } from '../../lib/shimadzuCloud'
+import { createShimadzuTaskStore } from '../../lib/shimadzuTaskStore'
 import { analyticsEnabled, supabase } from '../../lib/supabase'
 import './ShimadzuAnalysisPage.css'
 
@@ -50,7 +51,7 @@ const WORKFLOW = [
 ]
 
 const STATUS_LABELS = {
-  created: '等待运行', queued: '排队中', running: '处理中', saving: '云端保存中', waiting_review: '等待复核', complete: '已完成', failed: '运行失败',
+  created: '等待运行', queued: '排队中', running: '处理中', saving: '云端保存中', waiting_review: '等待复核', complete: '已完成', failed: '运行失败', interrupted: '已中断，需重新运行',
   pending: '未开始', PASS: '通过', WARN: '警告', REVIEW: '需复核', FAIL: '失败',
 }
 
@@ -121,7 +122,7 @@ function AccountPanel({ cloud, session, profile, loading, error, onRefresh }) {
   }
 
   if (!cloud.configured) {
-    return <section className="shimadzu-account local"><ShieldCheck /><div><strong>本地隐私模式</strong><p>当前构建未连接云端账号；仍可在浏览器内计算并立即下载，关闭页面后不保留结果。</p></div></section>
+    return <section className="shimadzu-account local"><ShieldCheck /><div><strong>本地隐私模式</strong><p>当前构建未连接云端账号；活动任务可在同一浏览器恢复，完成后请立即下载结果。</p></div></section>
   }
 
   if (loading) return <section className="shimadzu-account"><Loader2 className="spin" /><div><strong>正在核验账号</strong><p>读取登录会话与审批状态。</p></div></section>
@@ -153,7 +154,7 @@ function AccountPanel({ cloud, session, profile, loading, error, onRefresh }) {
   )
 }
 
-function HistoryPanel({ jobs, onDownload }) {
+function HistoryPanel({ jobs, interruptedJobIds, onDownload, onMarkInterrupted }) {
   if (!jobs.length) return null
   return (
     <section className="shimadzu-history shimadzu-reveal" aria-labelledby="history-title">
@@ -161,7 +162,9 @@ function HistoryPanel({ jobs, onDownload }) {
       <div className="shimadzu-history-table" role="table">
         {jobs.map(item => {
           const downloadable = item.result_path && new Date(item.result_expires_at) > new Date()
-          return <div key={item.id} role="row"><div><strong>{item.name}</strong><small>{new Date(item.created_at).toLocaleString('zh-CN', { hour12: false })}</small></div><span className={`shimadzu-job-badge ${item.status}`}>{STATUS_LABELS[item.status] || item.status}</span><span>步骤 {item.current_stage}/7 · {item.progress}%</span>{downloadable ? <button type="button" onClick={() => onDownload(item)}><CloudDownload />重新下载</button> : <small>{item.status === 'complete' || item.status === 'expired' ? '结果已过期' : '暂无结果'}</small>}</div>
+          const interrupted = interruptedJobIds.has(item.id)
+          const visibleStatus = interrupted ? 'interrupted' : item.status
+          return <div key={item.id} role="row"><div><strong>{item.name}</strong><small>{new Date(item.created_at).toLocaleString('zh-CN', { hour12: false })}</small></div><span className={`shimadzu-job-badge ${visibleStatus}`}>{STATUS_LABELS[visibleStatus] || visibleStatus}</span><span>步骤 {item.current_stage}/7 · {item.progress}%</span>{interrupted ? <button type="button" onClick={() => onMarkInterrupted(item)}>确认中断</button> : downloadable ? <button type="button" onClick={() => onDownload(item)}><CloudDownload />重新下载</button> : <small>{item.status === 'complete' || item.status === 'expired' ? '结果已过期' : '暂无结果'}</small>}</div>
         })}
       </div>
     </section>
@@ -183,6 +186,24 @@ const TemplateLink = ({ href, children }) => (
     {children}
   </a>
 )
+
+const jobFromStoredTask = (task, status = 'running') => {
+  const summaries = new Map((task.stageSummary || []).filter(item => Number.isInteger(item?.stage)).map(item => [item.stage, item]))
+  return {
+    id: task.id,
+    name: task.name,
+    status,
+    next_stage: task.nextStage || 0,
+    updated_at: task.savedAt || new Date().toISOString(),
+    error: task.error || null,
+    stages: WORKFLOW.map(stage => {
+      const summary = summaries.get(stage.index)
+      return summary
+        ? { index: stage.index, status: summary.status || 'PASS', counts: summary.counts || {}, can_advance: true, log_tail: `${stage.label}已完成` }
+        : { index: stage.index, status: 'pending', counts: {} }
+    }),
+  }
+}
 
 const FilePicker = ({ label, hint, file, onChange, inputRef, templateHref, templateLabel }) => (
   <div className={`shimadzu-upload-slot${file ? ' has-file' : ''}`}>
@@ -296,6 +317,7 @@ function LiveMonitor({ job, capabilities, engine: engineOverride }) {
 export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, setInterfaceLanguage }) {
   const api = useMemo(() => createShimadzuApi(API_BASE), [])
   const cloud = useMemo(() => createShimadzuCloud(supabase), [])
+  const taskStore = useMemo(() => createShimadzuTaskStore(), [])
   const pageRef = useRef(null)
   const rawInputRef = useRef(null)
   const samplesInputRef = useRef(null)
@@ -303,7 +325,11 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
   const resultUrlRef = useRef('')
   const activeJobIdRef = useRef('')
   const cloudSyncRef = useRef(Promise.resolve())
+  const taskSyncRef = useRef(Promise.resolve())
   const stageSummaryRef = useRef([])
+  const taskScopeRef = useRef('local')
+  const resumeFromStageRef = useRef(0)
+  const restoreScopeRef = useRef('')
   const [reducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   const [rawFile, setRawFile] = useState(null)
   const [samplesFile, setSamplesFile] = useState(null)
@@ -317,6 +343,9 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
   const [history, setHistory] = useState([])
   const [cloudLoading, setCloudLoading] = useState(analyticsEnabled)
   const [cloudError, setCloudError] = useState('')
+  const [activeTaskId, setActiveTaskId] = useState('')
+  const [recoveryChecked, setRecoveryChecked] = useState(false)
+  const [recoveryNotice, setRecoveryNotice] = useState('')
 
   const refreshCloud = async (knownSession = undefined) => {
     if (!cloud.configured) return
@@ -345,7 +374,7 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
 
   useEffect(() => {
     if (!cloud.configured) return undefined
-    refreshCloud()
+    queueMicrotask(() => refreshCloud())
     return cloud.onAuthChange(nextSession => refreshCloud(nextSession))
     // cloud is stable for the lifetime of this page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -388,9 +417,49 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
   const progress = getStageProgress(job)
   const engine = browserEnginePresentation()
   const canAnalyze = !cloud.configured || profile?.approval_status === 'approved'
-  const canStart = rawFile && samplesFile && canAnalyze && !submitting
+  const fileReadiness = useMemo(() => {
+    const missing = []
+    if (!rawFile) missing.push('岛津原始工作簿')
+    if (!samplesFile) missing.push('样品与内标信息表')
+    if (missing.length) {
+      return {
+        ready: false,
+        buttonLabel: missing.length === 2 ? '请先添加两个 Excel 文件' : `请添加${missing[0]}`,
+        message: `还缺少：${missing.join('、')}`,
+      }
+    }
+
+    const invalid = []
+    try { assertWorkbookFile(rawFile) } catch { invalid.push('岛津原始工作簿') }
+    try { assertWorkbookFile(samplesFile) } catch { invalid.push('样品与内标信息表') }
+    if (invalid.length) {
+      return {
+        ready: false,
+        buttonLabel: '请更换不符合要求的文件',
+        message: `${invalid.join('、')}未通过检查；仅接受不超过 50 MB 的 .xlsx 文件。`,
+      }
+    }
+
+    return { ready: true, buttonLabel: '开始分析', message: '文件已准备，可以开始分析' }
+  }, [rawFile, samplesFile])
+  const startFeedback = useMemo(() => {
+    if (submitting) return { buttonLabel: '正在建立任务', message: '正在读取文件并建立分析任务。' }
+    if (!fileReadiness.ready) return fileReadiness
+    if (!canAnalyze) return { buttonLabel: '等待账号审批后开始', message: '文件已准备，可以开始分析。当前账号还需通过管理员审批。' }
+    return fileReadiness
+  }, [canAnalyze, fileReadiness, submitting])
+  const canStart = fileReadiness.ready && canAnalyze && !submitting
+  const interruptedJobIds = useMemo(() => {
+    if (!recoveryChecked) return new Set()
+    return new Set(history
+      .filter(item => ['running', 'waiting_review'].includes(item.status) && item.id !== activeTaskId)
+      .map(item => item.id))
+  }, [activeTaskId, history, recoveryChecked])
 
   const handleWorkerEvent = event => {
+    const replayedStage = Number.isInteger(event.stage) && event.stage < resumeFromStageRef.current
+    if (replayedStage) return
+    if (event.type === 'stage-start' && recoveryNotice) setRecoveryNotice('任务已恢复，正在继续未完成的分析步骤。')
     setJob(current => {
       if (!current) return current
       const stages = current.stages.map(stage => ({ ...stage }))
@@ -401,48 +470,55 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
       if (event.type === 'stage-review') return { ...current, stages, status: 'waiting_review', next_stage: event.stage + 1, updated_at: new Date().toISOString() }
       return { ...current, stages, status: event.type === 'stage-start' ? 'running' : current.status, next_stage: Number.isInteger(event.stage) ? event.stage + 1 : current.next_stage, updated_at: new Date().toISOString() }
     })
-    if (cloud.configured && session?.user && activeJobIdRef.current && ['stage-complete', 'stage-review'].includes(event.type)) {
+    if (activeJobIdRef.current && ['stage-complete', 'stage-review'].includes(event.type)) {
       const currentStage = Math.min(7, (event.stage ?? 0) + 1)
-      stageSummaryRef.current[event.stage] = { stage: event.stage, status: event.status || 'PASS', counts: event.counts || {} }
+      if (event.type === 'stage-complete') stageSummaryRef.current[event.stage] = { stage: event.stage, status: event.status || 'PASS', counts: event.counts || {} }
       const patch = {
         status: event.type === 'stage-review' ? 'waiting_review' : 'running',
         current_stage: currentStage,
         progress: Math.round(currentStage / 7 * 100),
         stage_summary: stageSummaryRef.current.filter(Boolean),
       }
+      taskSyncRef.current = taskSyncRef.current
+        .then(() => taskStore.update(taskScopeRef.current, {
+          status: patch.status,
+          nextStage: currentStage,
+          stageSummary: patch.stage_summary,
+        }))
+        .catch(value => setError(`无法保存恢复进度：${value.message}`))
       if (event.stage === 5) patch.qc_summary = event.counts || {}
-      cloudSyncRef.current = cloudSyncRef.current
-        .then(() => cloud.updateJob(activeJobIdRef.current, patch))
-        .catch(value => setCloudError(`云端进度同步失败：${value.message}`))
+      if (cloud.configured && session?.user) {
+        cloudSyncRef.current = cloudSyncRef.current
+          .then(() => cloud.updateJob(activeJobIdRef.current, patch))
+          .catch(value => setCloudError(`云端进度同步失败：${value.message}`))
+      }
     }
   }
 
-  const submit = async event => {
-    event.preventDefault()
-    if (!canStart) return
+  const runTask = async (task, { restored = false } = {}) => {
     setSubmitting(true)
     setError('')
+    activeJobIdRef.current = task.id
+    taskScopeRef.current = task.scope
+    resumeFromStageRef.current = restored ? Math.max(0, Number(task.nextStage) || 0) : 0
+    stageSummaryRef.current = [...(task.stageSummary || [])]
+    cloudSyncRef.current = Promise.resolve()
+    taskSyncRef.current = Promise.resolve()
+    setActiveTaskId(task.id)
+    setName(task.name)
+    setMode(task.mode)
+    setJob(jobFromStoredTask(task, 'running'))
+    if (restored) setRecoveryNotice('已从当前浏览器恢复任务，正在重新验证已完成步骤。')
     try {
-      assertWorkbookFile(rawFile)
-      assertWorkbookFile(samplesFile)
-      const created = {
-        id: crypto.randomUUID(), name, status: 'running', next_stage: 0, updated_at: new Date().toISOString(),
-        stages: WORKFLOW.map(stage => ({ index: stage.index, status: 'pending', counts: {} })),
-      }
-      if (cloud.configured) {
-        if (!session?.user || profile?.approval_status !== 'approved') throw Object.assign(new Error('当前账号尚未通过管理员审批。'), { code: 'ACCOUNT_NOT_APPROVED' })
-        await cloud.createJob({
-          id: created.id, userId: session.user.id, name: name.trim() || '岛津气质分析', mode,
-          sourceNames: { raw: { name: rawFile.name, size: rawFile.size }, sample_info: { name: samplesFile.name, size: samplesFile.size } },
-        })
-      }
-      activeJobIdRef.current = created.id
-      stageSummaryRef.current = []
-      cloudSyncRef.current = Promise.resolve()
-      setJob(created)
-      const [rawBytes, sampleBytes] = await Promise.all([rawFile.arrayBuffer(), samplesFile.arrayBuffer()])
       const result = await workerClientRef.current.run({
-        rawBytes, sampleBytes, rawName: rawFile.name, sampleName: samplesFile.name, name, mode, onEvent: handleWorkerEvent,
+        rawBytes: task.rawBytes,
+        sampleBytes: task.sampleBytes,
+        rawName: task.rawName,
+        sampleName: task.sampleName,
+        name: task.name,
+        mode: task.mode,
+        resumeFromStage: resumeFromStageRef.current,
+        onEvent: handleWorkerEvent,
       })
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
       resultUrlRef.current = URL.createObjectURL(new Blob([result.archiveBytes], { type: 'application/zip' }))
@@ -451,33 +527,161 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
       if (cloud.configured) {
         try {
           await cloudSyncRef.current
-          await cloud.uploadResult({ userId: session.user.id, jobId: created.id, archiveBytes: result.archiveBytes, sha256: result.archiveSha256 })
+          await cloud.uploadResult({ userId: task.userId, jobId: task.id, archiveBytes: result.archiveBytes, sha256: result.archiveSha256 })
           setHistory(await cloud.listJobs())
           setJob(current => ({ ...current, ...completedResult, status: 'complete' }))
         } catch (value) {
           setCloudError(`分析已完成且可立即下载，但云端结果保存失败：${value.message}`)
-          await cloud.updateJob(created.id, { status: 'complete', current_stage: 7, progress: 100, completed_at: new Date().toISOString() }).catch(() => {})
+          await cloud.updateJob(task.id, { status: 'complete', current_stage: 7, progress: 100, completed_at: new Date().toISOString() }).catch(() => {})
           setJob(current => ({ ...current, ...completedResult, status: 'complete' }))
         }
       }
+      await taskSyncRef.current
+      await taskStore.clear(task.scope)
+      setActiveTaskId('')
+      setRecoveryNotice('')
     } catch (value) {
+      if (value.code === 'ANALYSIS_INTERRUPTED') return
+      const cancelled = value.code === 'ANALYSIS_CANCELLED'
       setError(value.message)
-      setJob(current => current ? { ...current, status: value.code === 'ANALYSIS_CANCELLED' ? 'cancelled' : 'failed', error: { code: value.code || 'BROWSER_ANALYSIS_FAILED', message: value.message } } : null)
-      if (cloud.configured && activeJobIdRef.current) cloud.updateJob(activeJobIdRef.current, { status: value.code === 'ANALYSIS_CANCELLED' ? 'cancelled' : 'failed' }).catch(() => {})
+      const failure = { code: value.code || 'BROWSER_ANALYSIS_FAILED', message: value.message, at: new Date().toISOString() }
+      setJob(current => current ? { ...current, status: cancelled ? 'cancelled' : 'failed', error: failure } : null)
+      if (cancelled) {
+        await taskSyncRef.current.catch(() => {})
+        await taskStore.clear(task.scope).catch(() => {})
+        setActiveTaskId('')
+      } else {
+        await taskSyncRef.current.catch(() => {})
+        const nextStage = Math.max(resumeFromStageRef.current, stageSummaryRef.current.filter(Boolean).length)
+        await taskStore.update(task.scope, { status: 'failed', nextStage, stageSummary: stageSummaryRef.current.filter(Boolean), error: failure }).catch(() => {})
+      }
+      if (cloud.configured && activeJobIdRef.current) {
+        const stageSummary = [...stageSummaryRef.current.filter(Boolean), { type: 'error', ...failure }]
+        await cloud.updateJob(activeJobIdRef.current, { status: cancelled ? 'cancelled' : 'failed', stage_summary: stageSummary }).catch(() => {})
+        setHistory(await cloud.listJobs().catch(() => history))
+      }
     } finally {
       setSubmitting(false)
     }
   }
 
+  const submit = async event => {
+    event.preventDefault()
+    if (!canStart) return
+    setSubmitting(true)
+    setError('')
+    const scope = cloud.configured ? session?.user?.id : 'local'
+    let cloudJobId = ''
+    try {
+      assertWorkbookFile(rawFile)
+      assertWorkbookFile(samplesFile)
+      if (cloud.configured && (!session?.user || profile?.approval_status !== 'approved')) throw Object.assign(new Error('当前账号尚未通过管理员审批。'), { code: 'ACCOUNT_NOT_APPROVED' })
+      const [rawBytes, sampleBytes] = await Promise.all([rawFile.arrayBuffer(), samplesFile.arrayBuffer()])
+      const task = {
+        id: crypto.randomUUID(), scope, userId: session?.user?.id || '', name: name.trim() || '岛津气质分析', mode,
+        status: 'running', nextStage: 0, stageSummary: [], rawName: rawFile.name, sampleName: samplesFile.name,
+        rawSize: rawFile.size, sampleSize: samplesFile.size, rawBytes, sampleBytes,
+      }
+      if (cloud.configured) {
+        await cloud.createJob({
+          id: task.id, userId: task.userId, name: task.name, mode,
+          sourceNames: { raw: { name: rawFile.name, size: rawFile.size }, sample_info: { name: samplesFile.name, size: samplesFile.size } },
+        })
+        cloudJobId = task.id
+      }
+      await taskStore.save(task)
+      await runTask(task)
+    } catch (value) {
+      setError(value.message)
+      if (cloud.configured && cloudJobId) await cloud.updateJob(cloudJobId, { status: 'failed', stage_summary: [{ type: 'error', code: value.code || 'TASK_PREPARATION_FAILED', message: value.message, at: new Date().toISOString() }] }).catch(() => {})
+      setSubmitting(false)
+    }
+  }
+
+  const restoreActiveTask = async scope => {
+    setRecoveryChecked(false)
+    try {
+      const task = await taskStore.load(scope)
+      if (!task) {
+        setActiveTaskId('')
+        return
+      }
+      taskScopeRef.current = scope
+      activeJobIdRef.current = task.id
+      stageSummaryRef.current = [...(task.stageSummary || [])]
+      resumeFromStageRef.current = Math.max(0, Number(task.nextStage) || 0)
+      taskSyncRef.current = Promise.resolve()
+      setActiveTaskId(task.id)
+      setName(task.name)
+      setMode(task.mode)
+      if (task.status === 'failed') {
+        setJob(jobFromStoredTask(task, 'failed'))
+        setRecoveryNotice('已恢复上次失败任务及错误信息。可重新运行，或更换文件建立新任务。')
+        return
+      }
+      if (task.status === 'waiting_review') {
+        setJob({ ...jobFromStoredTask(task, 'waiting_review'), restoredPause: true })
+        setRecoveryNotice('已恢复到刷新前的复核节点；确认后再继续下一步。')
+        return
+      }
+      setRecoveryChecked(true)
+      await runTask(task, { restored: true })
+    } catch (value) {
+      setError(`无法恢复浏览器任务：${value.message}`)
+    } finally {
+      setRecoveryChecked(true)
+    }
+  }
+
+  useEffect(() => {
+    if (cloud.configured && cloudLoading) return
+    if (cloud.configured && (!session?.user || profile?.approval_status !== 'approved')) {
+      restoreScopeRef.current = ''
+      queueMicrotask(() => setRecoveryChecked(true))
+      return
+    }
+    const scope = cloud.configured ? session.user.id : 'local'
+    if (restoreScopeRef.current === scope) return
+    restoreScopeRef.current = scope
+    restoreActiveTask(scope)
+    // Restore runs once per authenticated scope; runTask is intentionally guarded by restoreScopeRef.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloud.configured, cloudLoading, profile?.approval_status, session?.user?.id, taskStore])
+
   const continueJob = async () => {
     setError('')
+    if (job?.restoredPause) {
+      const task = await taskStore.load(taskScopeRef.current)
+      if (!task) {
+        setError('本地恢复数据已不存在，请重新选择两个输入文件。')
+        return
+      }
+      await taskStore.update(task.scope, { status: 'running' })
+      await runTask({ ...task, status: 'running' }, { restored: true })
+      return
+    }
     workerClientRef.current?.continueReview()
     setJob(current => ({ ...current, status: 'running', updated_at: new Date().toISOString() }))
+    taskSyncRef.current = taskSyncRef.current
+      .then(() => taskStore.update(taskScopeRef.current, { status: 'running' }))
+      .catch(value => setError(`无法保存恢复进度：${value.message}`))
     if (cloud.configured && activeJobIdRef.current) cloud.updateJob(activeJobIdRef.current, { status: 'running' }).catch(value => setCloudError(value.message))
   }
 
   const cancelJob = () => {
     workerClientRef.current?.cancel()
+  }
+
+  const retryJob = async () => {
+    setError('')
+    const task = await taskStore.load(taskScopeRef.current)
+    if (!task) {
+      setError('本地恢复数据已不存在，请重新选择两个输入文件。')
+      return
+    }
+    await taskStore.update(task.scope, { status: 'running', error: null })
+    if (cloud.configured) await cloud.updateJob(task.id, { status: 'running' }).catch(value => setCloudError(value.message))
+    await runTask({ ...task, status: 'running', error: null }, { restored: true })
   }
 
   const downloadCloudResult = async item => {
@@ -488,13 +692,29 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
     } catch (value) { setCloudError(`无法建立下载链接：${value.message}`) }
   }
 
-  const reset = () => {
+  const markInterrupted = async item => {
+    setCloudError('')
+    try {
+      const stageSummary = Array.isArray(item.stage_summary) ? item.stage_summary : []
+      await cloud.updateJob(item.id, {
+        status: 'failed',
+        stage_summary: [...stageSummary, { type: 'interrupted', code: 'LOCAL_INPUTS_UNAVAILABLE', message: '页面已关闭且当前浏览器没有可恢复的输入文件。', at: new Date().toISOString() }],
+      })
+      setHistory(await cloud.listJobs())
+    } catch (value) { setCloudError(`无法更新中断状态：${value.message}`) }
+  }
+
+  const reset = async () => {
     workerClientRef.current?.cancel()
+    await taskSyncRef.current.catch(() => {})
+    await taskStore.clear(taskScopeRef.current).catch(() => {})
     if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
     resultUrlRef.current = ''
     activeJobIdRef.current = ''
     stageSummaryRef.current = []
     cloudSyncRef.current = Promise.resolve()
+    taskSyncRef.current = Promise.resolve()
+    setActiveTaskId(''); setRecoveryNotice('')
     setJob(null); setRawFile(null); setSamplesFile(null); setError('')
     if (rawInputRef.current) rawInputRef.current.value = ''
     if (samplesInputRef.current) samplesInputRef.current.value = ''
@@ -520,13 +740,7 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
         <div className="shimadzu-hero">
           <div className="shimadzu-hero-copy shimadzu-hero-animate">
             <span className="shimadzu-product-kicker"><FlaskConical aria-hidden="true" /> GC–MS FLAVOR WORKFLOW</span>
-            <h1>岛津气质数据一站式分析</h1>
-            <p>从岛津原始工作簿出发，完整执行 Hit #1 提取、化合物筛查、平行补建、半定量、CV30 与作图矩阵输出。每一步都保留证据、报告与质量门禁。</p>
-            <dl className="shimadzu-hero-facts" aria-label="工作台信息">
-              <div><dt>流程</dt><dd>7 个审计节点</dd></div>
-              <div><dt>输入</dt><dd>2 个 Excel 工作簿</dd></div>
-              <div><dt>数据边界</dt><dd>当前浏览器处理</dd></div>
-            </dl>
+            <h1>岛津 GC–MS 风味数据分析工作台</h1>
           </div>
           <div className="shimadzu-hero-status shimadzu-hero-animate">
             <span className={engine.state}>{engine.state === 'ready' ? <ShieldCheck /> : engine.state === 'checking' ? <Loader2 className="spin" /> : <AlertCircle />}</span>
@@ -538,62 +752,70 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
       <main className="shimadzu-main">
         {error && <div className="shimadzu-alert" role="alert"><AlertCircle /><span><strong>当前操作未完成</strong>{error}</span></div>}
         {cloudError && <div className="shimadzu-alert cloud" role="alert"><AlertCircle /><span><strong>云端服务提示</strong>{cloudError}</span></div>}
+        {recoveryNotice && <div className="shimadzu-recovery-notice" role="status" aria-live="polite"><RotateCcw /><span><strong>浏览器任务恢复</strong>{recoveryNotice}</span></div>}
         <AccountPanel cloud={cloud} session={session} profile={profile} loading={cloudLoading} error={cloudError} onRefresh={refreshCloud} />
-        <WorkflowMap job={job} />
 
         {!job ? (
-          <form className="shimadzu-setup" onSubmit={submit}>
-            <section className="shimadzu-input-region shimadzu-reveal" aria-labelledby="input-title">
-              <div className="shimadzu-region-heading"><div><h2 id="input-title">准备输入文件</h2><p>正式文件和示例模板采用相同的数据契约。建议先下载示例核对结构。</p></div><span>2 个 Excel 文件</span></div>
-              <div className="shimadzu-upload-grid">
-                <FilePicker inputRef={rawInputRef} label="岛津原始工作簿" hint="包含 Peak Table、Similarity Search Results 与 Hit #" file={rawFile} onChange={setRawFile} templateHref={api.templateUrl('raw-example')} templateLabel="下载原始工作簿示例" />
-                <FilePicker inputRef={samplesInputRef} label="样品与内标信息表" hint="包含样品分组、形态、内标浓度、添加量与体系" file={samplesFile} onChange={setSamplesFile} templateHref={api.templateUrl('sample-info')} templateLabel="下载样品信息模板" />
-              </div>
-              <div className="shimadzu-upload-note"><Upload /><span>仅接受 .xlsx，每个文件不超过 50 MB。原始文件只在当前浏览器中处理，不上传云端；示例数据仅用于结构验证。</span></div>
-            </section>
+          <>
+            <form className="shimadzu-setup" onSubmit={submit}>
+              <section className="shimadzu-input-region shimadzu-reveal" aria-labelledby="input-title">
+                <div className="shimadzu-region-heading"><div><h2 id="input-title">准备输入文件</h2><p>正式文件和示例模板采用相同的字段结构。建议先下载示例核对内容。</p></div><span>2 个 Excel 文件</span></div>
+                <div className="shimadzu-upload-grid">
+                  <FilePicker inputRef={rawInputRef} label="岛津原始工作簿" hint="包含 Peak Table、Similarity Search Results 与 Hit #" file={rawFile} onChange={setRawFile} templateHref={api.templateUrl('raw-example')} templateLabel="下载原始工作簿示例" />
+                  <FilePicker inputRef={samplesInputRef} label="样品与内标信息表" hint="包含样品分组、形态、内标浓度、添加量与体系" file={samplesFile} onChange={setSamplesFile} templateHref={api.templateUrl('sample-info')} templateLabel="下载样品信息模板" />
+                </div>
+                <div className="shimadzu-upload-note"><Upload /><span>仅接受 .xlsx，每个文件不超过 50 MB。原始文件不上传云端；活动任务会临时保存在当前浏览器，刷新或重新打开后自动恢复。页面关闭期间不会继续计算。</span></div>
+              </section>
 
-            <aside className="shimadzu-settings shimadzu-reveal" aria-labelledby="settings-title">
-              <div className="shimadzu-region-heading"><div><h2 id="settings-title">运行设置</h2><p>科学规则已经由 skill 固定。</p></div></div>
-              <label className="shimadzu-field"><span>任务名称</span><input value={name} maxLength={120} onChange={event => setName(event.target.value)} /></label>
-              <fieldset className="shimadzu-mode-field">
-                <legend>执行方式</legend>
-                <label className={mode === 'continuous' ? 'selected' : ''}><input type="radio" name="mode" checked={mode === 'continuous'} onChange={() => setMode('continuous')} /><span><strong>连续执行</strong><small>自动完成全部七步。</small></span></label>
-                <label className={mode === 'step' ? 'selected' : ''}><input type="radio" name="mode" checked={mode === 'step'} onChange={() => setMode('step')} /><span><strong>逐步复核</strong><small>每完成一步暂停确认。</small></span></label>
-              </fieldset>
-              <dl className="shimadzu-parameter-list"><div><dt>CV 阈值</dt><dd>30%</dd></div><div><dt>响应因子</dt><dd>1</dd></div><div><dt>内标参数</dt><dd>按样品表</dd></div><div><dt>OAV</dt><dd>关闭</dd></div></dl>
-              <button className="shimadzu-run-button" type="submit" disabled={!canStart}>{submitting ? <Loader2 className="spin" /> : <Play />}{submitting ? '正在建立任务' : '开始一站式分析'}</button>
-              {cloud.configured && !canAnalyze && <p className="shimadzu-run-gate"><ShieldCheck />登录且通过管理员审批后开放计算。</p>}
-            </aside>
+              <aside className="shimadzu-settings shimadzu-reveal" aria-labelledby="settings-title">
+                <div className="shimadzu-region-heading"><div><h2 id="settings-title">运行设置</h2><p>分析参数依据已确认的科研规则执行。</p></div></div>
+                <label className="shimadzu-field"><span>任务名称</span><input value={name} maxLength={120} onChange={event => setName(event.target.value)} /></label>
+                <fieldset className="shimadzu-mode-field">
+                  <legend>执行方式</legend>
+                  <label className={mode === 'continuous' ? 'selected' : ''}><input type="radio" name="mode" checked={mode === 'continuous'} onChange={() => setMode('continuous')} /><span><strong>连续执行</strong><small>自动完成全部七步。</small></span></label>
+                  <label className={mode === 'step' ? 'selected' : ''}><input type="radio" name="mode" checked={mode === 'step'} onChange={() => setMode('step')} /><span><strong>逐步复核</strong><small>每完成一步暂停确认。</small></span></label>
+                </fieldset>
+                <dl className="shimadzu-parameter-list"><div><dt>CV 阈值</dt><dd>30%</dd></div><div><dt>响应因子</dt><dd>1</dd></div><div><dt>内标参数</dt><dd>按样品表</dd></div><div><dt>OAV</dt><dd>关闭</dd></div></dl>
+                <button className="shimadzu-run-button" type="submit" disabled={!canStart}>{submitting ? <Loader2 className="spin" /> : <Play />}{startFeedback.buttonLabel}</button>
+                <p className={`shimadzu-run-readiness${fileReadiness.ready && canAnalyze ? ' ready' : ''}`} role="status" aria-live="polite">{startFeedback.message}</p>
+                {cloud.configured && !canAnalyze && <p className="shimadzu-run-gate"><ShieldCheck />登录且通过管理员审批后开放计算。</p>}
+              </aside>
+            </form>
+            <WorkflowMap job={job} />
             <LiveMonitor job={null} capabilities={null} engine={engine} />
-          </form>
+          </>
         ) : (
-          <div className="shimadzu-job-workspace">
-            <section className="shimadzu-job-bar shimadzu-reveal">
-              <div className="shimadzu-job-identity"><span className={`shimadzu-job-badge ${job.status}`}>{STATUS_LABELS[job.status] || job.status}</span><div><h2>{job.name || name}</h2><code>{job.id}</code></div></div>
-              <div className="shimadzu-job-progress"><div><span>总流程</span><strong>{progress.completed} / {progress.total || 7}</strong></div><div className="shimadzu-progress-track"><span style={{ '--progress': progress.completed / (progress.total || 7) }} /></div></div>
-              <div className="shimadzu-job-actions">
-                {job.status === 'waiting_review' && <button type="button" className="primary" onClick={continueJob}><ChevronRight />复核完成，继续</button>}
-                {job.status === 'running' && <button type="button" onClick={cancelJob}><AlertCircle />取消分析</button>}
-                {job.status === 'saving' && <span className="shimadzu-saving"><Loader2 className="spin" />正在保存结果</span>}
-                {job.status === 'complete' && <a className="primary" href={job.downloadUrl} download={job.resultFileName}><Download />下载结果包</a>}
-                {job.status !== 'saving' && <button type="button" onClick={reset}><RotateCcw />新任务</button>}
-              </div>
-            </section>
-            {job.error && <div className="shimadzu-inline-error"><AlertCircle /><span><strong>{job.error.code}</strong>{job.error.message}</span></div>}
-            <LiveMonitor job={job} capabilities={null} engine={engine} />
-            <section className="shimadzu-stage-detail shimadzu-reveal" aria-labelledby="detail-title">
-              <div className="shimadzu-region-heading"><div><h2 id="detail-title">步骤状态与处理计数</h2><p>状态来自各步骤 manifest，WARN 与 REVIEW 会保留到报告。</p></div></div>
-              <ol>
-                {WORKFLOW.map(stage => {
-                  const runtime = job.stages?.[stage.index] || {}
-                  const status = runtime.status || 'pending'
-                  return <li key={stage.index} className={`state-${status}`}><span className="shimadzu-stage-status"><StageMark status={status} /></span><div><p><b>{String(stage.index).padStart(2, '0')}</b><strong>{stage.label}</strong></p><small>{stage.description}</small></div><div className="shimadzu-stage-result"><span>{STATUS_LABELS[status] || status}</span>{Object.keys(runtime.counts || {}).length > 0 && <small>{Object.entries(runtime.counts).slice(0, 3).map(([key, value]) => `${key} ${value}`).join(' · ')}</small>}</div></li>
-                })}
-              </ol>
-            </section>
-          </div>
+          <>
+            <div className="shimadzu-job-workspace">
+              <section className="shimadzu-job-bar shimadzu-reveal">
+                <div className="shimadzu-job-identity"><span className={`shimadzu-job-badge ${job.status}`}>{STATUS_LABELS[job.status] || job.status}</span><div><h2>{job.name || name}</h2><code>{job.id}</code></div></div>
+                <div className="shimadzu-job-progress"><div><span>总流程</span><strong>{progress.completed} / {progress.total || 7}</strong></div><div className="shimadzu-progress-track"><span style={{ '--progress': progress.completed / (progress.total || 7) }} /></div></div>
+                <div className="shimadzu-job-actions">
+                  {job.status === 'waiting_review' && <button type="button" className="primary" onClick={continueJob}><ChevronRight />复核完成，继续</button>}
+                  {job.status === 'running' && <button type="button" onClick={cancelJob}><AlertCircle />取消分析</button>}
+                  {job.status === 'failed' && <button type="button" className="primary" onClick={retryJob}><RotateCcw />重新运行</button>}
+                  {job.status === 'saving' && <span className="shimadzu-saving"><Loader2 className="spin" />正在保存结果</span>}
+                  {job.status === 'complete' && <a className="primary" href={job.downloadUrl} download={job.resultFileName}><Download />下载结果包</a>}
+                  {job.status !== 'saving' && <button type="button" onClick={reset}><RotateCcw />新任务</button>}
+                </div>
+              </section>
+              {job.error && <div className="shimadzu-inline-error"><AlertCircle /><span><strong>{job.error.code}</strong>{job.error.message}</span></div>}
+              <LiveMonitor job={job} capabilities={null} engine={engine} />
+              <section className="shimadzu-stage-detail shimadzu-reveal" aria-labelledby="detail-title">
+                <div className="shimadzu-region-heading"><div><h2 id="detail-title">步骤状态与处理计数</h2><p>各步骤的运行状态、警告和待复核项会保留到最终报告。</p></div></div>
+                <ol>
+                  {WORKFLOW.map(stage => {
+                    const runtime = job.stages?.[stage.index] || {}
+                    const status = runtime.status || 'pending'
+                    return <li key={stage.index} className={`state-${status}`}><span className="shimadzu-stage-status"><StageMark status={status} /></span><div><p><b>{String(stage.index).padStart(2, '0')}</b><strong>{stage.label}</strong></p><small>{stage.description}</small></div><div className="shimadzu-stage-result"><span>{STATUS_LABELS[status] || status}</span>{Object.keys(runtime.counts || {}).length > 0 && <small>{Object.entries(runtime.counts).slice(0, 3).map(([key, value]) => `${key} ${value}`).join(' · ')}</small>}</div></li>
+                  })}
+                </ol>
+              </section>
+            </div>
+            <WorkflowMap job={job} />
+          </>
         )}
-        <HistoryPanel jobs={history} onDownload={downloadCloudResult} />
+        <HistoryPanel jobs={history} interruptedJobIds={interruptedJobIds} onDownload={downloadCloudResult} onMarkInterrupted={markInterrupted} />
       </main>
     </div>
   )

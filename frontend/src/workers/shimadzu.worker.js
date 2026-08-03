@@ -21,13 +21,16 @@ self.onmessage = async ({ data }) => {
 
   controller = new AbortController()
   try {
+    const resumeFromStage = Number.isInteger(data.resumeFromStage) ? Math.max(0, Math.min(6, data.resumeFromStage)) : 0
     const result = await runShimadzuBrowserPipeline({
       ...data,
       signal: controller.signal,
       onEvent: event => {
         if (event.type !== 'complete') self.postMessage(event)
       },
-      reviewGate: data.mode === 'step' ? waitForReview : undefined,
+      reviewGate: data.mode === 'step'
+        ? stage => stage < resumeFromStage ? Promise.resolve() : waitForReview()
+        : undefined,
     })
     const archiveBytes = result.archiveBytes.buffer
     self.postMessage({
