@@ -273,7 +273,7 @@ const parseThreshold = (value) => {
   if (!exactMatch) return { value: null, unit: null };
   const numericText = exactMatch[1].replace(/,/g, '').replace(/\s+/g, '');
   const parsedValue = Number(numericText);
-  return Number.isFinite(parsedValue)
+  return Number.isFinite(parsedValue) && parsedValue > 0
     ? { value: parsedValue, unit: exactMatch[2]?.replace(/\s+/g, '') ?? null }
     : { value: null, unit: null };
 };
@@ -328,13 +328,48 @@ const thresholdSignature = (record) => [
   record.sourceRecordKey ?? '',
 ].join('|');
 
-const toThresholdRecords = (matchedResults, integratedResults) => {
+const foreignCasReferences = (entry, currentCas) => [
+  ...String(entry ?? '').matchAll(/(?<!\d)(\d{2,7}-\d{2}-\d)(?!\d)/g),
+].map(match => match[1]).filter(cas => cas !== normaliseCas(currentCas));
+
+const hasExplicitThresholdSemantics = (entry) => {
+  const text = String(entry ?? '').trim();
+  if (parseStringThreshold(text).type != null) return true;
+  return /(?:threshold|阈值)/i.test(text) && /\d/.test(text);
+};
+
+const toThresholdEvidence = (matchedResults, integratedResults) => {
   const seenOrigins = new Map();
+  const seenCrossReferenceOrigins = new Map();
   const occurrences = new Map();
-  return thresholdSources(matchedResults, integratedResults).flatMap(({ item, origin }) => {
+  const crossReferenceOccurrences = new Map();
+  const records = [];
+  const crossReferences = [];
+  thresholdSources(matchedResults, integratedResults).forEach(({ item, origin }) => {
     const entityKey = entityKeyFor(item);
-    return asArray(item.threshold_data).flatMap((entry) => {
+    asArray(item.threshold_data).forEach((entry) => {
       const stringEntry = typeof entry === 'string';
+      const targetCases = stringEntry ? foreignCasReferences(entry, item.cas) : [];
+      if (targetCases.length > 0 && !hasExplicitThresholdSemantics(entry)) {
+        const signature = `${entityKey}|${item.medium ?? ''}|${normaliseText(entry)}|${targetCases.join(',')}`;
+        const origins = seenCrossReferenceOrigins.get(signature) ?? new Set();
+        if (origins.size > 0 && !origins.has(origin)) return;
+        origins.add(origin);
+        seenCrossReferenceOrigins.set(signature, origins);
+        const idBase = `crossref:${entityKey}|${item.medium ?? ''}|${normaliseText(entry)}`;
+        const occurrence = crossReferenceOccurrences.get(idBase) ?? 0;
+        crossReferenceOccurrences.set(idBase, occurrence + 1);
+        crossReferences.push({
+          id: `${idBase}:${occurrence}`,
+          raw: entry,
+          originalText: entry,
+          currentCas: normaliseCas(item.cas) || null,
+          targetCas: targetCases[0],
+          targetCases: [...new Set(targetCases)],
+          medium: item.medium ?? null,
+        });
+        return;
+      }
       const parsedString = stringEntry ? parseStringThreshold(entry) : null;
       const hasObjectQualifier = !stringEntry && (
         [entry?.comparator, entry?.operator, entry?.qualifier]
@@ -370,15 +405,16 @@ const toThresholdRecords = (matchedResults, integratedResults) => {
       };
       const signature = `${entityKey}|${thresholdSignature(record)}`;
       const origins = seenOrigins.get(signature) ?? new Set();
-      if (origins.size > 0 && !origins.has(origin)) return [];
+      if (origins.size > 0 && !origins.has(origin)) return;
       origins.add(origin);
       seenOrigins.set(signature, origins);
       const idBase = record.sourceRecordKey ?? `${record.cas ?? entityKey}|${record.medium ?? ''}|${normaliseText(originalText)}`;
       const occurrence = occurrences.get(idBase) ?? 0;
       occurrences.set(idBase, occurrence + 1);
-      return [{ ...record, id: record.sourceRecordKey && occurrence === 0 ? record.sourceRecordKey : `${idBase}:${occurrence}` }];
+      records.push({ ...record, id: record.sourceRecordKey && occurrence === 0 ? record.sourceRecordKey : `${idBase}:${occurrence}` });
     });
   });
+  return { records, crossReferences };
 };
 
 const sensoryValues = (value) => asArray(value)
@@ -448,7 +484,9 @@ const bookThresholdValue = (record, quality) => {
   const values = asArray(record?.values).filter(value => value?.role == null || value.role === 'threshold');
   if (values.length !== 1 || values[0].high != null) return { value: null, unit: null };
   const parsed = Number(values[0].low);
-  return Number.isFinite(parsed) ? { value: parsed, unit: values[0].unit ?? null } : { value: null, unit: null };
+  return Number.isFinite(parsed) && parsed > 0
+    ? { value: parsed, unit: values[0].unit ?? null }
+    : { value: null, unit: null };
 };
 
 const toBookThresholdRecords = (bookThresholds) => asArray(bookThresholds).filter(Boolean).map((entry, index) => {
@@ -503,6 +541,7 @@ export function buildCompoundDossier({
     Object.entries(sourceStates && typeof sourceStates === 'object' ? sourceStates : {})
       .map(([name, state]) => [name, normalizeSourceStatus(state)]),
   );
+  const thresholdEvidence = toThresholdEvidence(matched, integrated);
 
   return {
     identity: {
@@ -517,10 +556,10 @@ export function buildCompoundDossier({
     sourceStates: normalizedSourceStates,
     overview: chapter(),
     sensory: chapter(toSensoryRecords(integrated)),
-    thresholds: chapter([
-      ...toThresholdRecords(matched, integrated),
-      ...toBookThresholdRecords(bookThresholds),
-    ]),
+    thresholds: {
+      records: [...thresholdEvidence.records, ...toBookThresholdRecords(bookThresholds)],
+      crossReferences: thresholdEvidence.crossReferences,
+    },
     spectra: chapter(toIntegratedRecords(integrated, ['spectra', 'pubchem_spectra'])),
     biochemistry: chapter(toIntegratedRecords(integrated, ['biochemistry', 'pathways'])),
     bioactivity: chapter(toIntegratedRecords(integrated, ['bioactivity', 'activities'])),

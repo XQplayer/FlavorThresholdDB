@@ -29,8 +29,36 @@ const recordSummary = (record, isEnglish) => (
   || (isEnglish ? 'Threshold source record' : '阈值来源记录')
 );
 
+const lineageText = (value) => {
+  if (value == null || value === '') return null;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) return value.map(lineageText).filter(Boolean).join(' · ');
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return null;
+  }
+};
+
+const correctionFields = (correction = {}) => ({
+  original: lineageText(
+    correction.source_text
+    ?? correction.original_text
+    ?? correction.original_value
+    ?? correction.from,
+  ),
+  corrected: lineageText(
+    correction.corrected_text
+    ?? correction.corrected_value
+    ?? correction.to,
+  ),
+  reason: lineageText(correction.reason ?? correction.correction_reason),
+});
+
 const recordSourceSummary = (record, isEnglish) => {
   const source = record.source || (isEnglish ? 'Source not stated' : '来源未说明');
+  const summary = recordSummary(record, isEnglish).toLocaleLowerCase().replace(/\s+/g, ' ');
+  if (record.source && summary.includes(record.source.toLocaleLowerCase().replace(/\s+/g, ' '))) return null;
   if (record.sourceKind !== 'book' || record.page == null) return source;
   return isEnglish ? `${source}, page ${record.page}` : `${source} · 第 ${record.page} 页`;
 };
@@ -117,6 +145,48 @@ export default function ThresholdEvidenceChapter({ records = [], filters, onFilt
                   {record.quality?.associationConfidence && <div><dt>{isEnglish ? 'Association confidence' : '关联置信度'}</dt><dd>{record.quality.associationConfidence}</dd></div>}
                   {record.quality?.reviewStatus && <div><dt>{isEnglish ? 'Review status' : '审核状态'}</dt><dd>{record.quality.reviewStatus}</dd></div>}
                   {record.quality?.reviewFlags?.length > 0 && <div><dt>{isEnglish ? 'Review flags' : '审核标记'}</dt><dd>{record.quality.reviewFlags.join('、')}</dd></div>}
+                  {record.quality?.sourceCorrections?.length > 0 && (
+                    <div>
+                      <dt>{isEnglish ? 'Source corrections' : '来源修正'}</dt>
+                      <dd>
+                        <ul className="threshold-lineage-list">
+                          {record.quality.sourceCorrections.map((correction, index) => {
+                            const fields = correctionFields(correction);
+                            return (
+                              <li key={`${fields.original}-${fields.corrected}-${index}`}>
+                                {fields.original && <span><strong>{isEnglish ? 'Original' : '原值'}</strong><code>{fields.original}</code></span>}
+                                {fields.corrected && <span><strong>{isEnglish ? 'Corrected' : '修正值'}</strong><code>{fields.corrected}</code></span>}
+                                {fields.reason && <span><strong>{isEnglish ? 'Reason' : '原因'}</strong><code>{fields.reason}</code></span>}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </dd>
+                    </div>
+                  )}
+                  {record.quality?.subjectResolution && (() => {
+                    const resolution = record.quality.subjectResolution;
+                    const subject = lineageText(resolution.subject_label ?? resolution.subject ?? resolution.canonical_name);
+                    const resolutionType = lineageText(resolution.resolution_type);
+                    const evidence = lineageText(
+                      resolution.source_page_evidence
+                      ?? resolution.source_locator
+                      ?? resolution.evidence_contains,
+                    );
+                    if (!subject && !resolutionType && !evidence) return null;
+                    return (
+                      <div>
+                        <dt>{isEnglish ? 'Subject resolution' : '主体解析'}</dt>
+                        <dd>
+                          <div className="threshold-lineage-fields">
+                            {subject && <span><strong>{isEnglish ? 'Subject' : '主体'}</strong><code>{subject}</code></span>}
+                            {resolutionType && <span><strong>{isEnglish ? 'Resolution type' : '解析类型'}</strong><code>{resolutionType}</code></span>}
+                            {evidence && <span><strong>{isEnglish ? 'Source-page evidence' : '源页证据'}</strong><code>{evidence}</code></span>}
+                          </div>
+                        </dd>
+                      </div>
+                    );
+                  })()}
                 </dl>
               )}
             />

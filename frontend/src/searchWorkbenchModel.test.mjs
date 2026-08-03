@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import * as searchWorkbenchModel from './searchWorkbenchModel.js';
 import {
@@ -345,6 +346,40 @@ test('maps production-style string thresholds without losing comparator or range
   assert.equal(filterThresholdRecords(records, createDefaultChapterFilters().thresholds).length, 2);
 });
 
+test('separates foreign-CAS cross references while retaining explicit current threshold evidence', () => {
+  const crossReference = '          [1506-02-1]';
+  const mixedEvidence = 'See [1506-02-1]; Current compound d 0.005 mg/L';
+  const dossier = buildCompoundDossier({
+    matchedResults: [{
+      cas: '164524-93-0',
+      medium: '空气',
+      threshold_data: [crossReference, mixedEvidence],
+    }],
+  });
+  assert.deepEqual(dossier.thresholds.records.map(record => record.raw), [mixedEvidence]);
+  assert.deepEqual(dossier.thresholds.crossReferences, [{
+    id: 'crossref:cas:164524-93-0|空气|[1506-02-1]:0',
+    raw: crossReference,
+    originalText: crossReference,
+    currentCas: '164524-93-0',
+    targetCas: '1506-02-1',
+    targetCases: ['1506-02-1'],
+    medium: '空气',
+  }]);
+});
+
+test('keeps zero and non-positive string thresholds unparsed', () => {
+  const source = 'Deadman & Prigg (1959) d 0.00';
+  const [record] = buildCompoundDossier({
+    matchedResults: [{ cas: '2365-48-2', medium: '空气', threshold_data: [source] }],
+  }).thresholds.records;
+  assert.equal(record.value, null);
+  assert.equal(record.unit, null);
+  assert.equal(record.parseStatus, 'unparsed');
+  assert.equal(record.raw, source);
+  assert.equal(record.originalText, source);
+});
+
 test('keeps a typed threshold range unparsed instead of collapsing it to the lower bound', () => {
   const source = 'Wise et al. (2007); Miyazawa et al. (2009a) d 0.017 - 0.020';
   const [record] = buildCompoundDossier({
@@ -558,6 +593,27 @@ test('keeps reviewed or weakly associated book thresholds unstructured with qual
     subjectResolution: { resolution_type: 'source_identity_error' },
   });
   assert.equal(record.raw, bookThreshold);
+});
+
+test('production scan isolates cross references and has no parsed non-positive thresholds', () => {
+  const productionData = JSON.parse(readFileSync(
+    new URL('../public/aroma_data_merged.json', import.meta.url),
+    'utf8',
+  ));
+  const dossier = buildCompoundDossier({ matchedResults: productionData });
+  const crossReferenceSignatures = new Set(dossier.thresholds.crossReferences.map(record => (
+    `${record.currentCas}|${record.medium}|${record.raw}`
+  )));
+  const leakedCrossReferences = dossier.thresholds.records.filter(record => (
+    crossReferenceSignatures.has(`${record.cas}|${record.medium}|${record.raw}`)
+  ));
+  const parsedNonPositive = dossier.thresholds.records.filter(record => (
+    record.value != null && record.value <= 0
+  ));
+  assert.equal(dossier.thresholds.records.length, 20277);
+  assert.equal(dossier.thresholds.crossReferences.length, 56);
+  assert.equal(leakedCrossReferences.length, 0);
+  assert.equal(parsedNonPositive.length, 0);
 });
 
 test('normalizes requested source states while retaining state fields', () => {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -177,6 +178,30 @@ try {
     }),
     });
   });
+  const bookFixture = JSON.parse(readFileSync(
+    path.join(frontendRoot, 'public', 'book_flavor_chemistry_index.json'),
+    'utf8',
+  ));
+  const lineageThreshold = bookFixture.thresholds.find(record => (
+    record.entity_cas === '141-78-6'
+    && record.raw_text === '水中觉察嗅阈值0.6μg/L，识别 '
+  ));
+  assert.ok(lineageThreshold, 'book lineage fixture target exists');
+  lineageThreshold.source_corrections = [{
+    source_text: '0.6pg/L',
+    corrected_text: '0.6μg/L',
+    reason: 'verified_against_source_page',
+  }];
+  lineageThreshold.subject_resolution = {
+    subject_label: '乙酸乙酯',
+    resolution_type: 'source_verified_context_subject',
+    source_page_evidence: 'page-182.jpg',
+  };
+  await page.route('**/book_flavor_chemistry_index.json*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(bookFixture),
+  }));
 
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
   const input = page.getByLabel('化合物名称或 CAS 号');
@@ -235,11 +260,13 @@ try {
   const rawRecordButton = workbench.getByRole('button', { name: /原始记录/ }).first();
   await rawRecordButton.waitFor({ state: 'visible' });
   assert.equal(await rawRecordButton.getAttribute('aria-expanded'), 'false', 'raw evidence is collapsed by default');
-  assert.match(
-    await rawRecordButton.locator('.evidence-record-disclosure__summary > span:not(.evidence-record-disclosure__sr-only)').textContent(),
-    /Backman \(1917\).*本地.*空气.*识别阈/,
-    'collapsed threshold metadata includes the actual source, origin kind, medium, and type',
+  const collapsedBackmanText = await rawRecordButton.textContent();
+  assert.equal(
+    collapsedBackmanText.match(/Backman \(1917\)/g)?.length,
+    1,
+    'collapsed threshold shows the actual source once without repeating it in metadata',
   );
+  assert.match(collapsedBackmanText, /本地.*空气.*识别阈/, 'collapsed threshold retains origin kind, medium, and type');
   for (let remainingControl = 0; remainingControl < 15; remainingControl += 1) {
     await page.keyboard.press('Tab');
   }
@@ -308,12 +335,26 @@ try {
   await bookFilterButton.click();
   const bookDisclosure = thresholdPanel.getByRole('button', { name: /水中觉察嗅阈值0\.6μg\/L/ }).first();
   await bookDisclosure.waitFor({ state: 'visible' });
+  assert.match(
+    await bookDisclosure.textContent(),
+    /酒类风味化学.*第 182 页.*书籍.*水.*odor/,
+    'collapsed book threshold supplies real source and page when the original title does not',
+  );
   await bookDisclosure.click();
   const bookEvidence = thresholdPanel.locator('.evidence-record-disclosure').filter({ hasText: '水中觉察嗅阈值0.6μg/L' }).first();
   await bookEvidence.getByText('酒类风味化学', { exact: true }).waitFor({ state: 'visible' });
   await bookEvidence.getByText('水', { exact: true }).waitFor({ state: 'visible' });
   await bookEvidence.getByText('odor', { exact: true }).waitFor({ state: 'visible' });
   await bookEvidence.getByText('μg/L', { exact: true }).waitFor({ state: 'visible' });
+  await bookEvidence.getByText('原值', { exact: true }).waitFor({ state: 'visible' });
+  await bookEvidence.getByText('0.6pg/L', { exact: true }).waitFor({ state: 'visible' });
+  await bookEvidence.getByText('修正值', { exact: true }).waitFor({ state: 'visible' });
+  await bookEvidence.getByText('0.6μg/L', { exact: true }).waitFor({ state: 'visible' });
+  await bookEvidence.getByText('verified_against_source_page', { exact: true }).waitFor({ state: 'visible' });
+  await bookEvidence.getByText('乙酸乙酯', { exact: true }).waitFor({ state: 'visible' });
+  await bookEvidence.getByText('source_verified_context_subject', { exact: true }).waitFor({ state: 'visible' });
+  await bookEvidence.getByText('page-182.jpg', { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await bookEvidence.getByText('[object Object]', { exact: true }).count(), 0, 'lineage never stringifies objects implicitly');
   await allTypeFilter.click();
   await rawRecordButton.focus();
 
@@ -464,6 +505,16 @@ try {
   );
   await workbench.getByRole('button', { name: /阈值/ }).click();
   assert.equal(await workbench.getByText('939-97-9', { exact: false }).count(), 0, 'selected threshold chapter excludes the other entity CAS');
+
+  await input.fill('164524-93-0');
+  await workbench.getByText('CAS 164524-93-0', { exact: true }).waitFor({ state: 'visible' });
+  await workbench.getByRole('button', { name: /阈值/ }).click();
+  const crossReferenceThresholdPanel = workbench.locator('.threshold-evidence-chapter');
+  assert.equal(
+    await crossReferenceThresholdPanel.locator('.evidence-record-disclosure__summary').filter({ hasText: '1506-02-1' }).count(),
+    0,
+    'foreign target CAS is not rendered as a threshold title for the current compound',
+  );
 
   await input.fill('141-78-6');
   await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor({ state: 'visible' });

@@ -494,6 +494,43 @@
   white-space: pre-wrap;
 }
 
+.threshold-lineage-list,
+.threshold-lineage-fields {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.threshold-lineage-list li,
+.threshold-lineage-fields {
+  padding: 0.7rem;
+  border: 1px solid #9bb4c6;
+  border-radius: 0.65rem;
+  background: #e8f3f9;
+}
+
+.threshold-lineage-list span,
+.threshold-lineage-fields span {
+  display: grid;
+  grid-template-columns: minmax(5rem, auto) minmax(0, 1fr);
+  gap: 0.6rem;
+  overflow-wrap: anywhere;
+}
+
+.threshold-lineage-list strong,
+.threshold-lineage-fields strong {
+  color: #294e67;
+  font-size: 0.75rem;
+}
+
+.threshold-lineage-list code,
+.threshold-lineage-fields code {
+  color: #102a43;
+  font: inherit;
+}
+
 .overview-chapter,
 .sensory-sources-chapter,
 .threshold-evidence-chapter {
