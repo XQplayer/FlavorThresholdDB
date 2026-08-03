@@ -23,7 +23,7 @@ import {
   TerminalSquare,
   Upload,
 } from 'lucide-react'
-import { createShimadzuApi, getMonitorStageIndex, getStageProgress, isActiveJob } from '../../lib/shimadzuApi'
+import { createShimadzuApi, getEnginePresentation, getMonitorStageIndex, getStageProgress, isActiveJob } from '../../lib/shimadzuApi'
 import './ShimadzuAnalysisPage.css'
 
 gsap.registerPlugin(useGSAP, ScrollTrigger)
@@ -114,6 +114,7 @@ function WorkflowMap({ job }) {
 }
 
 function LiveMonitor({ job, capabilities }) {
+  const engine = getEnginePresentation(capabilities)
   const selectedIndex = getMonitorStageIndex(job, WORKFLOW.length)
   const stage = WORKFLOW[selectedIndex]
   const liveStage = job?.stages?.[selectedIndex]
@@ -135,7 +136,7 @@ function LiveMonitor({ job, capabilities }) {
           <span className="shimadzu-live-dot" />
           <div><h2 id="monitor-title">实时分析监控</h2><p>{title}</p></div>
         </div>
-        <span className="shimadzu-engine-chip"><Activity />{capabilities?.available ? 'ENGINE ONLINE' : 'ENGINE CHECK'}</span>
+        <span className="shimadzu-engine-chip"><Activity />{engine.chip}</span>
       </div>
       <div className="shimadzu-monitor-body">
         <div className="shimadzu-current-work">
@@ -231,6 +232,7 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
   }, { scope: pageRef, dependencies: [Boolean(job), reducedMotion], revertOnUpdate: true })
 
   const progress = getStageProgress(job)
+  const engine = getEnginePresentation(capabilities)
   const canStart = rawFile && samplesFile && capabilities?.available && !submitting
 
   const submit = async event => {
@@ -291,8 +293,8 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
             </dl>
           </div>
           <div className="shimadzu-hero-status shimadzu-hero-animate">
-            <span className={capabilities?.available ? 'online' : ''}>{capabilities?.available ? <ShieldCheck /> : <Loader2 className="spin" />}</span>
-            <div><small>LOCAL ENGINE</small><strong>{capabilities?.available ? '本地分析引擎已就绪' : '正在连接分析引擎'}</strong><p>OAV 暂未启用，结果保留完整审计链。</p></div>
+            <span className={engine.state}>{engine.state === 'ready' ? <ShieldCheck /> : engine.state === 'checking' ? <Loader2 className="spin" /> : <AlertCircle />}</span>
+            <div><small>LOCAL ENGINE</small><strong>{engine.title}</strong><p>{engine.detail}</p></div>
           </div>
         </div>
       </header>
