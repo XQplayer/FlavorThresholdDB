@@ -10,6 +10,7 @@
     "test:book-search": "node --test src/bookSearch.test.mjs",
     "test:static-routes": "node --test src/staticRoutes.test.mjs",
     "test:shimadzu": "node --test src/shimadzuApi.test.mjs",
+    "test:shimadzu-browser": "node --test src/lib/shimadzuBrowserContract.test.mjs src/lib/shimadzuCloud.test.mjs src/lib/shimadzuWorkerClient.test.mjs src/shimadzu-core/*.test.mjs src/workers/*.test.mjs",
     "test:e2e": "node ../scripts/e2e/verify_release_candidate.mjs",
     "preview": "vite preview",
     "predeploy": "npm run build",
@@ -23,10 +24,12 @@
     "@tailwindcss/vite": "^4.2.2",
     "d3-hierarchy": "^3.1.2",
     "gsap": "^3.15.0",
+    "jszip": "^3.10.1",
     "lucide-react": "^1.0.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "tailwindcss": "^4.2.2"
+    "tailwindcss": "^4.2.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
