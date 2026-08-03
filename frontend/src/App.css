@@ -4689,3 +4689,38 @@ select:focus-visible,
 .structure-evidence-grid a span, .structure-evidence-grid a small { color: #66777b; font-size: .72rem; }
 .structure-evidence > footer { margin-top: .75rem; padding-top: .65rem; border-top: 1px solid #dfe7e9; color: #68787c; font-size: .78rem; }
 @media (max-width: 820px) { .structure-evidence { margin-inline: .75rem; } .structure-evidence-grid { grid-template-columns: 1fr; } .structure-evidence > header { flex-direction: column; } }
+.core-search-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  max-width: 72rem;
+  margin: 1.25rem auto;
+  padding: 1.25rem;
+  border: 1px solid #c67a7a;
+  border-radius: 1rem;
+  background: #fff3f3;
+  color: #652626;
+}
+
+.core-search-error svg {
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.core-search-error h2,
+.core-search-error p {
+  margin: 0 0 0.65rem;
+}
+
+.core-search-error button {
+  min-height: 2.75rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid #8f3e3e;
+  border-radius: 0.7rem;
+  background: #fff;
+  color: #652626;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}

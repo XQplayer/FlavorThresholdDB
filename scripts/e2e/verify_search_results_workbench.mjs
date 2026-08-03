@@ -123,6 +123,225 @@ const structureFixture = {
   gpcr_proteins: [],
   sources: { 'RCSB PDB': { status: 'ok' }, 'AlphaFold DB': { status: 'ok' }, GPCRdb: { status: 'no_data' } },
 };
+
+async function verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin }) {
+  const coreFixture = readFileSync(path.join(frontendRoot, 'public', 'aroma_data_merged.json'), 'utf8');
+  const bookFixture = readFileSync(path.join(frontendRoot, 'public', 'book_flavor_chemistry_index.json'), 'utf8');
+  const successfulCompound = {
+    pubchem: {
+      found: true,
+      cid: 8857,
+      title: 'Ethyl acetate',
+      molecular_formula: 'C4H8O2',
+      smiles: 'CCOC(=O)C',
+      inchi_key: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N',
+    },
+    pubchem_volatile: { found: false, status: 'no_data', properties: {} },
+    flavordb: { found: true, cid: 8857, flavor_profile: ['fruity'] },
+  };
+  const evidence = {};
+  const openScenario = async ({ femaHandler, compoundHandler, coreHandler, bookHandler } = {}) => {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const page = await context.newPage();
+    const counts = { core: 0, book: 0, fema: 0, compound: 0 };
+    page.on('request', request => {
+      const url = new URL(request.url());
+      if (url.pathname.endsWith('/aroma_data_merged.json')) counts.core += 1;
+      if (url.pathname.endsWith('/book_flavor_chemistry_index.json')) counts.book += 1;
+    });
+    if (coreHandler) await page.route('**/aroma_data_merged.json', route => coreHandler(route, counts));
+    if (bookHandler) await page.route('**/book_flavor_chemistry_index.json*', route => bookHandler(route, counts));
+    await page.route('**/fema?**', route => {
+      counts.fema += 1;
+      return (femaHandler || (currentRoute => currentRoute.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ found: true, name: 'Ethyl acetate', flavor_profile: 'fruity' }),
+      })))(route, counts);
+    });
+    await page.route('**/compound?**', route => {
+      counts.compound += 1;
+      return (compoundHandler || (currentRoute => currentRoute.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(successfulCompound),
+      })))(route, counts);
+    });
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+    return { context, page, counts };
+  };
+
+  const compoundScenario = await openScenario({
+    compoundHandler: async (route, counts) => {
+      if (counts.compound === 1) return route.fulfill({ status: 503, body: 'fixture compound failure' });
+      await new Promise(resolve => setTimeout(resolve, 250));
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(successfulCompound) });
+    },
+  });
+  try {
+    const { page, counts } = compoundScenario;
+    await page.getByLabel('化合物名称或 CAS 号').fill('141-78-6');
+    const workbench = page.getByTestId('search-results-workbench');
+    await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor();
+    const summary = workbench.getByLabel('来源状态');
+    const local = summary.getByRole('listitem').filter({ hasText: '本地阈值' });
+    await local.getByText('可用', { exact: true }).waitFor();
+    const pubchem = summary.getByRole('listitem').filter({ hasText: 'PubChem' });
+    const flavordb = summary.getByRole('listitem').filter({ hasText: 'FlavorDB2' });
+    await pubchem.getByText('失败', { exact: true }).waitFor();
+    await flavordb.getByText('失败', { exact: true }).waitFor();
+    const beforeRetry = { ...counts };
+    assert.deepEqual(beforeRetry, { core: 1, book: 1, fema: 1, compound: 1 }, 'compound scenario starts each source exactly once');
+    await pubchem.getByRole('button', { name: '重试', exact: true }).click();
+    await pubchem.getByRole('button', { name: '重试中…', exact: true }).waitFor();
+    assert.equal(await pubchem.getByRole('button').isDisabled(), true, 'compound retry button is disabled while loading');
+    assert.match(await local.textContent(), /可用/, 'local thresholds remain visible during compound retry');
+    await workbench.getByText('8857', { exact: true }).waitFor({ timeout: 30_000 });
+    await pubchem.getByText('可用', { exact: true }).waitFor();
+    assert.doesNotMatch(await summary.textContent(), /PubChem失败|FlavorDB2失败/, 'compound failures clear after retry');
+    assert.deepEqual(counts, {
+      core: beforeRetry.core,
+      book: beforeRetry.book,
+      fema: beforeRetry.fema,
+      compound: beforeRetry.compound + 1,
+    }, 'compound retry increments only the shared compound endpoint');
+    evidence.compound = { ...counts };
+  } finally {
+    await compoundScenario.context.close();
+  }
+
+  const partialCompoundScenario = await openScenario({
+    compoundHandler: async (route, counts) => {
+      if (counts.compound === 1) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ...successfulCompound,
+            flavordb: { found: false, status: 'upstream_unavailable', error: 'fixture FlavorDB failure' },
+          }),
+        });
+      }
+      await new Promise(resolve => setTimeout(resolve, 250));
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(successfulCompound) });
+    },
+  });
+  try {
+    const { page, counts } = partialCompoundScenario;
+    await page.getByLabel('化合物名称或 CAS 号').fill('141-78-6');
+    const workbench = page.getByTestId('search-results-workbench');
+    await workbench.getByText('8857', { exact: true }).waitFor({ timeout: 30_000 });
+    const summary = workbench.getByLabel('来源状态');
+    const pubchem = summary.getByRole('listitem').filter({ hasText: 'PubChem' });
+    const flavordb = summary.getByRole('listitem').filter({ hasText: 'FlavorDB2' });
+    await pubchem.getByText('可用', { exact: true }).waitFor();
+    await flavordb.getByText('失败', { exact: true }).waitFor();
+    assert.deepEqual(counts, { core: 1, book: 1, fema: 1, compound: 1 }, 'partial compound scenario starts each source exactly once');
+    await flavordb.getByRole('button', { name: '重试', exact: true }).click();
+    await flavordb.getByRole('button', { name: '重试中…', exact: true }).waitFor();
+    assert.match(await pubchem.textContent(), /可用/, 'successful PubChem evidence remains ready during shared compound retry');
+    assert.equal(await pubchem.getByRole('button').count(), 0, 'successful PubChem does not expose a retry button');
+    await flavordb.getByText('可用', { exact: true }).waitFor();
+    assert.deepEqual(counts, { core: 1, book: 1, fema: 1, compound: 2 }, 'partial retry increments only the shared compound endpoint');
+    evidence.partialCompound = { ...counts, pubchemRetained: true };
+  } finally {
+    await partialCompoundScenario.context.close();
+  }
+
+  const femaScenario = await openScenario({
+    femaHandler: async (route, counts) => {
+      if (counts.fema === 1) return route.fulfill({ status: 503, body: 'fixture FEMA failure' });
+      await new Promise(resolve => setTimeout(resolve, 250));
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ found: true, name: 'Ethyl acetate', flavor_profile: 'fruity' }) });
+    },
+  });
+  try {
+    const { page, counts } = femaScenario;
+    await page.getByLabel('化合物名称或 CAS 号').fill('141-78-6');
+    const workbench = page.getByTestId('search-results-workbench');
+    await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor();
+    const summary = workbench.getByLabel('来源状态');
+    const fema = summary.getByRole('listitem').filter({ hasText: 'FEMA' });
+    await fema.getByText('失败', { exact: true }).waitFor();
+    await workbench.getByText('8857', { exact: true }).waitFor({ timeout: 30_000 });
+    const beforeRetry = { ...counts };
+    assert.deepEqual(beforeRetry, { core: 1, book: 1, fema: 1, compound: 1 }, 'FEMA scenario starts each source exactly once');
+    await fema.getByRole('button', { name: '重试', exact: true }).click();
+    await fema.getByRole('button', { name: '重试中…', exact: true }).waitFor();
+    assert.equal(await workbench.getByText('8857', { exact: true }).count(), 1, 'compound identity stays visible during FEMA retry');
+    await fema.getByText('可用', { exact: true }).waitFor();
+    assert.deepEqual(counts, {
+      core: beforeRetry.core,
+      book: beforeRetry.book,
+      fema: beforeRetry.fema + 1,
+      compound: beforeRetry.compound,
+    }, 'FEMA retry increments only the FEMA endpoint');
+    evidence.fema = { ...counts };
+  } finally {
+    await femaScenario.context.close();
+  }
+
+  let bookAttempt = 0;
+  const bookScenario = await openScenario({
+    bookHandler: async (route) => {
+      bookAttempt += 1;
+      if (bookAttempt === 1) return route.fulfill({ status: 503, body: 'fixture book failure' });
+      await new Promise(resolve => setTimeout(resolve, 250));
+      return route.fulfill({ status: 200, contentType: 'application/json', body: bookFixture });
+    },
+  });
+  try {
+    const { page, counts } = bookScenario;
+    await page.getByLabel('化合物名称或 CAS 号').fill('141-78-6');
+    const workbench = page.getByTestId('search-results-workbench');
+    await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor();
+    const summary = workbench.getByLabel('来源状态');
+    const book = summary.getByRole('listitem').filter({ hasText: '书籍证据' });
+    await book.getByText('失败', { exact: true }).waitFor();
+    assert.deepEqual(counts, { core: 1, book: 1, fema: 1, compound: 1 }, 'book scenario starts each source exactly once');
+    await book.getByRole('button', { name: '重试', exact: true }).click();
+    await book.getByRole('button', { name: '重试中…', exact: true }).waitFor();
+    assert.equal(await book.getByRole('button').isDisabled(), true, 'book retry is disabled while loading');
+    await book.getByText('可用', { exact: true }).waitFor({ timeout: 30_000 });
+    assert.deepEqual(counts, { core: 1, book: 2, fema: 1, compound: 1 }, 'book retry increments only the book request');
+    evidence.book = { ...counts };
+  } finally {
+    await bookScenario.context.close();
+  }
+
+  let coreAttempt = 0;
+  const coreScenario = await openScenario({
+    coreHandler: (route) => {
+      coreAttempt += 1;
+      return coreAttempt === 1
+        ? route.fulfill({ status: 503, body: 'fixture core failure' })
+        : route.fulfill({ status: 200, contentType: 'application/json', body: coreFixture });
+    },
+  });
+  try {
+    const { page, counts } = coreScenario;
+    const input = page.getByLabel('化合物名称或 CAS 号');
+    await input.fill('141-78-6');
+    const error = page.getByTestId('core-search-error');
+    await error.getByText('暂时无法完成检索', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '经典版' }).click();
+    assert.equal(await input.inputValue(), '141-78-6', 'core error preserves the query');
+    assert.equal(await page.getByRole('button', { name: '经典版' }).getAttribute('aria-pressed'), 'true', 'core error preserves the selected result view');
+    await error.getByRole('button', { name: '重试本地数据库' }).click();
+    await error.waitFor({ state: 'hidden' });
+    await page.getByTestId('classic-search-results').waitFor();
+    assert.equal(counts.core, 2, 'core retry reloads the local identity JSON once');
+    await page.getByRole('button', { name: '新版档案' }).click();
+    await page.getByTestId('search-results-workbench').getByText('CAS 141-78-6', { exact: true }).waitFor();
+    await input.fill('definitely missing compound');
+    await page.getByText('未找到可确认的化合物身份', { exact: true }).waitFor();
+    evidence.core = { core: counts.core, inputPreserved: true, viewPreserved: true, noMatchDistinguished: true };
+  } finally {
+    await coreScenario.context.close();
+  }
+
+  return evidence;
+}
 let browser;
 
 try {
@@ -1057,6 +1276,8 @@ try {
   await page.reload({ waitUntil: 'domcontentloaded' });
   assert.equal(await page.getByRole('button', { name: '新版档案' }).getAttribute('aria-pressed'), 'true', 'new dossier preference survives reload');
 
+  const evidenceStateRetries = await verifyEvidenceStateRetries(browser, { baseUrl, proxyOrigin });
+
   assert.deepEqual(pageErrors, [], 'page errors');
   assert.deepEqual(consoleErrors, [], 'console errors');
   e2eStages.push('complete');
@@ -1089,6 +1310,7 @@ try {
     },
     selectedCandidateRequestEvidence,
     bulkLimitRequestEvidence,
+    evidenceStateRetries,
     batchReviewEvidence,
     e2eStages,
     firstClassicMountRequestCount: classicRequestsAfterMount.length,

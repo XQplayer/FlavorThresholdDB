@@ -53,6 +53,7 @@ export default function SearchResultsWorkbench({
   matchCount = 0,
   candidates = [],
   onCandidateSelect,
+  onRetrySource,
   apiUrl,
   citationText = '',
   onExportCompact,
@@ -315,6 +316,7 @@ export default function SearchResultsWorkbench({
             statusOwner={activeChapter.statusOwner}
             sourceStates={panelSourceStates}
             isEnglish={isEnglish}
+            onRetry={(sourceId) => onRetrySource?.(sourceId, selectedCandidate)}
           >
             {activeChapter.id === 'overview' ? (
               <OverviewChapter
@@ -351,6 +353,7 @@ export default function SearchResultsWorkbench({
                 records={records}
                 onExportCompact={onExportCompact}
                 onExportDetailed={onExportDetailed}
+                sourceStates={dossier.sourceStates}
                 isEnglish={isEnglish}
               />
             ) : (
@@ -372,8 +375,10 @@ export default function SearchResultsWorkbench({
     title = isEnglish ? 'Building compound dossier' : '正在建立化合物档案';
     detail = isEnglish ? 'Loading local search data…' : '正在载入本地检索数据…';
   } else {
-    title = isEnglish ? `${matchCount} matches` : `匹配 ${matchCount} 条`;
-    detail = isEnglish ? 'Chapter content will be connected in the next phase.' : '章节内容将在下一阶段接入';
+    title = isEnglish ? 'No confirmable compound identity found' : '未找到可确认的化合物身份';
+    detail = isEnglish
+      ? 'Check the CAS number or spelling, or switch to fuzzy matching to review candidates.'
+      : '请检查 CAS 号或名称拼写，也可切换为模糊匹配查看候选项。';
   }
 
   return (

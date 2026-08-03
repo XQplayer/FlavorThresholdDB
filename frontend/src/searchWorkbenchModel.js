@@ -73,20 +73,20 @@ export function normalizeSourceStatus(state) {
   return { ...source, status: normalized };
 }
 
-const sourceState = (status, labelZh, labelEn) => ({ status, labelZh, labelEn });
+const sourceState = (status, labelZh, labelEn, details = {}) => ({ status, labelZh, labelEn, ...details });
 
-const compoundSourceStatus = (currentCas, compoundProfile, sourceName) => {
-  if (!currentCas) return 'not_requested';
-  if (!compoundProfile || compoundProfile.loading) return 'loading';
-  if (compoundProfile.error) return 'failed';
+const compoundSourceState = (currentCas, compoundProfile, sourceName) => {
+  if (!currentCas) return { status: 'not_requested' };
+  if (!compoundProfile) return { status: 'loading' };
   const source = compoundProfile[sourceName];
-  if (!source) return 'not_requested';
-  if (source.error) return 'failed';
+  if (source?.error) return { status: 'failed', ...(compoundProfile.retrying ? { retrying: true } : {}) };
   const normalized = normalizeSourceStatus(source).status;
-  if (normalized !== 'not_requested') return normalized;
-  if (source.found === true) return 'ready';
-  if (source.found === false) return 'no_data';
-  return 'not_requested';
+  if (normalized !== 'not_requested') return { status: normalized };
+  if (source?.found === true) return { status: 'ready' };
+  if (source?.found === false) return { status: 'no_data' };
+  if (compoundProfile.error) return { status: 'failed', ...(compoundProfile.retrying ? { retrying: true } : {}) };
+  if (compoundProfile.loading) return { status: 'loading' };
+  return { status: 'not_requested' };
 };
 
 export function deriveDossierSourceStates({
@@ -96,38 +96,44 @@ export function deriveDossierSourceStates({
   femaProfile,
   compoundProfile,
   bookResults = [],
+  bookLoading = false,
+  bookError = null,
+  bookRetrying = false,
 } = {}) {
   const matched = asArray(matchedResults);
   const hasEntity = Boolean(currentCas) || matched.length > 0;
   const hasLocalThresholds = matched
     .some((item) => asArray(item?.threshold_data).length > 0);
   const localStatus = loading ? 'loading' : hasLocalThresholds ? 'ready' : 'no_data';
-  const hasObservedFema = femaProfile && Object.keys(femaProfile).some(key => key !== 'loading');
   const femaStatus = !currentCas
-    ? 'not_requested'
-    : !femaProfile || femaProfile.loading
-      ? 'loading'
-      : femaProfile.error
-        ? 'failed'
+    ? { status: 'not_requested' }
+    : femaProfile?.error
+      ? { status: 'failed', ...(femaProfile.retrying ? { retrying: true } : {}) }
+      : !femaProfile || femaProfile.loading
+        ? { status: 'loading' }
         : femaProfile.found === false
-          ? 'no_data'
-          : hasObservedFema
-            ? 'ready'
-            : 'not_requested';
-  const bookStatus = loading
+          ? { status: 'no_data' }
+          : femaProfile.found === true
+            ? { status: 'ready' }
+            : { status: 'not_requested' };
+  const bookStatus = bookLoading || loading
     ? 'loading'
     : !hasEntity
       ? 'not_requested'
-      : asArray(bookResults).length > 0
-        ? 'ready'
-        : 'no_data';
+      : bookError
+        ? 'failed'
+        : asArray(bookResults).length > 0
+          ? 'ready'
+          : 'no_data';
+  const pubchemState = compoundSourceState(currentCas, compoundProfile, 'pubchem');
+  const flavordbState = compoundSourceState(currentCas, compoundProfile, 'flavordb');
 
   return {
     local_thresholds: sourceState(localStatus, '本地阈值', 'Local thresholds'),
-    fema: sourceState(femaStatus, 'FEMA', 'FEMA'),
-    pubchem: sourceState(compoundSourceStatus(currentCas, compoundProfile, 'pubchem'), 'PubChem', 'PubChem'),
-    flavordb: sourceState(compoundSourceStatus(currentCas, compoundProfile, 'flavordb'), 'FlavorDB2', 'FlavorDB2'),
-    book: sourceState(bookStatus, '书籍证据', 'Book evidence'),
+    fema: sourceState(femaStatus.status, 'FEMA', 'FEMA', femaStatus),
+    pubchem: sourceState(pubchemState.status, 'PubChem', 'PubChem', pubchemState),
+    flavordb: sourceState(flavordbState.status, 'FlavorDB2', 'FlavorDB2', flavordbState),
+    book: sourceState(bookStatus, '书籍证据', 'Book evidence', bookStatus === 'failed' && bookRetrying ? { retrying: true } : {}),
   };
 }
 

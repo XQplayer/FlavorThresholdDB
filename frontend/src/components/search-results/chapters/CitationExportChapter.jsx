@@ -11,11 +11,12 @@ const locatorText = (raw, isEnglish) => {
   return [raw?.book_title || (isEnglish ? 'Wine Flavor Chemistry' : '酒类风味化学'), pageText, blockText].filter(Boolean);
 };
 
-export default function CitationExportChapter({ citationExampleText, records = [], onExportCompact, onExportDetailed, isEnglish = false }) {
+export default function CitationExportChapter({ citationExampleText, records = [], onExportCompact, onExportDetailed, sourceStates = {}, isEnglish = false }) {
   const [copyState, setCopyState] = useState('idle');
   const copyTimerRef = useRef(null);
   const copyRequestTokenRef = useRef(0);
   const mountedRef = useRef(false);
+  const unavailableSources = Object.values(sourceStates).filter(source => ['failed', 'loading'].includes(source?.status));
 
   useEffect(() => {
     mountedRef.current = true;
@@ -69,6 +70,13 @@ export default function CitationExportChapter({ citationExampleText, records = [
           <button type="button" onClick={onExportCompact}>{isEnglish ? 'Export compact CSV' : '导出精简版 CSV'}</button>
           <button type="button" onClick={onExportDetailed}>{isEnglish ? 'Export detailed CSV' : '导出详细版 CSV'}</button>
         </div>
+        {unavailableSources.length > 0 && (
+          <p className="citation-export-chapter__source-warning" aria-live="polite">
+            {isEnglish
+              ? 'Exports keep currently available evidence. Failed or loading sources are not represented as zero.'
+              : '导出会保留当前可用证据；失败或载入中的来源不会被表示为 0。'}
+          </p>
+        )}
       </section>
 
       <section aria-labelledby="citation-source-heading">

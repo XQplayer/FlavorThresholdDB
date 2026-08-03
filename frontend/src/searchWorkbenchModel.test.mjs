@@ -251,6 +251,57 @@ test('keeps pending, failed, and indeterminate source states distinct', () => {
     compoundProfile: {},
   });
   assert.equal(emptyFema.fema.status, 'not_requested');
+  const emptyCompletedFema = searchWorkbenchModel.deriveDossierSourceStates({
+    currentCas: threshold.cas,
+    femaProfile: { loading: false, retrying: false },
+  });
+  assert.equal(emptyCompletedFema.fema.status, 'not_requested');
+});
+
+test('keeps local identity evidence readable while remote and book sources load independently', () => {
+  const states = searchWorkbenchModel.deriveDossierSourceStates({
+    matchedResults: [threshold],
+    currentCas: threshold.cas,
+    femaProfile: { loading: true },
+    compoundProfile: { loading: true },
+    bookLoading: true,
+  });
+
+  assert.deepEqual(Object.fromEntries(Object.entries(states).map(([name, state]) => [name, state.status])), {
+    local_thresholds: 'ready',
+    fema: 'loading',
+    pubchem: 'loading',
+    flavordb: 'loading',
+    book: 'loading',
+  });
+});
+
+test('retains source-specific failure and retry metadata without erasing successful compound evidence', () => {
+  const states = searchWorkbenchModel.deriveDossierSourceStates({
+    matchedResults: [threshold],
+    currentCas: threshold.cas,
+    femaProfile: { found: false, error: 'offline', loading: true, retrying: true },
+    compoundProfile: {
+      loading: true,
+      retrying: true,
+      pubchem: { found: true, cid: 8857 },
+      flavordb: { found: false, error: 'offline' },
+    },
+    bookError: 'book unavailable',
+    bookRetrying: true,
+  });
+
+  assert.equal(states.local_thresholds.status, 'ready');
+  assert.deepEqual(states.fema, {
+    status: 'failed', labelZh: 'FEMA', labelEn: 'FEMA', retrying: true,
+  });
+  assert.equal(states.pubchem.status, 'ready');
+  assert.deepEqual(states.flavordb, {
+    status: 'failed', labelZh: 'FlavorDB2', labelEn: 'FlavorDB2', retrying: true,
+  });
+  assert.deepEqual(states.book, {
+    status: 'failed', labelZh: '书籍证据', labelEn: 'Book evidence', retrying: true,
+  });
 });
 
 test('defines eight bilingual compound-dossier chapters', () => {
