@@ -1,6 +1,7 @@
 import { validateWorkerEvent } from './shimadzuBrowserContract.js'
 
 const cancelledError = () => Object.assign(new Error('ANALYSIS_CANCELLED'), { code: 'ANALYSIS_CANCELLED' })
+const interruptedError = () => Object.assign(new Error('ANALYSIS_INTERRUPTED'), { code: 'ANALYSIS_INTERRUPTED' })
 
 export function createShimadzuWorkerClient({
   WorkerCtor,
@@ -43,12 +44,12 @@ export function createShimadzuWorkerClient({
   }
 
   return {
-    run({ rawBytes, sampleBytes, rawName, sampleName, name, mode = 'continuous', onEvent = () => {} }) {
+    run({ rawBytes, sampleBytes, rawName, sampleName, name, mode = 'continuous', resumeFromStage = 0, onEvent = () => {} }) {
       if (active) return Promise.reject(new Error('ANALYSIS_ALREADY_RUNNING'))
       const instance = ensureWorker()
       return new Promise((resolve, reject) => {
         active = { resolve, reject, onEvent }
-        instance.postMessage({ type: 'start', rawBytes, sampleBytes, rawName, sampleName, name, mode }, [rawBytes, sampleBytes])
+        instance.postMessage({ type: 'start', rawBytes, sampleBytes, rawName, sampleName, name, mode, resumeFromStage }, [rawBytes, sampleBytes])
       })
     },
     cancel() {
@@ -63,7 +64,7 @@ export function createShimadzuWorkerClient({
     },
     dispose() {
       if (active) {
-        active.reject(cancelledError())
+        active.reject(interruptedError())
         active = null
       }
       worker?.terminate()
