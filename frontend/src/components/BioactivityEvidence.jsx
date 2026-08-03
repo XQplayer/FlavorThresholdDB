@@ -7,6 +7,7 @@ const SOURCE_META = [
 
 export default function BioactivityEvidence({ apiUrl, cid, inchikey, smiles, isEnglish, onStatusChange }) {
   const [payload, setPayload] = useState({ loading: true });
+  const [retryNonce, setRetryNonce] = useState(0);
   const [active, setActive] = useState('pubchem');
   useEffect(() => {
     if (!cid && !inchikey && !smiles) return;
@@ -17,10 +18,10 @@ export default function BioactivityEvidence({ apiUrl, cid, inchikey, smiles, isE
     if (smiles) query.set('smiles', smiles);
     fetch(`${apiUrl}/bioactivity/resolve?${query}`, { signal: controller.signal })
       .then(async response => ({ ok: response.ok, data: await response.json() }))
-      .then(({ ok, data }) => setPayload({ ...data, loading: false, requestFailed: !ok }))
-      .catch(error => { if (error.name !== 'AbortError') setPayload({ loading: false, requestFailed: true }); });
+      .then(({ ok, data }) => setPayload(previous => ({ ...previous, ...data, loading: false, requestFailed: !ok })))
+      .catch(error => { if (error.name !== 'AbortError') setPayload(previous => ({ ...previous, loading: false, requestFailed: true })); });
     return () => controller.abort();
-  }, [apiUrl, cid, inchikey, smiles]);
+  }, [apiUrl, cid, inchikey, smiles, retryNonce]);
   const data = useMemo(() => normalizeBioactivity(payload), [payload]);
   useEffect(() => {
     onStatusChange?.(payload.loading ? 'loading' : payload.requestFailed ? 'failed' : 'available');
@@ -29,7 +30,7 @@ export default function BioactivityEvidence({ apiUrl, cid, inchikey, smiles, isE
   if (!cid && !inchikey && !smiles) return null;
   return <section className="bioactivity-evidence" aria-label={isEnglish ? 'Bioactivity evidence' : '生物活性证据'}>
     <header><div><span>PubChem · ChEMBL · GtoPdb · BindingDB</span><h4>{isEnglish ? 'Bioactivity and target evidence' : '生物活性与靶点证据'}</h4></div></header>
-    {payload.loading ? <p>{isEnglish ? 'Loading exact-identity activity records…' : '正在查询精确身份活性记录…'}</p> : payload.requestFailed ? <p>{isEnglish ? 'Activity sources are temporarily unavailable.' : '活性来源暂时不可用。'}</p> : <>
+    {payload.loading ? <p>{isEnglish ? 'Loading exact-identity activity records…' : '正在查询精确身份活性记录…'}</p> : payload.requestFailed ? <p>{isEnglish ? 'Activity sources are temporarily unavailable.' : '活性来源暂时不可用。'} <button type="button" onClick={() => { setPayload(previous => ({ ...previous, loading: true })); setRetryNonce(value => value + 1); }}>{isEnglish ? 'Retry activity sources' : '重试活性来源'}</button></p> : <>
       <div className="bioactivity-tabs" role="tablist">{SOURCE_META.map(([key, label]) => {
         const total = data.sources[label]?.total ?? data[key].length;
         return <button key={key} type="button" role="tab" aria-selected={active === key} onClick={() => setActive(key)}><strong>{label}</strong><span>{total}</span></button>;

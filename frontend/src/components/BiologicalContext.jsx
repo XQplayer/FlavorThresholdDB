@@ -7,8 +7,9 @@ const STATUS_TEXT = {
   upstream_unavailable: ['暂时不可用', 'Unavailable'], not_requested: ['未请求', 'Not requested'],
 };
 
-export default function BiologicalContext({ apiUrl, cas, inchikey, compoundName, isEnglish }) {
+export default function BiologicalContext({ apiUrl, cas, inchikey, compoundName, isEnglish, onStatusChange }) {
   const [payload, setPayload] = useState({ loading: true });
+  const [retryNonce, setRetryNonce] = useState(0);
   useEffect(() => {
     if (!cas && !inchikey && !compoundName) return;
     const controller = new AbortController();
@@ -18,11 +19,17 @@ export default function BiologicalContext({ apiUrl, cas, inchikey, compoundName,
     if (compoundName) query.append('name', compoundName);
     fetch(`${apiUrl}/biological-context/resolve?${query}`, { signal: controller.signal })
       .then(async response => ({ ok: response.ok, data: await response.json() }))
-      .then(({ ok, data }) => setPayload({ ...data, loading: false, requestFailed: !ok }))
-      .catch(error => { if (error.name !== 'AbortError') setPayload({ loading: false, requestFailed: true }); });
+      .then(({ ok, data }) => setPayload(previous => ({ ...previous, ...data, loading: false, requestFailed: !ok })))
+      .catch(error => { if (error.name !== 'AbortError') setPayload(previous => ({ ...previous, loading: false, requestFailed: true })); });
     return () => controller.abort();
-  }, [apiUrl, cas, inchikey, compoundName]);
+  }, [apiUrl, cas, inchikey, compoundName, retryNonce]);
   const context = useMemo(() => normalizeBiologicalContext(payload), [payload]);
+  useEffect(() => {
+    const states = Object.values(context.sources || {}).map(source => source?.status);
+    const hasFailure = payload.requestFailed || states.some(status => ['partial_failure', 'upstream_unavailable'].includes(status));
+    const hasAvailable = states.includes('ok');
+    onStatusChange?.(payload.loading ? 'loading' : hasFailure && hasAvailable ? 'partial' : hasFailure ? 'failed' : 'available');
+  }, [context.sources, onStatusChange, payload.loading, payload.requestFailed]);
   if (!cas && !inchikey && !compoundName) return null;
   return <section className="biological-context" aria-label={isEnglish ? 'Biological context' : '生物学上下文'}>
     <header>
@@ -31,7 +38,7 @@ export default function BiologicalContext({ apiUrl, cas, inchikey, compoundName,
         <b>{context.genes.length}</b>{isEnglish ? ' genes' : ' 个基因'} · <b>{context.taxa.length}</b>{isEnglish ? ' taxa' : ' 个物种'} · <b>{context.studies.length}</b>{isEnglish ? ' studies shown' : ' 项研究'}
       </div>}
     </header>
-    {payload.loading ? <p>{isEnglish ? 'Following verified protein evidence…' : '正在沿已核验蛋白证据链查询…'}</p> : payload.requestFailed ? <p>{isEnglish ? 'Biological context is temporarily unavailable.' : '生物学上下文暂时不可用。'}</p> : <>
+    {payload.loading ? <p>{isEnglish ? 'Following verified protein evidence…' : '正在沿已核验蛋白证据链查询…'}</p> : payload.requestFailed ? <p>{isEnglish ? 'Biological context is temporarily unavailable.' : '生物学上下文暂时不可用。'} <button type="button" onClick={() => { setPayload(previous => ({ ...previous, loading: true })); setRetryNonce(value => value + 1); }}>{isEnglish ? 'Retry biological context' : '重试生物学上下文'}</button></p> : <>
       <div className="biological-context-sources">{SOURCE_ORDER.map(name => {
         const status = context.sources[name]?.status || 'not_requested';
         return <span key={name} data-status={status}><strong>{name}</strong>{STATUS_TEXT[status]?.[isEnglish ? 1 : 0] || status}</span>;

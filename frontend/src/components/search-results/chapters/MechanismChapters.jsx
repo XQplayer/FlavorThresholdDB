@@ -1,9 +1,20 @@
+import { useCallback, useEffect, useState } from 'react';
 import BiochemicalRelationships from '../../BiochemicalRelationships';
 import BiologicalContext from '../../BiologicalContext';
 import BioactivityEvidence from '../../BioactivityEvidence';
 import StructureEvidence from '../../StructureEvidence';
 
 export function BiochemistryChapter({ apiUrl, cas, inchikey, name, isEnglish = false, onStatusChange }) {
+  const [sourceStatuses, setSourceStatuses] = useState({ relationships: 'loading', context: 'loading' });
+  const setRelationshipStatus = useCallback(status => setSourceStatuses(current => ({ ...current, relationships: status })), []);
+  const setContextStatus = useCallback(status => setSourceStatuses(current => ({ ...current, context: status })), []);
+  useEffect(() => {
+    const values = Object.values(sourceStatuses);
+    const status = values.includes('loading') ? 'loading'
+      : values.every(value => value === 'failed') ? 'failed'
+        : values.some(value => ['failed', 'partial'].includes(value)) ? 'partial' : 'available';
+    onStatusChange?.(status);
+  }, [onStatusChange, sourceStatuses]);
   return (
     <div className="mechanism-chapter mechanism-chapter--biochemistry">
       <p className="scientific-chapter-note">
@@ -11,8 +22,8 @@ export function BiochemistryChapter({ apiUrl, cas, inchikey, name, isEnglish = f
           ? 'These are identifier-linked biochemical associations and supporting records, not evidence of aroma-formation causality.'
           : '本章仅呈现标识符关联的生化关系与支持证据，不据此推断风味形成因果。'}
       </p>
-      <BiochemicalRelationships apiUrl={apiUrl} cas={cas} inchikey={inchikey} compoundName={name} isEnglish={isEnglish} onStatusChange={onStatusChange} />
-      <BiologicalContext apiUrl={apiUrl} cas={cas} inchikey={inchikey} compoundName={name} isEnglish={isEnglish} />
+      <BiochemicalRelationships apiUrl={apiUrl} cas={cas} inchikey={inchikey} compoundName={name} isEnglish={isEnglish} onStatusChange={setRelationshipStatus} />
+      <BiologicalContext apiUrl={apiUrl} cas={cas} inchikey={inchikey} compoundName={name} isEnglish={isEnglish} onStatusChange={setContextStatus} />
     </div>
   );
 }
