@@ -681,6 +681,14 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       bookResults: workbenchBookResults,
     });
     return groups.map(group => {
+      const mappedBookThresholds = [...new Map(
+        group.bookResults
+          .flatMap(hit => getThresholdsForBookHit(bookThresholds, hit))
+          .map(record => [
+            [record.record_id, ...(record.media || []), record.raw_text].join('|'),
+            record,
+          ]),
+      ).values()];
       const sourceStates = deriveDossierSourceStates({
         loading,
         matchedResults: group.matchedResults,
@@ -696,6 +704,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
           matchedResults: group.matchedResults,
           integratedResults: group.integratedResults,
           bookResults: group.bookResults,
+          bookThresholds: mappedBookThresholds,
           sourceStates,
         }),
       };
@@ -707,6 +716,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     queryMatchedResults,
     workbenchIntegratedResults,
     workbenchBookResults,
+    bookThresholds,
     loading,
     femaProfiles,
     compoundProfiles,

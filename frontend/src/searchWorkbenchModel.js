@@ -21,7 +21,7 @@ const freezeFilters = (value) => {
 
 export const DEFAULT_CHAPTER_FILTERS = freezeFilters({
   sensory: { sources: ['FEMA', 'FlavorDB'] },
-  thresholds: { media: ['空气', '水', '其他介质'], types: [], includeBooks: true },
+  thresholds: { media: null, types: null, includeBooks: true, bookOnly: false },
   spectra: { sources: ['PubChem'], includeExperimental: true },
 });
 
@@ -29,8 +29,8 @@ export const createDefaultChapterFilters = () => ({
   sensory: { ...DEFAULT_CHAPTER_FILTERS.sensory, sources: [...DEFAULT_CHAPTER_FILTERS.sensory.sources] },
   thresholds: {
     ...DEFAULT_CHAPTER_FILTERS.thresholds,
-    media: [...DEFAULT_CHAPTER_FILTERS.thresholds.media],
-    types: [...DEFAULT_CHAPTER_FILTERS.thresholds.types],
+    media: DEFAULT_CHAPTER_FILTERS.thresholds.media,
+    types: DEFAULT_CHAPTER_FILTERS.thresholds.types,
   },
   spectra: { ...DEFAULT_CHAPTER_FILTERS.spectra, sources: [...DEFAULT_CHAPTER_FILTERS.spectra.sources] },
 });
@@ -367,15 +367,76 @@ const toThresholdRecords = (matchedResults, integratedResults) => {
   });
 };
 
+const sensoryValues = (value) => asArray(value)
+  .flatMap(item => typeof item === 'string' ? item.split(/[,;|]/) : [item])
+  .map(item => String(item ?? '').trim())
+  .filter(Boolean);
+
 const toSensoryRecords = (integratedResults) => asArray(integratedResults).flatMap((entry) => {
   const fema = entry?.fema ?? {};
   const flavorDb = getFlavorDb(entry);
+  const profile = getProfile(entry);
+  const foodEntities = asArray(profile.flavordb2_entities?.entities ?? entry?.flavordb2_entities?.entities);
   const records = [];
-  if (fema.flavor_profile != null) records.push({ source: 'FEMA', descriptors: fema.flavor_profile, raw: fema });
-  if (flavorDb.flavor_profile != null || flavorDb.descriptors != null) {
-    records.push({ source: 'FlavorDB', descriptors: flavorDb.flavor_profile ?? flavorDb.descriptors, raw: flavorDb });
-  }
+  const addDescriptors = (source, informationType, value, raw) => {
+    const descriptors = sensoryValues(value);
+    if (descriptors.length > 0) {
+      records.push({ source, sourceLabel: raw?.source ?? source, informationType, descriptors, raw });
+    }
+  };
+  addDescriptors('FEMA', 'flavor', fema.flavor_profile, fema);
+  addDescriptors('FlavorDB', 'flavor', flavorDb.flavor_profile ?? flavorDb.descriptors, flavorDb);
+  addDescriptors('FlavorDB', 'odor', flavorDb.odor, flavorDb);
+  addDescriptors('FlavorDB', 'taste', flavorDb.taste, flavorDb);
+  foodEntities.forEach((entity) => {
+    if (!entity?.name) return;
+    records.push({
+      source: 'FlavorDB',
+      sourceLabel: flavorDb.source ?? 'FlavorDB2',
+      informationType: 'food_entity',
+      descriptors: [String(entity.name)],
+      naturalSource: entity.natural_source?.name ?? null,
+      raw: entity,
+    });
+    if (entity.natural_source?.name) {
+      records.push({
+        source: 'FlavorDB',
+        sourceLabel: flavorDb.source ?? 'FlavorDB2',
+        informationType: 'natural_source',
+        descriptors: [String(entity.natural_source.name)],
+        relatedFoodEntity: String(entity.name),
+        raw: entity,
+      });
+    }
+  });
   return records;
+});
+
+const bookThresholdValue = (record) => {
+  const values = asArray(record?.values).filter(value => value?.role == null || value.role === 'threshold');
+  if (values.length !== 1 || values[0].high != null) return { value: null, unit: null };
+  const parsed = Number(values[0].low);
+  return Number.isFinite(parsed) ? { value: parsed, unit: values[0].unit ?? null } : { value: null, unit: null };
+};
+
+const toBookThresholdRecords = (bookThresholds) => asArray(bookThresholds).filter(Boolean).map((entry, index) => {
+  const recordId = entry.record_id ?? entry.source_record_key ?? `record-${index}`;
+  const blockMatch = String(recordId).match(/-b(\d+)$/);
+  return {
+    id: `book:${recordId}:${index}`,
+    cas: entry.entity_cas ?? entry.subject_resolution?.canonical_cas ?? null,
+    medium: asArray(entry.media).filter(Boolean)[0] ?? null,
+    type: entry.threshold_type ?? null,
+    thresholdType: entry.threshold_type ?? null,
+    ...bookThresholdValue(entry),
+    source: '酒类风味化学',
+    sourceKind: 'book',
+    originalText: entry.raw_text ?? null,
+    sourceRecordKey: recordId,
+    page: Number.isFinite(entry.page) ? entry.page : null,
+    block: blockMatch ? Number(blockMatch[1]) : null,
+    raw: entry,
+  };
 });
 
 const toIntegratedRecords = (integratedResults, fieldNames) => asArray(integratedResults).flatMap((entry) => {
@@ -390,6 +451,7 @@ export function buildCompoundDossier({
   matchedResults = [],
   integratedResults = [],
   bookResults = [],
+  bookThresholds = [],
   sourceStates = {},
 } = {}) {
   const matched = asArray(matchedResults).filter(Boolean);
@@ -421,7 +483,10 @@ export function buildCompoundDossier({
     sourceStates: normalizedSourceStates,
     overview: chapter(),
     sensory: chapter(toSensoryRecords(integrated)),
-    thresholds: chapter(toThresholdRecords(matched, integrated)),
+    thresholds: chapter([
+      ...toThresholdRecords(matched, integrated),
+      ...toBookThresholdRecords(bookThresholds),
+    ]),
     spectra: chapter(toIntegratedRecords(integrated, ['spectra', 'pubchem_spectra'])),
     biochemistry: chapter(toIntegratedRecords(integrated, ['biochemistry', 'pathways'])),
     bioactivity: chapter(toIntegratedRecords(integrated, ['bioactivity', 'activities'])),
@@ -430,14 +495,29 @@ export function buildCompoundDossier({
   };
 }
 
+export function filterSensoryRecords(records, filters = {}) {
+  const sources = filters.sources == null ? null : new Set(filters.sources);
+  return asArray(records).filter(record => !sources || sources.has(record.source));
+}
+
+const thresholdMediumCategory = (medium) => {
+  const text = normaliseText(medium);
+  if (text.includes('空气') || text === 'air') return 'air';
+  if (text === '水' || text === 'water' || text.includes('水溶液')) return 'water';
+  if (/(酒|乙醇|酒精|ethanol|wine|beer)/i.test(text)) return 'alcohol';
+  return 'other';
+};
+
 export function filterThresholdRecords(records, filters = {}) {
-  const media = filters.media == null ? null : new Set(filters.media);
+  const media = filters.media ?? null;
   const types = filters.types == null ? null : new Set(filters.types);
   const includeBooks = filters.includeBooks ?? true;
+  const bookOnly = filters.bookOnly === true;
   return asArray(records).filter((record) => {
-    if (media && !media.has(record.medium)) return false;
-    if (types?.size && !types.has(record.thresholdType ?? record.type)) return false;
     const isBook = record.sourceKind === 'book' || record.isBook === true || record.source === 'book';
+    if (bookOnly && !isBook) return false;
+    if (media && thresholdMediumCategory(record.medium) !== media) return false;
+    if (types?.size && !types.has(record.thresholdType ?? record.type)) return false;
     return includeBooks || !isBook;
   });
 }

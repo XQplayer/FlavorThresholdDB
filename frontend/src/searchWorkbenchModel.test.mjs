@@ -6,6 +6,7 @@ import {
   createDefaultChapterFilters,
   normalizeSourceStatus,
   buildCompoundDossier,
+  filterSensoryRecords,
   filterThresholdRecords,
   buildBatchReviewRows,
   sortBatchRows,
@@ -224,9 +225,52 @@ test('defines eight bilingual compound-dossier chapters', () => {
 
 test('creates independent default chapter-filter copies', () => {
   const defaults = createDefaultChapterFilters();
-  defaults.thresholds.media.pop();
-  assert.deepEqual(createDefaultChapterFilters().thresholds.media, ['空气', '水', '其他介质']);
+  defaults.sensory.sources.pop();
+  defaults.thresholds.media = 'water';
+  assert.deepEqual(createDefaultChapterFilters(), {
+    sensory: { sources: ['FEMA', 'FlavorDB'] },
+    thresholds: { media: null, types: null, includeBooks: true, bookOnly: false },
+    spectra: { sources: ['PubChem'], includeExperimental: true },
+  });
   assert.notEqual(defaults.thresholds, defaults.sensory);
+});
+
+test('keeps FEMA and FlavorDB2 sensory evidence separate and filters without mutation', () => {
+  const sensoryInput = {
+    item: threshold,
+    fema: { flavor_profile: ['fruity', 'green'], source: 'FEMA Flavor Library' },
+    profile: {
+      flavordb: {
+        flavor_profile: ['fruity'],
+        odor: ['pineapple'],
+        taste: ['sweet'],
+        source: 'FlavorDB2',
+      },
+      flavordb2_entities: {
+        entities: [{ id: 12, name: 'Pineapple', natural_source: { name: 'Ananas comosus' } }],
+      },
+    },
+  };
+  const records = buildCompoundDossier({ integratedResults: [sensoryInput] }).sensory.records;
+  const before = structuredClone(records);
+  assert.ok(records.some(record => record.source === 'FEMA' && record.descriptors.includes('fruity')));
+  assert.ok(records.some(record => record.source === 'FlavorDB' && record.descriptors.includes('fruity')));
+  assert.ok(records.some(record => record.source === 'FEMA' && record.sourceLabel === 'FEMA Flavor Library'));
+  assert.ok(records.some(record => record.informationType === 'odor' && record.descriptors.includes('pineapple')));
+  assert.ok(records.some(record => record.informationType === 'taste' && record.descriptors.includes('sweet')));
+  assert.ok(records.some(record => (
+    record.informationType === 'food_entity'
+    && record.descriptors.includes('Pineapple')
+    && record.naturalSource === 'Ananas comosus'
+  )));
+  assert.ok(records.some(record => (
+    record.informationType === 'natural_source'
+    && record.descriptors.includes('Ananas comosus')
+    && record.relatedFoodEntity === 'Pineapple'
+  )));
+  assert.ok(filterSensoryRecords(records, { sources: ['FEMA'] }).every(record => record.source === 'FEMA'));
+  assert.ok(filterSensoryRecords(records, { sources: ['FlavorDB'] }).every(record => record.source === 'FlavorDB'));
+  assert.deepEqual(records, before);
 });
 
 test('builds identity and preserves parsed threshold provenance', () => {
@@ -361,6 +405,72 @@ test('filters threshold records without mutating source records', () => {
   const filtered = filterThresholdRecords(records, { media: ['空气'], types: ['d'], includeBooks: true });
   assert.equal(filtered.length, 0);
   assert.equal(records.length, 1);
+});
+
+test('filters thresholds independently by medium category, threshold type, and mapped book records', () => {
+  const records = [
+    { id: 'water-d', medium: '水', type: 'd', thresholdType: 'd', sourceKind: 'local' },
+    { id: 'air-r', medium: '空气', type: 'r', thresholdType: 'r', sourceKind: 'local' },
+    { id: 'wine-unknown', medium: '葡萄酒', type: null, thresholdType: null, sourceKind: 'local' },
+    { id: 'other-unknown', medium: null, type: null, thresholdType: null, sourceKind: 'local' },
+    { id: 'book-water', medium: '水', type: 'odor', thresholdType: 'odor', sourceKind: 'book' },
+  ];
+  const before = structuredClone(records);
+  assert.deepEqual(filterThresholdRecords(records, createDefaultChapterFilters().thresholds), records);
+  assert.deepEqual(filterThresholdRecords(records, {
+    ...createDefaultChapterFilters().thresholds,
+    media: 'water',
+  }).map(record => record.id), ['water-d', 'book-water']);
+  assert.deepEqual(filterThresholdRecords(records, {
+    ...createDefaultChapterFilters().thresholds,
+    media: 'alcohol',
+  }).map(record => record.id), ['wine-unknown']);
+  assert.deepEqual(filterThresholdRecords(records, {
+    ...createDefaultChapterFilters().thresholds,
+    media: 'other',
+  }).map(record => record.id), ['other-unknown']);
+  assert.deepEqual(filterThresholdRecords(records, {
+    ...createDefaultChapterFilters().thresholds,
+    types: ['d'],
+  }).map(record => record.id), ['water-d']);
+  assert.deepEqual(filterThresholdRecords(records, {
+    ...createDefaultChapterFilters().thresholds,
+    bookOnly: true,
+  }).map(record => record.id), ['book-water']);
+  assert.deepEqual(records, before);
+});
+
+test('maps only associated book thresholds and preserves their source lineage', () => {
+  const bookThreshold = {
+    entity_cas: '141-78-6',
+    page: 182,
+    record_id: 'book-flavor-chemistry-p0182-b10',
+    media: ['水'],
+    threshold_type: 'odor',
+    values: [{ low: '0.6', high: null, unit: 'μg/L', role: 'threshold' }],
+    raw_text: '水中觉察嗅阈值0.6μg/L',
+  };
+  const dossier = buildCompoundDossier({
+    matchedResults: [{ ...threshold, threshold_data: [] }],
+    bookThresholds: [bookThreshold],
+  });
+  assert.deepEqual(dossier.thresholds.records, [{
+    id: 'book:book-flavor-chemistry-p0182-b10:0',
+    cas: '141-78-6',
+    medium: '水',
+    type: 'odor',
+    thresholdType: 'odor',
+    value: 0.6,
+    unit: 'μg/L',
+    source: '酒类风味化学',
+    sourceKind: 'book',
+    originalText: '水中觉察嗅阈值0.6μg/L',
+    sourceRecordKey: 'book-flavor-chemistry-p0182-b10',
+    page: 182,
+    block: 10,
+    raw: bookThreshold,
+  }]);
+  assert.equal(dossier.citation.records.length, 0, 'mapped thresholds do not fabricate citation hits');
 });
 
 test('normalizes requested source states while retaining state fields', () => {

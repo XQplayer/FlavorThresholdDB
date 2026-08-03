@@ -1,6 +1,13 @@
 import { useId, useState } from 'react';
 
-export default function EvidenceRecordDisclosure({ record, renderRecord, isEnglish = false, panelId }) {
+export default function EvidenceRecordDisclosure({
+  record,
+  renderRecord,
+  summary,
+  summaryMeta = [],
+  isEnglish = false,
+  panelId,
+}) {
   const generatedId = useId();
   const [expanded, setExpanded] = useState(false);
   const contentId = panelId || `evidence-record-${generatedId.replace(/:/g, '')}`;
@@ -13,7 +20,17 @@ export default function EvidenceRecordDisclosure({ record, renderRecord, isEngli
         aria-controls={contentId}
         onClick={() => setExpanded((current) => !current)}
       >
-        <span>{isEnglish ? 'Original record' : '原始记录'}</span>
+        <span className="evidence-record-disclosure__summary">
+          {summary && (
+            <span className="evidence-record-disclosure__sr-only">
+              {isEnglish ? 'Original record' : '原始记录'}
+            </span>
+          )}
+          <strong>{summary || (isEnglish ? 'Original record' : '原始记录')}</strong>
+          {summaryMeta.length > 0 && (
+            <span>{summaryMeta.filter(Boolean).join(' · ')}</span>
+          )}
+        </span>
         <span aria-hidden="true">{expanded ? '−' : '+'}</span>
       </button>
       <div id={contentId} className="evidence-record-disclosure__panel" hidden={!expanded}>

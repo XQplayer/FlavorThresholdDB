@@ -1,15 +1,17 @@
-import { useMemo, useState } from 'react';
-import { CHAPTERS, summarizeChapterStatus } from '../../searchWorkbenchModel';
+import { useEffect, useMemo, useState } from 'react';
+import { CHAPTERS, createDefaultChapterFilters, summarizeChapterStatus } from '../../searchWorkbenchModel';
 import ChapterNavigation from './ChapterNavigation';
 import ChapterPanel from './ChapterPanel';
 import CompoundIdentityHeader from './CompoundIdentityHeader';
-import EvidenceRecordDisclosure from './EvidenceRecordDisclosure';
+import OverviewChapter from './chapters/OverviewChapter';
+import SensorySourcesChapter from './chapters/SensorySourcesChapter';
+import ThresholdEvidenceChapter from './chapters/ThresholdEvidenceChapter';
 import './SearchResultsWorkbench.css';
 
 const CHAPTER_SOURCE_KEYS = {
   overview: ['local_thresholds', 'fema', 'pubchem', 'flavordb', 'book'],
   sensory: ['fema', 'flavordb'],
-  thresholds: ['local_thresholds'],
+  thresholds: ['local_thresholds', 'book'],
   spectra: ['pubchem'],
   structures: ['pubchem'],
   citation: ['book'],
@@ -33,9 +35,17 @@ export default function SearchResultsWorkbench({
   const dossier = selectedCandidate?.dossier;
   const entityKey = selectedCandidate?.entityKey ?? null;
   const [chapterSelection, setChapterSelection] = useState({ entityKey, id: 'overview' });
+  const [filterSelection, setFilterSelection] = useState({
+    entityKey,
+    values: createDefaultChapterFilters(),
+  });
   const hasQuery = Boolean(query?.trim());
   const hasIdentity = Boolean(entityKey);
   const activeChapterId = chapterSelection.entityKey === entityKey ? chapterSelection.id : 'overview';
+  const defaultChapterFilters = useMemo(() => createDefaultChapterFilters(), []);
+  const chapterFilters = filterSelection.entityKey === entityKey
+    ? filterSelection.values
+    : defaultChapterFilters;
   const chapters = useMemo(() => CHAPTERS.map((chapter) => {
     const count = dossier?.[chapter.id]?.records?.length || 0;
     const sourceStates = (CHAPTER_SOURCE_KEYS[chapter.id] || [])
@@ -44,13 +54,24 @@ export default function SearchResultsWorkbench({
     return { ...chapter, count, status: summarizeChapterStatus({ recordCount: count, sourceStates }) };
   }), [dossier]);
 
-  if (candidateSelection.queryKey !== queryKey) {
-    setCandidateSelection({ queryKey, entityKey: null });
-  }
+  useEffect(() => {
+    // Query ownership is part of the selection; changing it must not revive a stale candidate.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCandidateSelection(current => current.queryKey === queryKey
+      ? current
+      : { queryKey, entityKey: null });
+  }, [queryKey]);
 
-  if (chapterSelection.entityKey !== entityKey) {
-    setChapterSelection({ entityKey, id: 'overview' });
-  }
+  useEffect(() => {
+    // Entity-scoped navigation and filters reset together after identity changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setChapterSelection(current => current.entityKey === entityKey
+      ? current
+      : { entityKey, id: 'overview' });
+    setFilterSelection(current => current.entityKey === entityKey
+      ? current
+      : { entityKey, values: createDefaultChapterFilters() });
+  }, [entityKey]);
 
   if (hasQuery && !loading && candidates.length > 1 && !selectedCandidate) {
     return (
@@ -99,6 +120,17 @@ export default function SearchResultsWorkbench({
     const activeChapter = chapters.find(({ id }) => id === activeChapterId) || chapters[0];
     const records = dossier[activeChapter.id]?.records || [];
     const coveredChapterCount = chapters.filter(({ count }) => count > 0).length;
+    const panelSourceStates = Object.fromEntries(
+      (CHAPTER_SOURCE_KEYS[activeChapter.id] || [])
+        .filter(key => dossier.sourceStates?.[key])
+        .map(key => [key, dossier.sourceStates[key]]),
+    );
+    const updateChapterFilters = (chapterId, nextFilters) => {
+      setFilterSelection(current => {
+        const values = current.entityKey === entityKey ? current.values : createDefaultChapterFilters();
+        return { entityKey, values: { ...values, [chapterId]: nextFilters } };
+      });
+    };
     const deferredMessage = isEnglish
       ? 'This chapter will be connected in a later data-mapping phase.'
       : '该章节将在后续数据映射中接入';
@@ -126,19 +158,30 @@ export default function SearchResultsWorkbench({
             title={isEnglish ? activeChapter.en : activeChapter.zh}
             count={activeChapter.count}
             status={activeChapter.status}
-            sourceStates={dossier.sourceStates}
+            sourceStates={panelSourceStates}
             isEnglish={isEnglish}
           >
-            {activeChapter.id === 'thresholds' && records.length > 0 ? (
-              <div className="evidence-record-list">
-                {records.map((record) => (
-                  <EvidenceRecordDisclosure key={record.id} record={record} isEnglish={isEnglish} />
-                ))}
-              </div>
+            {activeChapter.id === 'overview' ? (
+              <OverviewChapter
+                identity={dossier.identity}
+                chapters={chapters}
+                sourceStates={dossier.sourceStates}
+                isEnglish={isEnglish}
+              />
+            ) : activeChapter.id === 'sensory' ? (
+              <SensorySourcesChapter
+                records={records}
+                filters={chapterFilters.sensory}
+                onFiltersChange={next => updateChapterFilters('sensory', next)}
+                isEnglish={isEnglish}
+              />
             ) : activeChapter.id === 'thresholds' ? (
-              <p className="chapter-panel__empty">
-                {isEnglish ? 'No threshold evidence is available for this match.' : '当前匹配项暂无阈值证据。'}
-              </p>
+              <ThresholdEvidenceChapter
+                records={records}
+                filters={chapterFilters.thresholds}
+                onFiltersChange={next => updateChapterFilters('thresholds', next)}
+                isEnglish={isEnglish}
+              />
             ) : (
               <p className="chapter-panel__empty">{deferredMessage}</p>
             )}

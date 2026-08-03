@@ -146,7 +146,9 @@ try {
       contentType: 'application/json',
       body: JSON.stringify(cas === '18127-01-0'
         ? { found: true, name: 'Selected Bourgeonal FEMA' }
-        : { found: false }),
+        : cas === '141-78-6'
+          ? { found: true, flavor_profile: 'fruity, pineapple', source: 'FEMA Flavor Library' }
+          : { found: false }),
     });
   });
   await page.route('**/compound?**', route => {
@@ -166,7 +168,12 @@ try {
         url: `https://pubchem.ncbi.nlm.nih.gov/compound/${isSelectedCandidate ? 18127010 : 8857}`,
       },
       pubchem_volatile: { found: false, status: 'no_data', properties: {} },
-      flavordb: { found: false },
+      flavordb: isSelectedCandidate
+        ? { found: false }
+        : { found: true, flavor_profile: ['fruity'], odor: ['pineapple'], taste: ['sweet'], source: 'FlavorDB2' },
+      flavordb2_entities: isSelectedCandidate
+        ? { found: false, entities: [] }
+        : { found: true, entities: [{ id: 12, name: 'Pineapple', natural_source: { name: 'Ananas comosus' } }] },
     }),
     });
   });
@@ -228,13 +235,13 @@ try {
   const rawRecordButton = workbench.getByRole('button', { name: /原始记录/ }).first();
   await rawRecordButton.waitFor({ state: 'visible' });
   assert.equal(await rawRecordButton.getAttribute('aria-expanded'), 'false', 'raw evidence is collapsed by default');
-  for (let remainingChapter = 0; remainingChapter < 6; remainingChapter += 1) {
+  for (let remainingControl = 0; remainingControl < 15; remainingControl += 1) {
     await page.keyboard.press('Tab');
   }
   assert.equal(
     await rawRecordButton.evaluate(element => element === document.activeElement),
     true,
-    'Tab moves keyboard focus to the disclosure button',
+    'Tab moves keyboard focus through chapter filters to the disclosure button',
   );
   const disclosureFocusStyle = await rawRecordButton.locator('..').evaluate(element => ({
     boxShadow: getComputedStyle(element).boxShadow,
@@ -244,6 +251,47 @@ try {
   assert.match(disclosureFocusStyle.boxShadow, /rgb\(30, 58, 138\)/, 'disclosure boundary has a visible cobalt outer focus ring');
   await page.keyboard.press('Enter');
   assert.equal(await rawRecordButton.getAttribute('aria-expanded'), 'true', 'Enter expands raw evidence');
+
+  const thresholdPanel = workbench.locator('.threshold-evidence-chapter');
+  const waterFilter = thresholdPanel.getByRole('button', { name: '水', exact: true });
+  const recognitionFilter = thresholdPanel.getByRole('button', { name: /识别阈/ });
+  await waterFilter.click();
+  await recognitionFilter.click();
+  assert.equal(await waterFilter.getAttribute('aria-pressed'), 'true', 'water medium filter is selected');
+  await thresholdPanel.getByText('当前筛选下无记录', { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(
+    await thresholdPanel.getByText('当前匹配项暂无阈值证据。', { exact: true }).count(),
+    0,
+    'filter-empty state is distinct from source no-data',
+  );
+  const sensoryChapter = chapterNavigation.getByRole('button', { name: /感官/ });
+  await sensoryChapter.click();
+  const sensoryPanel = workbench.locator('.sensory-sources-chapter');
+  const femaFilter = sensoryPanel.getByRole('button', { name: 'FEMA', exact: true });
+  const flavorDbFilter = sensoryPanel.getByRole('button', { name: 'FlavorDB2', exact: true });
+  assert.equal(await femaFilter.getAttribute('aria-pressed'), 'true', 'FEMA starts selected independently');
+  assert.equal(await flavorDbFilter.getAttribute('aria-pressed'), 'true', 'FlavorDB2 starts selected independently');
+  assert.equal(await sensoryPanel.getByRole('heading', { name: 'FEMA', exact: true }).count(), 1, 'FEMA evidence has its own group');
+  assert.equal(await sensoryPanel.getByRole('heading', { name: 'FlavorDB2', exact: true }).count(), 1, 'FlavorDB2 evidence has its own group');
+  await thresholdChapter.click();
+  assert.equal(await waterFilter.getAttribute('aria-pressed'), 'true', 'threshold medium filter survives chapter switching');
+  assert.equal(await recognitionFilter.getAttribute('aria-pressed'), 'true', 'threshold type filter survives chapter switching');
+  const allMediaFilter = thresholdPanel.getByRole('button', { name: '全部介质', exact: true });
+  const allTypeFilter = thresholdPanel.getByRole('button', { name: '全部类型', exact: true });
+  await allMediaFilter.click();
+  await allTypeFilter.click();
+  const bookFilterButton = thresholdPanel.getByRole('button', { name: '书籍记录', exact: true });
+  await bookFilterButton.click();
+  const bookDisclosure = thresholdPanel.getByRole('button', { name: /水中觉察嗅阈值0\.6μg\/L/ }).first();
+  await bookDisclosure.waitFor({ state: 'visible' });
+  await bookDisclosure.click();
+  const bookEvidence = thresholdPanel.locator('.evidence-record-disclosure').filter({ hasText: '水中觉察嗅阈值0.6μg/L' }).first();
+  await bookEvidence.getByText('酒类风味化学', { exact: true }).waitFor({ state: 'visible' });
+  await bookEvidence.getByText('水', { exact: true }).waitFor({ state: 'visible' });
+  await bookEvidence.getByText('odor', { exact: true }).waitFor({ state: 'visible' });
+  await bookEvidence.getByText('μg/L', { exact: true }).waitFor({ state: 'visible' });
+  await allTypeFilter.click();
+  await rawRecordButton.focus();
 
   const assertNoPageOverflow = async (width) => {
     await page.setViewportSize({ width, height: 900 });
@@ -264,6 +312,10 @@ try {
         buttons => buttons.map(button => button.getBoundingClientRect().height),
       );
       assert.ok(chapterHeights.every(height => height >= 44), 'mobile chapter controls are at least 44px high');
+      const filterHeights = await thresholdPanel.locator('.chapter-filter-group__buttons button').evaluateAll(
+        buttons => buttons.map(button => button.getBoundingClientRect().height),
+      );
+      assert.ok(filterHeights.every(height => height >= 44), 'mobile threshold filters are at least 44px high');
       const workbenchDimensions = await workbench.evaluate(element => ({
         clientWidth: element.clientWidth,
         scrollWidth: element.scrollWidth,
@@ -363,6 +415,17 @@ try {
   assert.equal(await selectedSourceSummary.getByText('载入中', { exact: true }).count(), 0, 'selected candidate sources leave loading state');
   assert.equal(await workbench.getByText('CAS 939-97-9', { exact: true }).count(), 0, 'selected dossier excludes the other entity identity');
   await workbench.getByRole('button', { name: /阈值/ }).click();
+  const selectedThresholdPanel = workbench.locator('.threshold-evidence-chapter');
+  assert.equal(
+    await selectedThresholdPanel.getByRole('button', { name: '全部介质', exact: true }).getAttribute('aria-pressed'),
+    'true',
+    'new entity resets medium filter',
+  );
+  assert.equal(
+    await selectedThresholdPanel.getByRole('button', { name: '全部类型', exact: true }).getAttribute('aria-pressed'),
+    'true',
+    'new entity resets threshold type filter',
+  );
   assert.equal(await workbench.getByText('939-97-9', { exact: false }).count(), 0, 'selected threshold chapter excludes the other entity CAS');
 
   await input.fill('141-78-6');
