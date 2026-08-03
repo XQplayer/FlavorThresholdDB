@@ -78,13 +78,13 @@
   position: relative;
   z-index: 1;
   width: min(1320px, calc(100% - 48px));
-  min-height: 330px;
+  min-height: 244px;
   margin: 0 auto;
-  padding: 118px 0 48px;
+  padding: 96px 0 34px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  align-items: end;
-  gap: 72px;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  align-items: center;
+  gap: 56px;
 }
 
 .shimadzu-hero-copy { max-width: 830px; }
@@ -113,35 +113,9 @@
   text-wrap: balance;
 }
 
-.shimadzu-hero-copy > p {
-  max-width: 72ch;
-  margin: 18px 0 0;
-  color: var(--sz-ink-2);
-  font-size: 15px;
-  line-height: 1.8;
-  text-wrap: pretty;
-}
-
-.shimadzu-hero-facts {
-  margin: 28px 0 0;
-  display: flex;
-  align-items: center;
-  gap: 0;
-}
-
-.shimadzu-hero-facts div {
-  min-width: 148px;
-  padding: 0 24px;
-  border-left: 1px solid var(--sz-line-strong);
-}
-
-.shimadzu-hero-facts div:first-child { padding-left: 0; border-left: 0; }
-.shimadzu-hero-facts dt { color: var(--sz-faint); font-size: 11px; }
-.shimadzu-hero-facts dd { margin: 4px 0 0; color: var(--sz-ink); font-size: 13px; font-weight: 680; }
-
 .shimadzu-hero-status {
-  min-height: 136px;
-  padding: 24px;
+  min-height: 112px;
+  padding: 20px;
   border: 1px solid var(--sz-line);
   border-radius: var(--sz-radius);
   display: grid;
@@ -739,7 +713,7 @@
 @keyframes shimadzu-signal { 70%, 100% { box-shadow: 0 0 0 12px rgb(45 91 216 / 0); } }
 
 @media (max-width: 1100px) {
-  .shimadzu-hero { grid-template-columns: minmax(0, 1fr) 310px; gap: 38px; }
+  .shimadzu-hero { grid-template-columns: minmax(0, 1fr) 320px; gap: 36px; }
   .shimadzu-flow-node { padding: 0 9px; }
   .shimadzu-flow-node > small { font-size: 9.5px; }
   .shimadzu-setup { grid-template-columns: 1fr; grid-template-areas: "input" "settings" "monitor"; }
@@ -782,13 +756,9 @@
 @media (max-width: 620px) {
   .shimadzu-hero,
   .shimadzu-main { width: min(100% - 24px, 1320px); }
-  .shimadzu-hero { min-height: auto; padding: 96px 0 32px; }
+  .shimadzu-hero { min-height: auto; padding: 88px 0 28px; }
   .shimadzu-hero h1 { font-size: 36px; line-height: 1.08; }
   .shimadzu-product-kicker { margin-bottom: 14px; font-size: 9.5px; }
-  .shimadzu-hero-copy > p { font-size: 13px; line-height: 1.72; }
-  .shimadzu-hero-facts { display: grid; grid-template-columns: 1fr 1fr; row-gap: 14px; }
-  .shimadzu-hero-facts div { min-width: 0; padding: 0 14px; }
-  .shimadzu-hero-facts div:nth-child(3) { grid-column: 1 / -1; padding: 14px 0 0; border-top: 1px solid var(--sz-line-strong); border-left: 0; }
   .shimadzu-main { padding-top: 18px; }
   .shimadzu-workflow,
   .shimadzu-input-region,

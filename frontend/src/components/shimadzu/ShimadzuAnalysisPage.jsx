@@ -521,12 +521,6 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
           <div className="shimadzu-hero-copy shimadzu-hero-animate">
             <span className="shimadzu-product-kicker"><FlaskConical aria-hidden="true" /> GC–MS FLAVOR WORKFLOW</span>
             <h1>岛津气质数据一站式分析</h1>
-            <p>从岛津原始工作簿出发，完整执行 Hit #1 提取、化合物筛查、平行补建、半定量、CV30 与作图矩阵输出。每一步都保留证据、报告与质量门禁。</p>
-            <dl className="shimadzu-hero-facts" aria-label="工作台信息">
-              <div><dt>流程</dt><dd>7 个审计节点</dd></div>
-              <div><dt>输入</dt><dd>2 个 Excel 工作簿</dd></div>
-              <div><dt>数据边界</dt><dd>当前浏览器处理</dd></div>
-            </dl>
           </div>
           <div className="shimadzu-hero-status shimadzu-hero-animate">
             <span className={engine.state}>{engine.state === 'ready' ? <ShieldCheck /> : engine.state === 'checking' ? <Loader2 className="spin" /> : <AlertCircle />}</span>
