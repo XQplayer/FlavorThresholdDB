@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { normalizeBiochemicalGraph, summarizeBiochemicalSources } from '../lib/biochemicalRelationships';
+import { summarizeScientificSourceStatus } from '../searchWorkbenchModel';
 
 const STATUS_LABELS = {
   ok: ['可用', 'Available'], no_data: ['无记录', 'No data'], candidate: ['待核验', 'Candidate'],
@@ -34,11 +35,17 @@ export default function BiochemicalRelationships({ apiUrl, cas, inchikey, compou
   const graph = useMemo(() => normalizeBiochemicalGraph(payload), [payload]);
   const sourceStates = useMemo(() => summarizeBiochemicalSources(payload.sources), [payload.sources]);
   useEffect(() => {
-    const hasFailure = payload.requestFailed || sourceStates.some(source => ['partial_failure', 'upstream_unavailable', 'invalid_response'].includes(source.status));
-    const hasAvailable = sourceStates.some(source => source.status === 'ok');
-    const allNoData = sourceStates.length > 0 && sourceStates.every(source => ['no_data', 'not_requested'].includes(source.status));
-    onStatusChange?.(!canRequest ? 'no_data' : payload.loading ? 'loading' : hasFailure && hasAvailable ? 'partial' : hasFailure ? 'failed' : allNoData || !hasAvailable ? 'no_data' : 'available');
-  }, [canRequest, onStatusChange, payload.loading, payload.requestFailed, sourceStates]);
+    const hasCandidate = Boolean(graph.chebi) || sourceStates.some(source => ['candidate', 'blocked_unverified_identity'].includes(source.status));
+    onStatusChange?.(summarizeScientificSourceStatus({
+      canRequest,
+      loading: payload.loading,
+      requestFailed: payload.requestFailed,
+      hasData: sourceStates.some(source => source.status === 'ok'),
+      hasCandidate,
+      verified: graph.verified,
+      sourceStatuses: sourceStates.map(source => source.status),
+    }));
+  }, [canRequest, graph.chebi, graph.verified, onStatusChange, payload.loading, payload.requestFailed, sourceStates]);
   if (!cas && !inchikey && !compoundName) return null;
   const unavailable = !graph.chebi;
   return <section className="biochemical-relationships" aria-label={isEnglish ? 'Biochemical relationships' : '生化关系证据'}>

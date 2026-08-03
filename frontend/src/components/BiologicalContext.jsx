@@ -62,7 +62,7 @@ export default function BiologicalContext({ apiUrl, cas, inchikey, compoundName,
         {context.hmdb?.source_url && <a href={context.hmdb.source_url} target="_blank" rel="noopener noreferrer">HMDB · {isEnglish ? 'link-only search' : '仅链接检索'}</a>}
       </div>
     </>}
-    {hasSourceFailure && hasData && <button type="button" onClick={() => setRetryNonce(value => value + 1)}>{isEnglish ? 'Retry the biological-context endpoint for failed sources' : '重试生物学聚合端点中失败的来源'}</button>}
+    {hasSourceFailure && (!payload.requestFailed || hasData) && <button type="button" onClick={() => setRetryNonce(value => value + 1)}>{isEnglish ? 'Retry the biological-context endpoint for failed sources' : '重试生物学聚合端点中失败的来源'}</button>}
     <footer>{isEnglish ? 'Gene and organism entries are shown only when supported by the ChEBI–Rhea–UniProt chain. HMDB remains link-only under its redistribution terms.' : '基因和物种仅沿 ChEBI–Rhea–UniProt 证据链展示；HMDB 按再分发限制仅提供原站链接。'}</footer>
   </section>;
 }

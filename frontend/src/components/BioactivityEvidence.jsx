@@ -62,7 +62,7 @@ export default function BioactivityEvidence({ apiUrl, cid, inchikey, smiles, isE
         {active === 'gtopdb' && (isEnglish ? 'GtoPdb uses an exact ligand identifier before requesting interactions.' : 'GtoPdb 先核验精确配体标识，再查询相互作用。')}
       </div>
     </>}
-    {hasSourceFailure && hasData && <button type="button" onClick={() => setRetryNonce(value => value + 1)}>{isEnglish ? 'Retry the bioactivity endpoint for failed sources' : '重试活性聚合端点中失败的来源'}</button>}
+    {hasSourceFailure && (!payload.requestFailed || hasData) && <button type="button" onClick={() => setRetryNonce(value => value + 1)}>{isEnglish ? 'Retry the bioactivity endpoint for failed sources' : '重试活性聚合端点中失败的来源'}</button>}
     <footer>{isEnglish ? 'Database activity is assay-specific evidence, not proof of physiological effect, aroma perception, or causality.' : '数据库活性是特定实验条件下的证据，不等同于生理效应、香气感知或因果关系。'}</footer>
   </section>;
 }

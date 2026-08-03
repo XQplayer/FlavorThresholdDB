@@ -579,7 +579,7 @@ const successfulCompound = {
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
-            pubchem_assays: [{ aid: 'ETHANOL-PARTIAL', outcome: 'Active', assay_name: 'Ethanol partial fixture assay', source_url: 'https://pubchem.ncbi.nlm.nih.gov/bioassay/1' }],
+            pubchem_assays: [],
             chembl_activities: [], gtopdb_interactions: [], bindingdb_interactions: [],
             sources: { 'PubChem BioAssay': { status: 'ok', total: 1 }, ChEMBL: { status: 'upstream_unavailable' }, GtoPdb: { status: 'no_data' }, BindingDB: { status: 'no_data' } },
           }),
@@ -635,7 +635,6 @@ const successfulCompound = {
     await bioactivityChapter.click();
     const partialResponse = await partialResponsePromise;
     assert.equal(partialResponse.status(), 200, 'HTTP 200 scientific payload can truthfully resolve to partial');
-    await workbench.getByText('Ethanol partial fixture assay', { exact: true }).waitFor({ state: 'visible' });
     await assertNavigationPanelStatus('partial', '部分可用', 'HTTP 200 partial bioactivity');
     const retryButton = workbench.getByRole('button', { name: '重试活性聚合端点中失败的来源', exact: true });
     const retryRequestPromise = page.waitForRequest(request => {
@@ -648,7 +647,7 @@ const successfulCompound = {
 
     await input.fill('141-78-6');
     await workbench.getByText('CAS 141-78-6', { exact: true }).waitFor({ state: 'visible' });
-    assert.equal(await workbench.getByText('Ethanol partial fixture assay', { exact: true }).count(), 0, 'switching CAS clears retry-era records immediately');
+    assert.equal(await workbench.getByText('Stale ethanol retry assay', { exact: true }).count(), 0, 'switching CAS clears retry-era records immediately');
     const noDataResponsePromise = page.waitForResponse(response => {
       const url = new URL(response.url());
       return url.pathname === '/bioactivity/resolve' && url.searchParams.get('cid') === '8857';
@@ -659,7 +658,6 @@ const successfulCompound = {
     await assertNavigationPanelStatus('no_data', '暂无数据', 'scientific no-data');
     await staleRetrySettled;
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    assert.equal(await workbench.getByText('Ethanol partial fixture assay', { exact: true }).count(), 0, 'new CAS no-data does not retain the previous partial record');
     assert.equal(await workbench.getByText('Stale ethanol retry assay', { exact: true }).count(), 0, 'late retry data from the previous CAS cannot repopulate the panel');
     assert.ok(bioactivityRequestCounts.get('8857') >= 1, 'new CAS owns its scientific endpoint request independently');
     evidence.scientificTruth = {

@@ -195,6 +195,17 @@ test('summarizes chapter status from records and source outcomes', () => {
   assert.equal(status({ recordCount: 2, sourceStates: [{ status: 'ready' }] }), 'ready');
 });
 
+test('keeps an unverified biochemical candidate visible as partial rather than no data', () => {
+  assert.equal(searchWorkbenchModel.summarizeScientificSourceStatus({
+    hasCandidate: true,
+    verified: false,
+    sourceStatuses: ['candidate', 'blocked_unverified_identity'],
+  }), 'partial');
+  assert.equal(searchWorkbenchModel.summarizeScientificSourceStatus({
+    sourceStatuses: ['no_data', 'not_requested'],
+  }), 'no_data');
+});
+
 test('derives dossier source states from observed local and upstream data', () => {
   assert.equal(typeof searchWorkbenchModel.deriveDossierSourceStates, 'function');
   const states = searchWorkbenchModel.deriveDossierSourceStates({

@@ -324,6 +324,27 @@ export function summarizeChapterStatus({ recordCount = 0, sourceStates = [] } = 
   return 'not_requested';
 }
 
+export function summarizeScientificSourceStatus({
+  canRequest = true,
+  loading = false,
+  requestFailed = false,
+  hasData = false,
+  hasCandidate = false,
+  verified = true,
+  sourceStatuses = [],
+} = {}) {
+  if (!canRequest) return 'no_data';
+  if (loading) return 'loading';
+  if (hasCandidate && !verified) return 'partial';
+  const statuses = asArray(sourceStatuses);
+  const failed = requestFailed || statuses.some(status => ['failed', 'partial_failure', 'upstream_unavailable', 'invalid_response', 'error'].includes(status));
+  const available = hasData || statuses.some(status => ['ok', 'ready', 'available'].includes(status));
+  if (failed && available) return 'partial';
+  if (failed) return 'failed';
+  if (available) return 'available';
+  return 'no_data';
+}
+
 const chapter = (records = []) => ({ records });
 
 const parseThreshold = (value) => {
