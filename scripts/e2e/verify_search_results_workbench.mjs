@@ -832,6 +832,88 @@ try {
   await input.fill('对叔丁基苯甲醛');
   await candidateHeading.waitFor({ state: 'visible' });
   assert.equal(await workbench.locator('.compound-identity-header').count(), 0, 'a new query clears the previous candidate selection');
+
+  await page.getByRole('button', { name: '批量匹配' }).click();
+  const bulkInput = page.getByLabel('请输入需要匹配的物质名单（每行一个记录）');
+  await bulkInput.fill('141-78-6\n64-17-5\nunknown');
+  const batchReview = workbench.getByRole('region', { name: '批量审查结果' });
+  await batchReview.waitFor({ state: 'visible', timeout: 30_000 });
+  const initialBatchRows = batchReview.locator('tbody tr');
+  await initialBatchRows.first().waitFor({ state: 'visible' });
+  assert.equal(await initialBatchRows.count(), 3, 'batch review keeps one row per non-empty raw input');
+  assert.deepEqual(
+    await initialBatchRows.evaluateAll(rows => rows.map(row => row.dataset.status)),
+    ['exact', 'exact', 'unmatched'],
+    'batch review labels exact, exact, and unmatched rows in input order',
+  );
+  assert.equal(await batchReview.getByRole('button', { name: '查看档案' }).count(), 2, 'only uniquely matched rows can open a dossier');
+  assert.equal(await initialBatchRows.filter({ hasText: 'unknown' }).getByRole('button', { name: '查看档案' }).count(), 0, 'unmatched rows cannot open a dossier');
+  assert.equal(await batchReview.getByRole('columnheader').count(), 7, 'batch results keep semantic table headers');
+
+  await page.setViewportSize({ width: 390, height: 900 });
+  const batchMobileDimensions = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  assert.ok(batchMobileDimensions.scrollWidth <= batchMobileDimensions.clientWidth, 'mobile batch table does not create page-level overflow');
+  const batchTableDimensions = await batchReview.locator('.batch-review__table-scroll').evaluate(element => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  assert.ok(batchTableDimensions.scrollWidth > batchTableDimensions.clientWidth, 'mobile batch table owns its horizontal overflow');
+  const batchControlHeights = await batchReview.locator('button, select').evaluateAll(elements => elements.map(element => element.getBoundingClientRect().height));
+  assert.ok(batchControlHeights.every(height => height >= 44), 'mobile batch controls are at least 44px high');
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  const candidateFilter = batchReview.getByRole('button', { name: '候选', exact: true });
+  await candidateFilter.click();
+  assert.equal(await batchReview.getByText('当前状态筛选下没有结果。', { exact: true }).count(), 1, 'empty filtered state explains why no rows are shown');
+
+  const unmatchedFilter = batchReview.getByRole('button', { name: '未匹配', exact: true });
+  await unmatchedFilter.click();
+  assert.equal(await unmatchedFilter.getAttribute('aria-pressed'), 'true', 'unmatched filter exposes active state');
+  assert.equal(await batchReview.locator('tbody tr').count(), 1, 'unmatched filter hides matched rows');
+  assert.match(await batchReview.locator('tbody tr').first().innerText(), /unknown/, 'unmatched filter retains the unresolved raw input');
+  const batchSort = batchReview.getByLabel('排序方式');
+  await batchSort.selectOption('reviewPriority');
+  assert.equal(await batchSort.inputValue(), 'reviewPriority', 'batch sort exposes the active review-priority choice');
+
+  await bulkInput.fill('对叔丁基苯甲醛');
+  const ambiguousBatchRow = batchReview.locator('tbody tr');
+  await ambiguousBatchRow.waitFor({ state: 'visible' });
+  assert.equal(await ambiguousBatchRow.getAttribute('data-status'), 'candidate', 'same-name multi-CAS input remains a candidate');
+  assert.equal(await ambiguousBatchRow.getByRole('button', { name: '选择候选 / 待处理' }).isDisabled(), true, 'ambiguous candidate cannot open an arbitrary first dossier');
+  assert.equal(await batchReview.getByRole('button', { name: '查看档案' }).count(), 0, 'ambiguous candidate has no direct dossier action');
+
+  const paginatedInputs = Array.from({ length: 50 }, (_, index) => index % 2 === 0 ? '141-78-6' : '64-17-5');
+  await bulkInput.fill(paginatedInputs.join('\n'));
+  const exactFilter = batchReview.getByRole('button', { name: '精确', exact: true });
+  await exactFilter.click();
+  await batchSort.selectOption('coverage');
+  const directionButton = batchReview.getByRole('button', { name: /排序方向/ });
+  await directionButton.click();
+  assert.equal(await directionButton.getAttribute('aria-pressed'), 'true', 'descending sort direction exposes active state');
+  await batchReview.getByRole('button', { name: '下一页' }).click();
+  const savedPageLabel = await batchReview.getByTestId('batch-page-label').innerText();
+  assert.match(savedPageLabel, /第 2 页，共 2 页/, 'batch pagination reaches the second page');
+  await batchReview.locator('tbody tr').last().scrollIntoViewIfNeeded();
+  const savedBatchScrollY = await page.evaluate(() => window.scrollY);
+  assert.ok(savedBatchScrollY > 0, 'batch dossier navigation starts from a real scrolled position');
+  await batchReview.getByRole('button', { name: '查看档案' }).last().click();
+  await workbench.getByRole('button', { name: '返回批量结果' }).waitFor({ state: 'visible' });
+  assert.equal(await workbench.locator('.compound-identity-header').count(), 1, 'batch detail renders exactly one compound identity header');
+  assert.equal(await batchReview.count(), 0, 'batch table is not rendered alongside a selected full dossier');
+  await workbench.getByRole('button', { name: '返回批量结果' }).click();
+  await batchReview.waitFor({ state: 'visible' });
+  assert.equal(await exactFilter.getAttribute('aria-pressed'), 'true', 'returning preserves the exact-status filter');
+  assert.equal(await batchSort.inputValue(), 'coverage', 'returning preserves the active sort');
+  assert.equal(await directionButton.getAttribute('aria-pressed'), 'true', 'returning preserves sort direction');
+  assert.equal(await batchReview.getByTestId('batch-page-label').innerText(), savedPageLabel, 'returning preserves the current page');
+  assert.ok((await batchReview.locator('tbody tr').count()) > 0, 'returning keeps filtered rows visible');
+  await page.waitForFunction(expected => Math.abs(window.scrollY - expected) <= 2, savedBatchScrollY);
+  assert.ok(Math.abs((await page.evaluate(() => window.scrollY)) - savedBatchScrollY) <= 2, 'returning restores scroll within two pixels');
+
+  await page.getByRole('button', { name: '单物质检索' }).click();
   await classicButton.click();
 
   await page.reload({ waitUntil: 'domcontentloaded' });

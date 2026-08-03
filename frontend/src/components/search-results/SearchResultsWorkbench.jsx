@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CHAPTERS,
   buildScientificComponentProps,
@@ -18,6 +18,7 @@ import {
   ProteinStructuresChapter,
 } from './chapters/MechanismChapters';
 import CitationExportChapter from './chapters/CitationExportChapter';
+import BatchReviewTable from './BatchReviewTable';
 import './SearchResultsWorkbench.css';
 
 const CHAPTER_SOURCE_KEYS = {
@@ -33,8 +34,20 @@ const CHAPTER_SOURCE_KEYS = {
 
 const DELEGATED_CHAPTER_IDS = new Set(['spectra', 'biochemistry', 'bioactivity', 'structures']);
 
+const createDefaultBatchState = () => ({
+  status: 'all',
+  sortKey: 'inputOrder',
+  sortDirection: 'asc',
+  page: 1,
+  selectedRowId: null,
+  scrollY: 0,
+});
+
 export default function SearchResultsWorkbench({
   query,
+  mode = 'single',
+  rawBatchInputs = [],
+  batchRows = [],
   loading,
   matchCount = 0,
   candidates = [],
@@ -48,11 +61,24 @@ export default function SearchResultsWorkbench({
 }) {
   const queryKey = String(query || '').trim().toLowerCase();
   const [candidateSelection, setCandidateSelection] = useState({ queryKey, entityKey: null });
-  const selectedCandidate = candidates.length === 1
-    ? candidates[0]
-    : candidateSelection.queryKey === queryKey
-      ? candidates.find(candidate => candidate.entityKey === candidateSelection.entityKey)
-      : null;
+  const [batchState, setBatchState] = useState(createDefaultBatchState);
+  const pendingBatchScrollRestore = useRef(null);
+  const selectedBatchRow = mode === 'bulk'
+    ? batchRows.find(row => row.id === batchState.selectedRowId)
+    : null;
+  const linkedBatchCandidates = selectedBatchRow?.candidateEntityKey
+    ? candidates.filter(candidate => (
+      candidate.entityKey === selectedBatchRow.candidateEntityKey
+      || (selectedBatchRow.cas && candidate.cas === selectedBatchRow.cas)
+    ))
+    : [];
+  const selectedCandidate = mode === 'bulk'
+    ? (linkedBatchCandidates.length === 1 ? linkedBatchCandidates[0] : null)
+    : candidates.length === 1
+      ? candidates[0]
+      : candidateSelection.queryKey === queryKey
+        ? candidates.find(candidate => candidate.entityKey === candidateSelection.entityKey)
+        : null;
   const dossier = selectedCandidate?.dossier;
   const entityKey = selectedCandidate?.entityKey ?? null;
   const [chapterSelection, setChapterSelection] = useState({ entityKey, id: 'overview' });
@@ -102,7 +128,36 @@ export default function SearchResultsWorkbench({
       : { entityKey, values: createDefaultChapterFilters() });
   }, [entityKey]);
 
-  if (hasQuery && !loading && candidates.length > 1 && !selectedCandidate) {
+  useEffect(() => {
+    if (mode !== 'bulk' || batchState.selectedRowId !== null || pendingBatchScrollRestore.current === null) return;
+    const restoreY = pendingBatchScrollRestore.current;
+    pendingBatchScrollRestore.current = null;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => window.scrollTo(0, restoreY));
+    });
+  }, [batchState.selectedRowId, mode]);
+
+  if (mode === 'bulk' && hasQuery && !loading && !selectedCandidate) {
+    return (
+      <section className="search-results-workbench search-results-workbench--batch" data-testid="search-results-workbench">
+        <BatchReviewTable
+          rawInputs={rawBatchInputs}
+          rows={batchRows}
+          candidates={candidates}
+          state={batchState}
+          onStateChange={setBatchState}
+          onOpen={(rowId) => setBatchState(current => ({
+            ...current,
+            selectedRowId: rowId,
+            scrollY: window.scrollY,
+          }))}
+          isEnglish={isEnglish}
+        />
+      </section>
+    );
+  }
+
+  if (mode !== 'bulk' && hasQuery && !loading && candidates.length > 1 && !selectedCandidate) {
     return (
       <section className="search-results-workbench search-results-workbench--candidates" data-testid="search-results-workbench">
         <span className="search-results-workbench__eyebrow">
@@ -168,6 +223,18 @@ export default function SearchResultsWorkbench({
 
     return (
       <section className="search-results-workbench search-results-workbench--dossier" data-testid="search-results-workbench">
+        {mode === 'bulk' && (
+          <button
+            type="button"
+            className="batch-review__back"
+            onClick={() => {
+              pendingBatchScrollRestore.current = batchState.scrollY;
+              setBatchState(current => ({ ...current, selectedRowId: null }));
+            }}
+          >
+            {isEnglish ? 'Back to batch results' : '返回批量结果'}
+          </button>
+        )}
         <p className="search-results-workbench__match-summary" aria-live="polite">
           {isEnglish ? `${matchCount} matches` : `匹配 ${matchCount} 条`}
         </p>

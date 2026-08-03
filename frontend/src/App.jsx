@@ -13,10 +13,12 @@ import ResultViewSwitch from './components/search-results/ResultViewSwitch';
 import SearchResultsWorkbench from './components/search-results/SearchResultsWorkbench';
 import {
   buildCompoundDossier,
+  buildBatchReviewRows,
   buildScientificComponentProps,
   buildWorkbenchIntegratedResults,
   deriveDossierSourceStates,
   groupDossierInputsByEntity,
+  parseBatchReviewInputs,
   selectProfileRequestCas,
 } from './searchWorkbenchModel';
 import { recordCompoundSearch } from './lib/supabase';
@@ -468,6 +470,16 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       return matched;
     }
   }, [data, deferredSingleQuery, deferredBulkQuery, searchMode, exactMatch]);
+
+  // Batch review intentionally keeps each non-empty source line verbatim and ignores blank lines.
+  const rawBatchInputs = useMemo(
+    () => parseBatchReviewInputs(deferredBulkQuery),
+    [deferredBulkQuery],
+  );
+  const batchRows = useMemo(
+    () => buildBatchReviewRows(rawBatchInputs, queryMatchedResults),
+    [rawBatchInputs, queryMatchedResults],
+  );
 
   const results = useMemo(
     () => queryMatchedResults.filter(item => selectedMedia.includes(item.medium)),
@@ -1633,7 +1645,11 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
 
         {resultView === 'new' ? (
           <SearchResultsWorkbench
+            key={searchMode === 'bulk' ? `bulk:${rawBatchInputs.join('\u001f')}` : 'single'}
             query={searchMode === 'single' ? singleQuery : bulkQuery}
+            mode={searchMode}
+            rawBatchInputs={rawBatchInputs}
+            batchRows={batchRows}
             loading={loading}
             matchCount={queryMatchedResults.length}
             candidates={compoundDossierCandidates}

@@ -670,10 +670,16 @@ const coverageFor = (items) => {
   };
 };
 
+export function parseBatchReviewInputs(rawText) {
+  return String(rawText ?? '')
+    .split(/\r?\n/)
+    .filter(line => line.trim() !== '');
+}
+
 export function buildBatchReviewRows(rawInputs, matchedResults) {
   const occurrences = new Map();
   const candidates = asArray(matchedResults).filter(Boolean);
-  return asArray(rawInputs).map((input) => {
+  return asArray(rawInputs).map((input, inputIndex) => {
     const originalInput = String(input ?? '');
     const inputKey = normaliseText(originalInput) || 'empty';
     const occurrence = occurrences.get(inputKey) ?? 0;
@@ -685,13 +691,21 @@ export function buildBatchReviewRows(rawInputs, matchedResults) {
     const candidateCas = [...new Set(nameMatches.map((item) => normaliseCas(item.cas)).filter(Boolean))];
     const ambiguous = exactMatches.length === 0 && candidateCas.length > 1;
     const matches = exactMatches.length > 0 ? exactMatches : nameMatches;
+    const candidateEntityKeys = [...new Set(matches.map(compoundEntityKey).filter(key => key !== 'name:'))];
     const status = exactMatches.length > 0 ? 'exact' : matches.length > 0 ? 'candidate' : 'unmatched';
     const coverage = coverageFor(matches);
     return {
       id: `${inputKey}:${occurrence}`,
+      inputIndex,
       originalInput,
       normalizedName,
+      standardName: matches[0]?.english_name
+        ?? matches[0]?.englishName
+        ?? matches[0]?.chinese_name
+        ?? matches[0]?.chineseName
+        ?? null,
       cas: ambiguous ? null : matches[0]?.cas ?? (/^\d{2,7}-\d{2}-\d$/.test(cas) ? cas : null),
+      candidateEntityKey: candidateEntityKeys.length === 1 ? candidateEntityKeys[0] : null,
       status,
       thresholdRecordCount: coverage.thresholdRecordCount,
       media: coverage.media,
@@ -714,7 +728,12 @@ export function sortBatchRows(rows, { key = 'reviewPriority', direction = 'asc' 
   return asArray(rows).map((row, index) => ({ row, index })).sort((left, right) => {
     const compared = key === 'reviewPriority'
       ? (priority[left.row.status] ?? 99) - (priority[right.row.status] ?? 99)
-      : compareValues(left.row[key], right.row[key]);
+      : key === 'inputOrder'
+        ? (left.row.inputIndex ?? left.index) - (right.row.inputIndex ?? right.index)
+        : key === 'coverage'
+          ? (left.row.thresholdRecordCount ?? 0) - (right.row.thresholdRecordCount ?? 0)
+            || (left.row.coverage ?? 0) - (right.row.coverage ?? 0)
+          : compareValues(left.row[key], right.row[key]);
     if (compared) return compared * multiplier;
     const byId = compareValues(left.row.id, right.row.id);
     return byId ? byId * multiplier : left.index - right.index;

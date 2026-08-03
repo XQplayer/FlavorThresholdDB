@@ -10,6 +10,7 @@ import {
   filterSensoryRecords,
   filterThresholdRecords,
   buildBatchReviewRows,
+  parseBatchReviewInputs,
   sortBatchRows,
 } from './searchWorkbenchModel.js';
 
@@ -723,7 +724,28 @@ test('builds occurrence-aware batch review rows for exact candidate and unmatche
     ['missing compound:0', 'unmatched'],
   ]);
   assert.equal(rows[2].normalizedName, 'ethyl acetate');
+  assert.equal(rows[0].standardName, 'Ethyl acetate');
+  assert.equal(rows[3].standardName, null);
+  assert.equal(rows[0].candidateEntityKey, 'cas:141-78-6');
+  assert.equal(rows[2].candidateEntityKey, 'cas:141-78-6');
   assert.ok('cas' in rows[2] && 'coverage' in rows[2] && Array.isArray(rows[2].issues));
+});
+
+test('keeps duplicate batch row ids stable and records the original input order', () => {
+  const inputs = [' 141-78-6 ', '141-78-6', '141-78-6'];
+  const first = buildBatchReviewRows(inputs, [threshold]);
+  const second = buildBatchReviewRows(inputs, [threshold]);
+  assert.deepEqual(first.map(row => row.id), ['141-78-6:0', '141-78-6:1', '141-78-6:2']);
+  assert.deepEqual(second.map(row => row.id), first.map(row => row.id));
+  assert.deepEqual(first.map(row => row.inputIndex), [0, 1, 2]);
+  assert.equal(new Set(first.map(row => row.id)).size, first.length);
+});
+
+test('parses batch text by preserving non-empty raw lines and intentionally ignoring blank lines', () => {
+  assert.deepEqual(
+    parseBatchReviewInputs('141-78-6\r\n\r\n 64-17-5 \n   \nunknown'),
+    ['141-78-6', ' 64-17-5 ', 'unknown'],
+  );
 });
 
 test('aggregates all media for one CAS without mutating matched inputs', () => {
@@ -752,6 +774,7 @@ test('keeps a multi-CAS name match ambiguous instead of choosing the first ident
   const [row] = buildBatchReviewRows(['shared name'], candidates);
   assert.equal(row.status, 'candidate');
   assert.equal(row.cas, null);
+  assert.equal(row.candidateEntityKey, null);
   assert.ok(row.issues.includes('ambiguous_identity'));
   assert.equal(row.matches.length, 2);
 });
@@ -762,4 +785,35 @@ test('sorts batch review priority deterministically without changing inputs', ()
   const sorted = sortBatchRows(rows, { key: 'reviewPriority', direction: 'asc' });
   assert.deepEqual(sorted.map(row => row.status), ['unmatched', 'candidate', 'exact']);
   assert.deepEqual(rows.map(row => row.id), before);
+});
+
+test('sorts input order and coverage deterministically in both directions', () => {
+  const richThreshold = {
+    ...threshold,
+    cas: '64-17-5',
+    english_name: 'Ethanol',
+    medium: '空气',
+    threshold_data: ['A d 1', 'B d 2', 'C d 3'],
+  };
+  const rows = buildBatchReviewRows(
+    ['64-17-5', 'missing compound', '141-78-6'],
+    [threshold, richThreshold],
+  );
+
+  assert.deepEqual(
+    sortBatchRows(rows, { key: 'inputOrder', direction: 'asc' }).map(row => row.originalInput),
+    ['64-17-5', 'missing compound', '141-78-6'],
+  );
+  assert.deepEqual(
+    sortBatchRows(rows, { key: 'inputOrder', direction: 'desc' }).map(row => row.originalInput),
+    ['141-78-6', 'missing compound', '64-17-5'],
+  );
+  assert.deepEqual(
+    sortBatchRows(rows, { key: 'coverage', direction: 'desc' }).map(row => row.originalInput),
+    ['64-17-5', '141-78-6', 'missing compound'],
+  );
+  assert.deepEqual(
+    sortBatchRows(rows, { key: 'coverage', direction: 'desc' }).map(row => row.id),
+    sortBatchRows(rows, { key: 'coverage', direction: 'desc' }).map(row => row.id),
+  );
 });
