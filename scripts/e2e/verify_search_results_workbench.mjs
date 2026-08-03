@@ -210,6 +210,7 @@ async function inspectAccessibility(page, scopeSelector = '.search-view') {
       .filter(element => !['page', 'step', 'location', 'date', 'time', 'true', 'false'].includes(element.getAttribute('aria-current')))
       .map(element => element.getAttribute('aria-current'));
     const invalidHeaders = [...scope.querySelectorAll('table th')]
+      .filter(visible)
       .filter(header => !['col', 'row', 'colgroup', 'rowgroup'].includes(header.getAttribute('scope')))
       .map(header => header.textContent.trim());
     const liveRegions = [...scope.querySelectorAll('[aria-live], [role="status"], [role="alert"]')]
@@ -363,6 +364,13 @@ const successfulCompound = {
   const openScenario = async ({ name, expected503 = [], femaHandler, compoundHandler, coreHandler, bookHandler } = {}) => {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const page = await context.newPage();
+    await page.addInitScript(() => {
+      window.requestIdleCallback = callback => window.setTimeout(
+        () => callback({ didTimeout: false, timeRemaining: () => 50 }),
+        2_000,
+      );
+      window.cancelIdleCallback = id => window.clearTimeout(id);
+    });
     const diagnostics = { pageErrors: [], consoleErrors: [], network503ConsoleErrors: [], expected503Responses: [], unexpected503Responses: [] };
     page.on('pageerror', error => diagnostics.pageErrors.push(error.message));
     page.on('console', message => {
@@ -877,6 +885,8 @@ try {
   });
   const page = await context.newPage();
   const consoleErrors = [];
+  const expectedNetwork503Errors = [];
+  const expectedCompare503Responses = [];
   const pageErrors = [];
   const apiRequests = [];
   const failedScientificRequests = [];
@@ -885,7 +895,18 @@ try {
   const batchReviewEvidence = {};
   const e2eStages = [];
   page.on('console', message => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
+    if (message.type() !== 'error') return;
+    if (/^Failed to load resource: the server responded with a status of 503/.test(message.text())) {
+      expectedNetwork503Errors.push(message.text());
+      return;
+    }
+    consoleErrors.push(message.text());
+  });
+  page.on('response', response => {
+    const url = new URL(response.url());
+    if (response.status() === 503 && url.pathname === '/spectra/compare') {
+      expectedCompare503Responses.push(url.pathname);
+    }
   });
   page.on('pageerror', error => pageErrors.push(error.message));
   page.on('requestfailed', request => {
@@ -969,7 +990,9 @@ try {
     contentType: 'application/json',
     body: JSON.stringify(bookFixture),
   }));
-  await page.route('**/spectra/search?**', route => route.fulfill({
+  await page.route('**/spectra/search?**', async route => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    await route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
@@ -984,7 +1007,8 @@ try {
       summary: { total: 3, massbank: 3, gnps: 0, ei: 3, ms2: 0 },
       sources: { MassBank: { status: 'ok' }, GNPS: { status: 'no_data' } },
     }),
-  }));
+    });
+  });
   const detailRequestCounts = new Map();
   await page.route('**/spectra/MassBank/MB-FIXTURE-*', async route => {
     const spectrumId = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1));
@@ -1036,6 +1060,13 @@ try {
   await page.route('**/bioactivity/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(bioactivityFixture) }));
   await page.route('**/structures/resolve?**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(structureFixture) }));
 
+  await page.addInitScript(() => {
+    window.requestIdleCallback = callback => window.setTimeout(
+      () => callback({ didTimeout: false, timeRemaining: () => 50 }),
+      2_000,
+    );
+    window.cancelIdleCallback = id => window.clearTimeout(id);
+  });
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.press('Tab');
@@ -1116,10 +1147,11 @@ try {
       1,
       'lazy scientific chapter navigation exposes its request state',
     );
-    assert.match(await button.textContent(), /未加载/, 'unvisited scientific chapter starts idle');
+    assert.match(await button.textContent(), /点击章节加载/, 'unvisited scientific chapter explains how to start loading');
+    assert.match(await button.textContent(), /加载数据/, 'unvisited scientific chapter exposes an explicit load action');
   }
   const assertDelegatedPanelMeta = async (chapterName) => {
-    const panelHeader = workbench.locator('.chapter-panel__header');
+    const panelHeader = workbench.locator('.chapter-panel:visible .chapter-panel__header');
     assert.equal(await panelHeader.locator('.chapter-panel__status').count(), 1, `${chapterName} exposes the delegated request status`);
     assert.equal(await panelHeader.locator('.chapter-panel__count').count(), 0, `${chapterName} omits the delegated outer count`);
   };
@@ -1130,6 +1162,8 @@ try {
 
   const spectraChapter = chapterNavigation.getByRole('button', { name: /光谱/ });
   await spectraChapter.click();
+  await workbench.getByText(/预计需要 5–15 秒/).waitFor({ state: 'visible' });
+  assert.equal(await workbench.locator('.chapter-panel__loading-spinner').count(), 1, 'chapter click immediately shows a loading indicator');
   await page.getByTestId('spectrum-workbench').waitFor({ state: 'visible', timeout: 30_000 });
   await workbench.getByText('MassBank · MB-FIXTURE-1', { exact: true }).waitFor({ state: 'visible' });
   await workbench.getByRole('link', { name: 'EI 质谱' }).waitFor({ state: 'visible' });
@@ -1145,7 +1179,7 @@ try {
   const comparisonDetailStarted = page.waitForRequest(request => new URL(request.url()).pathname === '/spectra/MassBank/MB-FIXTURE-1');
   await workbench.getByRole('button', { name: '加入比较' }).first().click();
   await comparisonDetailStarted;
-  await workbench.getByText(/A · MassBank · MB-FIXTURE-1/).waitFor({ state: 'visible', timeout: 5_000 });
+  await workbench.getByText(/A · MassBank · MB-FIXTURE-1/).first().waitFor({ state: 'visible', timeout: 5_000 });
   await workbench.getByRole('region', { name: '可滚动谱图峰表' }).waitFor({ state: 'visible', timeout: 5_000 });
   assert.equal(await workbench.getByText('正在加载峰表…', { exact: true }).count(), 0, 'comparison detail does not leave the record detail loading');
   assert.equal(
@@ -1156,12 +1190,12 @@ try {
 
   const biochemistryChapter = chapterNavigation.getByRole('button', { name: /生化关系/ });
   await biochemistryChapter.click();
-  assert.equal(await page.getByTestId('spectrum-workbench').count(), 0, 'leaving spectra unmounts the spectrum workbench');
+  assert.equal(await page.getByTestId('spectrum-workbench').isHidden(), true, 'leaving spectra keeps the cached spectrum workbench mounted but hidden');
   await workbench.getByText('RHEA:10020', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
   await workbench.getByText('ATF2', { exact: true }).waitFor({ state: 'visible' });
   await assertDelegatedPanelMeta('biochemistry');
-  assert.equal(await workbench.locator('.bioactivity-evidence').count(), 0, 'biochemistry does not mount bioactivity');
-  assert.equal(await workbench.locator('.structure-evidence').count(), 0, 'biochemistry does not mount protein structures');
+  assert.equal(await workbench.locator('.bioactivity-evidence').isVisible(), false, 'biochemistry keeps inactive bioactivity hidden');
+  assert.equal(await workbench.locator('.structure-evidence').isVisible(), false, 'biochemistry keeps inactive protein structures hidden');
 
   const bioactivityChapter = chapterNavigation.getByRole('button', { name: /活性与靶点/ });
   await bioactivityChapter.click();
@@ -1170,16 +1204,16 @@ try {
   await workbench.getByRole('tab', { name: /ChEMBL/ }).click();
   await workbench.getByText('Fixture ChEMBL target', { exact: true }).waitFor({ state: 'visible' });
   await assertDelegatedPanelMeta('bioactivity');
-  assert.equal(await workbench.locator('.biochemical-relationships').count(), 0, 'bioactivity does not mount biochemistry');
-  assert.equal(await workbench.locator('.biological-context').count(), 0, 'bioactivity does not mount biological context');
+  assert.equal(await workbench.locator('.biochemical-relationships').isHidden(), true, 'bioactivity keeps cached biochemistry hidden');
+  assert.equal(await workbench.locator('.biological-context').isHidden(), true, 'bioactivity keeps cached biological context hidden');
 
   const structuresChapter = chapterNavigation.getByRole('button', { name: /蛋白结构/ });
   await structuresChapter.click();
   await workbench.getByText('PDB 1ABC', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
   await workbench.getByText('AF-P12345-F1', { exact: true }).waitFor({ state: 'visible' });
   await assertDelegatedPanelMeta('protein structures');
-  assert.equal(await workbench.locator('.bioactivity-evidence').count(), 0, 'protein structures do not mount bioactivity');
-  assert.equal(await workbench.locator('.biochemical-relationships').count(), 0, 'protein structures do not mount biochemistry');
+  assert.equal(await workbench.locator('.bioactivity-evidence').isHidden(), true, 'protein structures keeps cached bioactivity hidden');
+  assert.equal(await workbench.locator('.biochemical-relationships').isHidden(), true, 'protein structures keeps cached biochemistry hidden');
 
   const expectedScientificQueries = {
     '/spectra/search': { inchikey: 'XEKOWRVHYACXOJ-UHFFFAOYSA-N', cas: '141-78-6', smiles: 'CCOC(=O)C', name: 'Fema canonical name' },
@@ -1204,7 +1238,7 @@ try {
   await workbench.getByText('MassBank · MB-FIXTURE-2', { exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
   const comparisonButtons = workbench.getByRole('button', { name: '加入比较' });
   await comparisonButtons.nth(0).click();
-  await workbench.getByText(/A · MassBank · MB-FIXTURE-1/).waitFor({ state: 'visible' });
+  await workbench.getByText(/A · MassBank · MB-FIXTURE-1/).first().waitFor({ state: 'visible' });
   await comparisonButtons.nth(1).click();
   await workbench.getByText(/谱图载入失败/).waitFor({ state: 'visible' });
   assert.deepEqual(pageErrors, [], 'failed comparison detail is handled without an unhandled rejection');
@@ -1226,8 +1260,8 @@ try {
   const citationChapter = chapterNavigation.getByRole('button', { name: /引用与导出/ });
   await citationChapter.click();
   const [detailWasAborted, compareWasAborted] = await Promise.all([detailAbortObserved, compareAbortObserved]);
-  assert.equal(detailWasAborted, true, 'leaving spectra aborts a pending record detail request');
-  assert.equal(compareWasAborted, true, 'leaving spectra aborts a pending comparison request');
+  assert.equal(detailWasAborted, false, 'leaving spectra keeps the cached record detail request alive');
+  assert.equal(compareWasAborted, false, 'leaving spectra keeps the cached comparison request alive');
   await workbench.getByRole('heading', { name: '引用与导出', level: 4 }).waitFor({ state: 'visible' });
   await page.evaluate(() => {
     window.__clipboardFixture = { pending: [], resetTimerCreations: 0 };
@@ -1917,7 +1951,7 @@ try {
 
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto(`${appRootUrl}shimadzu-analysis/`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('heading', { name: '岛津气质数据一站式分析' }).waitFor();
+  await page.getByRole('heading', { name: '岛津 GC–MS 风味数据分析工作台' }).waitFor();
   await page.locator('.shimadzu-settings').scrollIntoViewIfNeeded();
   await page.locator('.shimadzu-settings').waitFor({ state: 'visible' });
   finalQa.regressions.shimadzu = { heading: true, settings: true };
@@ -1952,6 +1986,8 @@ try {
 
   const duplicateKeyErrors = consoleErrors.filter(message => /unique "key" prop|same key|duplicate key/i.test(message));
   assert.deepEqual(duplicateKeyErrors, [], 'PubChem and other rendered lists emit no duplicate-key diagnostics');
+  assert.equal(expectedCompare503Responses.length, 1, 'the comparison failure fixture emits one expected 503 response');
+  assert.equal(expectedNetwork503Errors.length, 1, 'the browser reports only the expected comparison fixture 503');
   assert.deepEqual(pageErrors, [], 'page errors');
   assert.deepEqual(consoleErrors, [], 'console errors');
   e2eStages.push('complete');

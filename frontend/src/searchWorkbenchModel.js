@@ -84,10 +84,10 @@ const compoundSourceState = (currentCas, compoundProfile, sourceName) => {
   if (!compoundProfile) return { status: 'loading' };
   const source = compoundProfile[sourceName];
   if (source?.error) return { status: 'failed', ...(compoundProfile.retrying ? { retrying: true } : {}) };
+  if (source?.found === false) return { status: 'no_data' };
   const normalized = normalizeSourceStatus(source).status;
   if (normalized !== 'not_requested') return { status: normalized };
   if (source?.found === true) return { status: 'ready' };
-  if (source?.found === false) return { status: 'no_data' };
   if (compoundProfile.error) return { status: 'failed', ...(compoundProfile.retrying ? { retrying: true } : {}) };
   if (compoundProfile.loading) return { status: 'loading' };
   return { status: 'not_requested' };

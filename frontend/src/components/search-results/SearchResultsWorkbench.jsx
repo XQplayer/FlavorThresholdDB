@@ -19,6 +19,11 @@ import {
 } from './chapters/MechanismChapters';
 import CitationExportChapter from './chapters/CitationExportChapter';
 import BatchReviewTable from './BatchReviewTable';
+import {
+  createScientificPreloadState,
+  markScientificChapterStarted,
+  nextScientificChapterToPreload,
+} from '../../scientificChapterPreload';
 import './SearchResultsWorkbench.css';
 
 const CHAPTER_SOURCE_KEYS = {
@@ -105,6 +110,7 @@ export default function SearchResultsWorkbench({
   const entityKey = selectedCandidate?.entityKey ?? null;
   const [chapterSelection, setChapterSelection] = useState({ entityKey, id: 'overview' });
   const [scientificStatuses, setScientificStatuses] = useState({ entityKey, values: {} });
+  const [scientificPreload, setScientificPreload] = useState(() => createScientificPreloadState(entityKey));
   const scientificStatusHandlers = useMemo(() => Object.fromEntries(
     [...DELEGATED_CHAPTER_IDS].map(id => [id, status => setScientificStatuses(current => ({
       entityKey,
@@ -117,6 +123,9 @@ export default function SearchResultsWorkbench({
   });
   const hasQuery = Boolean(query?.trim());
   const hasIdentity = Boolean(entityKey);
+  const effectiveScientificPreload = scientificPreload.entityKey === entityKey
+    ? scientificPreload
+    : createScientificPreloadState(entityKey);
   const activeChapterId = chapterSelection.entityKey === entityKey ? chapterSelection.id : 'overview';
   const defaultChapterFilters = useMemo(() => createDefaultChapterFilters(), []);
   const chapterFilters = filterSelection.entityKey === entityKey
@@ -162,7 +171,27 @@ export default function SearchResultsWorkbench({
       ? current
       : { entityKey, values: createDefaultChapterFilters() });
     setScientificStatuses(current => current.entityKey === entityKey ? current : { entityKey, values: {} });
+    setScientificPreload(current => current.entityKey === entityKey
+      ? current
+      : createScientificPreloadState(entityKey));
   }, [entityKey]);
+
+  useEffect(() => {
+    if (!hasIdentity || loading) return undefined;
+    const statuses = scientificStatuses.entityKey === entityKey ? scientificStatuses.values : {};
+    const nextChapterId = nextScientificChapterToPreload(effectiveScientificPreload, statuses);
+    if (!nextChapterId) return undefined;
+    const startChapter = () => setScientificPreload(current => {
+      const scoped = current.entityKey === entityKey ? current : createScientificPreloadState(entityKey);
+      return markScientificChapterStarted(scoped, nextChapterId);
+    });
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleId = window.requestIdleCallback(startChapter, { timeout: 1200 });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+    const timeoutId = window.setTimeout(startChapter, 600);
+    return () => window.clearTimeout(timeoutId);
+  }, [effectiveScientificPreload, entityKey, hasIdentity, loading, scientificStatuses]);
 
   useEffect(() => {
     if (mode !== 'bulk' || batchState.selectedRowId === null) return;
@@ -297,6 +326,37 @@ export default function SearchResultsWorkbench({
       ...buildScientificComponentProps({ dossier, includeFlavorDescriptions }),
       isEnglish,
     };
+    const renderScientificContent = (chapterId) => {
+      if (chapterId === 'spectra') return <SpectraChapter {...scientificProps} onStatusChange={scientificStatusHandlers.spectra} />;
+      if (chapterId === 'biochemistry') return <BiochemistryChapter {...scientificProps} onStatusChange={scientificStatusHandlers.biochemistry} />;
+      if (chapterId === 'bioactivity') return <BioactivityChapter {...scientificProps} onStatusChange={scientificStatusHandlers.bioactivity} />;
+      return <ProteinStructuresChapter {...scientificProps} onStatusChange={scientificStatusHandlers.structures} />;
+    };
+    const renderStandardContent = () => {
+      if (activeChapter.id === 'overview') {
+        return <OverviewChapter identity={dossier.identity} chapters={chapters} sourceStates={dossier.sourceStates} isEnglish={isEnglish} />;
+      }
+      if (activeChapter.id === 'sensory') {
+        return <SensorySourcesChapter records={records} filters={chapterFilters.sensory} onFiltersChange={next => updateChapterFilters('sensory', next)} isEnglish={isEnglish} />;
+      }
+      if (activeChapter.id === 'thresholds') {
+        return <ThresholdEvidenceChapter records={records} filters={chapterFilters.thresholds} onFiltersChange={next => updateChapterFilters('thresholds', next)} isEnglish={isEnglish} />;
+      }
+      if (activeChapter.id === 'citation') {
+        return (
+          <CitationExportChapter
+            citationExampleText={citationText}
+            records={records}
+            onExportCompact={onExportCompact}
+            onExportDetailed={onExportDetailed}
+            sourceStates={dossier.sourceStates}
+            exportEnabledSourceKeys={exportEnabledSourceKeys}
+            isEnglish={isEnglish}
+          />
+        );
+      }
+      return <p className="chapter-panel__empty">{isEnglish ? 'Chapter unavailable.' : '章节不可用。'}</p>;
+    };
 
     return (
       <section className="search-results-workbench search-results-workbench--dossier" data-testid="search-results-workbench">
@@ -333,63 +393,57 @@ export default function SearchResultsWorkbench({
             activeId={activeChapter.id}
             onChange={(id) => {
               setChapterSelection({ entityKey, id });
-              if (DELEGATED_CHAPTER_IDS.has(id)) setScientificStatuses(current => ({ entityKey, values: { ...(current.entityKey === entityKey ? current.values : {}), [id]: 'loading' } }));
+              if (DELEGATED_CHAPTER_IDS.has(id)) {
+                setScientificPreload(current => markScientificChapterStarted(
+                  current.entityKey === entityKey ? current : createScientificPreloadState(entityKey),
+                  id,
+                ));
+                setScientificStatuses(current => {
+                  const values = current.entityKey === entityKey ? current.values : {};
+                  return values[id] && values[id] !== 'idle'
+                    ? current
+                    : { entityKey, values: { ...values, [id]: 'loading' } };
+                });
+              }
             }}
             isEnglish={isEnglish}
           />
-          <ChapterPanel
-            id={activeChapter.id}
-            title={isEnglish ? activeChapter.en : activeChapter.zh}
-            count={activeChapter.count}
-            status={activeChapter.status}
-            statusOwner={activeChapter.statusOwner}
-            sourceStates={panelSourceStates}
-            isEnglish={isEnglish}
-            onRetry={(sourceId) => onRetrySource?.(sourceId, selectedCandidate)}
-          >
-            {activeChapter.id === 'overview' ? (
-              <OverviewChapter
-                identity={dossier.identity}
-                chapters={chapters}
-                sourceStates={dossier.sourceStates}
+          <div className="chapter-panel-stack">
+            {[...DELEGATED_CHAPTER_IDS]
+              .filter(id => effectiveScientificPreload.started.includes(id))
+              .map(id => {
+                const chapter = chapters.find(item => item.id === id);
+                return (
+                  <div key={id} hidden={activeChapter.id !== id}>
+                    <ChapterPanel
+                      id={id}
+                      title={isEnglish ? chapter.en : chapter.zh}
+                      count={chapter.count}
+                      status={chapter.status}
+                      statusOwner={chapter.statusOwner}
+                      sourceStates={{}}
+                      isEnglish={isEnglish}
+                    >
+                      {renderScientificContent(id)}
+                    </ChapterPanel>
+                  </div>
+                );
+              })}
+            {!DELEGATED_CHAPTER_IDS.has(activeChapter.id) && (
+              <ChapterPanel
+                id={activeChapter.id}
+                title={isEnglish ? activeChapter.en : activeChapter.zh}
+                count={activeChapter.count}
+                status={activeChapter.status}
+                statusOwner={activeChapter.statusOwner}
+                sourceStates={panelSourceStates}
                 isEnglish={isEnglish}
-              />
-            ) : activeChapter.id === 'sensory' ? (
-              <SensorySourcesChapter
-                records={records}
-                filters={chapterFilters.sensory}
-                onFiltersChange={next => updateChapterFilters('sensory', next)}
-                isEnglish={isEnglish}
-              />
-            ) : activeChapter.id === 'thresholds' ? (
-              <ThresholdEvidenceChapter
-                records={records}
-                filters={chapterFilters.thresholds}
-                onFiltersChange={next => updateChapterFilters('thresholds', next)}
-                isEnglish={isEnglish}
-              />
-            ) : activeChapter.id === 'spectra' ? (
-              <SpectraChapter {...scientificProps} onStatusChange={scientificStatusHandlers.spectra} />
-            ) : activeChapter.id === 'biochemistry' ? (
-              <BiochemistryChapter {...scientificProps} onStatusChange={scientificStatusHandlers.biochemistry} />
-            ) : activeChapter.id === 'bioactivity' ? (
-              <BioactivityChapter {...scientificProps} onStatusChange={scientificStatusHandlers.bioactivity} />
-            ) : activeChapter.id === 'structures' ? (
-              <ProteinStructuresChapter {...scientificProps} onStatusChange={scientificStatusHandlers.structures} />
-            ) : activeChapter.id === 'citation' ? (
-              <CitationExportChapter
-                citationExampleText={citationText}
-                records={records}
-                onExportCompact={onExportCompact}
-                onExportDetailed={onExportDetailed}
-                sourceStates={dossier.sourceStates}
-                exportEnabledSourceKeys={exportEnabledSourceKeys}
-                isEnglish={isEnglish}
-              />
-            ) : (
-              <p className="chapter-panel__empty">{isEnglish ? 'Chapter unavailable.' : '章节不可用。'}</p>
+                onRetry={(sourceId) => onRetrySource?.(sourceId, selectedCandidate)}
+              >
+                {renderStandardContent()}
+              </ChapterPanel>
             )}
-          </ChapterPanel>
+          </div>
         </div>
       </section>
     );

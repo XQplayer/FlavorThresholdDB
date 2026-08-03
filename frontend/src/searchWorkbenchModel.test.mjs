@@ -232,6 +232,19 @@ test('derives dossier source states from observed local and upstream data', () =
   assert.equal(states.book.labelZh, '书籍证据');
 });
 
+test('treats a completed FlavorDB2 found false response as no matching data', () => {
+  const states = searchWorkbenchModel.deriveDossierSourceStates({
+    currentCas: threshold.cas,
+    compoundProfile: {
+      loading: false,
+      pubchem: { found: true },
+      flavordb: { found: false, status: 'ok', entities: [] },
+    },
+  });
+
+  assert.equal(states.flavordb.status, 'no_data');
+});
+
 test('keeps pending, failed, and indeterminate source states distinct', () => {
   assert.equal(typeof searchWorkbenchModel.deriveDossierSourceStates, 'function');
   const pending = searchWorkbenchModel.deriveDossierSourceStates({
