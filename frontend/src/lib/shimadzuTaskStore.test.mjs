@@ -61,6 +61,26 @@ test('updates progress without replacing stored workbook buffers', async () => {
   assert.equal(restored.nextStage, 3)
 })
 
+test('persists a partial result archive with a failed task for resume and download', async () => {
+  const adapter = memoryAdapter()
+  const store = createShimadzuTaskStore({ adapter })
+  const partial = new Uint8Array([9, 8, 7]).buffer
+  await store.save(task({
+    status: 'failed',
+    error: { code: 'STAGE_GATE_FAILED', message: '步骤4未通过质量门禁', details: { stage: 4 } },
+    partialArchiveBytes: partial,
+    partialArchiveSha256: 'partial-sha',
+    partialArchiveFileName: '失败测试_部分结果.zip',
+  }))
+
+  const restored = await store.load('user-1')
+  assert.equal(restored.status, 'failed')
+  assert.equal(restored.error.details.stage, 4)
+  assert.deepEqual([...new Uint8Array(restored.partialArchiveBytes)], [9, 8, 7])
+  assert.equal(restored.partialArchiveSha256, 'partial-sha')
+  assert.equal(restored.partialArchiveFileName, '失败测试_部分结果.zip')
+})
+
 test('clears all active-task records', async () => {
   const adapter = memoryAdapter()
   const store = createShimadzuTaskStore({ adapter })

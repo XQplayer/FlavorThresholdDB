@@ -5,6 +5,7 @@ import test from 'node:test'
 import {
   authCallbackMessage,
   createShimadzuCloud,
+  inputObjectPath,
   resultObjectPath,
   retentionColumns,
   shimadzuAuthRedirect,
@@ -56,10 +57,40 @@ test('scopes every retained result to its user and job', () => {
   assert.throws(() => resultObjectPath('../owner', 'job'), /INVALID_STORAGE_ID/)
 })
 
+test('scopes raw workbooks and supports result deletion through the private buckets', async () => {
+  const calls = []
+  const client = {
+    storage: {
+      from(bucket) {
+        return {
+          async upload(path, body, options) { calls.push(['upload', bucket, path, body.size, options]); return { data: { path }, error: null } },
+          async remove(paths) { calls.push(['remove', bucket, paths]); return { data: paths, error: null } },
+          async createSignedUrl(path, seconds) { calls.push(['signed', bucket, path, seconds]); return { data: { signedUrl: `https://signed/${bucket}/${path}` }, error: null } },
+        }
+      },
+    },
+    from(table) {
+      return {
+        update(patch) { calls.push(['update', table, patch]); return { eq() { return { select() { return { async single() { return { data: { ...patch }, error: null } } } } } } } },
+      }
+    },
+  }
+  const cloud = createShimadzuCloud(client)
+  const userId = '11111111-1111-4111-8111-111111111111'
+  const jobId = '22222222-2222-4222-8222-222222222222'
+  assert.equal(inputObjectPath(userId, jobId, 'raw'), `${userId}/${jobId}/raw.xlsx`)
+  assert.throws(() => inputObjectPath('../owner', jobId, 'raw'), /INVALID_STORAGE_ID/)
+  await cloud.uploadInputs({ userId, jobId, rawBytes: new Uint8Array([1]), sampleBytes: new Uint8Array([2]) })
+  await cloud.deleteResult({ jobId, path: resultObjectPath(userId, jobId) })
+  assert.deepEqual(calls.filter(call => call[0] === 'upload').map(call => call[1]), ['shimadzu-inputs', 'shimadzu-inputs'])
+  assert.deepEqual(calls.find(call => call[0] === 'remove'), ['remove', 'shimadzu-results', [`${userId}/${jobId}/result.zip`]])
+})
+
 test('sets result retention to seven days and records to ninety days', () => {
   assert.deepEqual(retentionColumns('2026-08-03T00:00:00.000Z'), {
     result_expires_at: '2026-08-10T00:00:00.000Z',
     record_expires_at: '2026-11-01T00:00:00.000Z',
+    input_expires_at: '2026-11-01T00:00:00.000Z',
   })
 })
 
@@ -67,6 +98,7 @@ test('migration enforces approval, RLS, private storage and cleanup', async () =
   const sql = await readFile(new URL('../../../supabase/migrations/20260803070000_shimadzu_browser_analysis.sql', import.meta.url), 'utf8')
   const schedule = await readFile(new URL('../../../supabase/migrations/20260803073000_shimadzu_retention_schedule.sql', import.meta.url), 'utf8')
   const bootstrap = await readFile(new URL('../../../supabase/migrations/20260803080000_shimadzu_admin_bootstrap.sql', import.meta.url), 'utf8')
+  const adminRetention = await readFile(new URL('../../../supabase/migrations/20260807090000_shimadzu_partial_results_admin_retention.sql', import.meta.url), 'utf8')
   const edgeFunction = await readFile(new URL('../../../supabase/functions/shimadzu-retention-cleanup/index.ts', import.meta.url), 'utf8')
   for (const required of [
     'enable row level security', "approval_status = 'approved'", "'shimadzu-results'", 'cleanup_expired_shimadzu_data',
@@ -77,9 +109,14 @@ test('migration enforces approval, RLS, private storage and cleanup', async () =
   assert.match(schedule, /cron\.schedule/)
   assert.match(schedule, /17 3 \* \* \*/)
   assert.match(edgeFunction, /storage\.from\('shimadzu-results'\)\.remove/)
+  assert.match(edgeFunction, /storage\.from\('shimadzu-inputs'\)\.remove/)
   assert.match(edgeFunction, /SUPABASE_SERVICE_ROLE_KEY/)
   assert.match(bootstrap, /claim_first_shimadzu_admin/)
   assert.match(bootstrap, /administrator already initialized/)
   assert.match(bootstrap, /digest\(coalesce\(bootstrap_code/)
   assert.doesNotMatch(bootstrap, /bootstrap_code\s*=\s*['"][a-f0-9]{32}['"]/i)
+  assert.match(adminRetention, /shimadzu-inputs/)
+  assert.match(adminRetention, /is_shimadzu_admin\(\)/)
+  assert.match(adminRetention, /input_expires_at/)
+  assert.match(adminRetention, /removed_inputs/)
 })

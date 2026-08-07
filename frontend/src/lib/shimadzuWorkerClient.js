@@ -27,7 +27,14 @@ export function createShimadzuWorkerClient({
         } else if (data.type === 'error' || data.type === 'cancelled') {
           const reject = active.reject
           active = null
-          reject(Object.assign(new Error(data.message || data.code || data.type), { code: data.code || data.type }))
+          reject(Object.assign(new Error(data.message || data.code || data.type), {
+            code: data.code || data.type,
+            details: data.details,
+            archiveBytes: data.archiveBytes,
+            archiveSha256: data.archiveSha256,
+            archiveSize: data.archiveSize,
+            fileName: data.fileName,
+          }))
         }
       } catch (error) {
         const reject = active?.reject

@@ -154,7 +154,7 @@ function AccountPanel({ cloud, session, profile, loading, error, onRefresh }) {
   )
 }
 
-function HistoryPanel({ jobs, interruptedJobIds, onDownload, onMarkInterrupted }) {
+function HistoryPanelLegacy({ jobs, interruptedJobIds, onDownload, onMarkInterrupted }) {
   if (!jobs.length) return null
   return (
     <section className="shimadzu-history shimadzu-reveal" aria-labelledby="history-title">
@@ -170,6 +170,25 @@ function HistoryPanel({ jobs, interruptedJobIds, onDownload, onMarkInterrupted }
     </section>
   )
 }
+
+function HistoryPanel({ jobs, interruptedJobIds, onDownload, onMarkInterrupted, onDownloadInput, onDeleteResult, isAdmin = false }) {
+  if (!jobs.length) return null
+  return (
+    <section className="shimadzu-history shimadzu-reveal" aria-labelledby="history-title">
+      <div className="shimadzu-region-heading"><div><h2 id="history-title"><History />{isAdmin ? '管理员任务台' : '最近任务'}</h2><p>{isAdmin ? '可查看所有用户运行状态，并下载原始工作簿与结果证据。' : '任务与 QC 摘要保留 90 天；结果包完成后保留 7 天。'}</p></div><span>{isAdmin ? '管理员可见' : '私有记录'}</span></div>
+      <div className="shimadzu-history-table" role="table">
+        {jobs.map(item => {
+          const downloadable = item.result_path && new Date(item.result_expires_at) > new Date()
+          const interrupted = interruptedJobIds.has(item.id)
+          const visibleStatus = interrupted ? 'interrupted' : item.status
+          return <div key={item.id} role="row"><div><strong>{item.name}</strong><small>{isAdmin ? `用户 ${item.user_id} · ` : ''}{new Date(item.created_at).toLocaleString('zh-CN', { hour12: false })}</small></div><span className={`shimadzu-job-badge ${visibleStatus}`}>{STATUS_LABELS[visibleStatus] || visibleStatus}</span><span>步骤 {item.current_stage}/7 · {item.progress}%</span><div className="shimadzu-history-actions">{interrupted ? <button type="button" onClick={() => onMarkInterrupted(item)}>确认中断</button> : downloadable ? <button type="button" onClick={() => onDownload(item)}><CloudDownload />重新下载</button> : <small>{item.status === 'complete' || item.status === 'expired' ? '结果已过期' : '暂无结果'}</small>}{isAdmin && item.raw_path && <button type="button" onClick={() => onDownloadInput(item)}><Download />原始文件</button>}{downloadable && onDeleteResult && <button type="button" className="danger" onClick={() => onDeleteResult(item)}>删除结果</button>}</div></div>
+        })}
+      </div>
+    </section>
+  )
+}
+
+void HistoryPanelLegacy
 
 const stageStatus = (job, index) => job?.stages?.[index]?.status || 'pending'
 
@@ -196,6 +215,9 @@ const jobFromStoredTask = (task, status = 'running') => {
     next_stage: task.nextStage || 0,
     updated_at: task.savedAt || new Date().toISOString(),
     error: task.error || null,
+    partialArchiveFileName: task.partialArchiveFileName || null,
+    partialArchiveSha256: task.partialArchiveSha256 || null,
+    partialArchiveSize: task.partialArchiveSize || null,
     stages: WORKFLOW.map(stage => {
       const summary = summaries.get(stage.index)
       return summary
@@ -323,6 +345,7 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
   const samplesInputRef = useRef(null)
   const workerClientRef = useRef(null)
   const resultUrlRef = useRef('')
+  const partialResultUrlRef = useRef('')
   const activeJobIdRef = useRef('')
   const cloudSyncRef = useRef(Promise.resolve())
   const taskSyncRef = useRef(Promise.resolve())
@@ -369,6 +392,7 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
     return () => {
       workerClientRef.current?.dispose()
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
+      if (partialResultUrlRef.current) URL.revokeObjectURL(partialResultUrlRef.current)
     }
   }, [api])
 
@@ -520,6 +544,10 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
         resumeFromStage: resumeFromStageRef.current,
         onEvent: handleWorkerEvent,
       })
+      if (partialResultUrlRef.current) {
+        URL.revokeObjectURL(partialResultUrlRef.current)
+        partialResultUrlRef.current = ''
+      }
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
       resultUrlRef.current = URL.createObjectURL(new Blob([result.archiveBytes], { type: 'application/zip' }))
       const completedResult = { next_stage: 7, updated_at: new Date().toISOString(), downloadUrl: resultUrlRef.current, resultFileName: result.fileName, archiveSha256: result.archiveSha256, archiveSize: result.archiveSize }
@@ -544,18 +572,46 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
       if (value.code === 'ANALYSIS_INTERRUPTED') return
       const cancelled = value.code === 'ANALYSIS_CANCELLED'
       setError(value.message)
-      const failure = { code: value.code || 'BROWSER_ANALYSIS_FAILED', message: value.message, at: new Date().toISOString() }
-      setJob(current => current ? { ...current, status: cancelled ? 'cancelled' : 'failed', error: failure } : null)
+      const failure = {
+        code: value.code || 'BROWSER_ANALYSIS_FAILED', message: value.message, details: value.details || null,
+        at: new Date().toISOString(),
+      }
+      let partialResult = {}
+      if (!cancelled && value.archiveBytes) {
+        if (partialResultUrlRef.current) URL.revokeObjectURL(partialResultUrlRef.current)
+        partialResultUrlRef.current = URL.createObjectURL(new Blob([value.archiveBytes], { type: 'application/zip' }))
+        partialResult = {
+          partialDownloadUrl: partialResultUrlRef.current,
+          partialArchiveFileName: value.fileName || `${task.name}_部分结果.zip`,
+          partialArchiveSha256: value.archiveSha256 || null,
+          partialArchiveSize: value.archiveSize || value.archiveBytes.byteLength,
+        }
+      }
+      setJob(current => current ? { ...current, ...partialResult, status: cancelled ? 'cancelled' : 'failed', error: failure } : null)
+      const nextStage = Math.max(resumeFromStageRef.current, stageSummaryRef.current.filter(Boolean).length)
       if (cancelled) {
         await taskSyncRef.current.catch(() => {})
         await taskStore.clear(task.scope).catch(() => {})
         setActiveTaskId('')
       } else {
         await taskSyncRef.current.catch(() => {})
-        const nextStage = Math.max(resumeFromStageRef.current, stageSummaryRef.current.filter(Boolean).length)
-        await taskStore.update(task.scope, { status: 'failed', nextStage, stageSummary: stageSummaryRef.current.filter(Boolean), error: failure }).catch(() => {})
+        await taskStore.update(task.scope, {
+          status: 'failed', nextStage, stageSummary: stageSummaryRef.current.filter(Boolean), error: failure,
+          ...(value.archiveBytes ? {
+            partialArchiveBytes: value.archiveBytes,
+            partialArchiveSha256: value.archiveSha256 || null,
+            partialArchiveSize: value.archiveSize || value.archiveBytes.byteLength,
+            partialArchiveFileName: value.fileName || `${task.name}_部分结果.zip`,
+          } : {}),
+        }).catch(() => {})
       }
       if (cloud.configured && activeJobIdRef.current) {
+        if (!cancelled && value.archiveBytes) {
+          await cloud.uploadResult({
+            userId: task.userId, jobId: activeJobIdRef.current, archiveBytes: value.archiveBytes,
+            sha256: value.archiveSha256, status: 'failed', currentStage: Math.max(0, nextStage), progress: Math.round(Math.min(6, nextStage) / 7 * 100),
+          }).catch(uploadError => setCloudError(`失败任务的部分结果保存失败：${uploadError.message}`))
+        }
         const stageSummary = [...stageSummaryRef.current.filter(Boolean), { type: 'error', ...failure }]
         await cloud.updateJob(activeJobIdRef.current, { status: cancelled ? 'cancelled' : 'failed', stage_summary: stageSummary }).catch(() => {})
         setHistory(await cloud.listJobs().catch(() => history))
@@ -588,6 +644,11 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
           sourceNames: { raw: { name: rawFile.name, size: rawFile.size }, sample_info: { name: samplesFile.name, size: samplesFile.size } },
         })
         cloudJobId = task.id
+        try {
+          await cloud.uploadInputs({ userId: task.userId, jobId: task.id, rawBytes, sampleBytes })
+        } catch (value) {
+          setCloudError(`原始工作簿云端留存失败，分析仍会继续：${value.message}`)
+        }
       }
       await taskStore.save(task)
       await runTask(task)
@@ -615,7 +676,13 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
       setName(task.name)
       setMode(task.mode)
       if (task.status === 'failed') {
-        setJob(jobFromStoredTask(task, 'failed'))
+        const restoredJob = jobFromStoredTask(task, 'failed')
+        if (task.partialArchiveBytes) {
+          if (partialResultUrlRef.current) URL.revokeObjectURL(partialResultUrlRef.current)
+          partialResultUrlRef.current = URL.createObjectURL(new Blob([task.partialArchiveBytes], { type: 'application/zip' }))
+          restoredJob.partialDownloadUrl = partialResultUrlRef.current
+        }
+        setJob(restoredJob)
         setRecoveryNotice('已恢复上次失败任务及错误信息。可重新运行，或更换文件建立新任务。')
         return
       }
@@ -692,6 +759,23 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
     } catch (value) { setCloudError(`无法建立下载链接：${value.message}`) }
   }
 
+  const downloadCloudInput = async item => {
+    setCloudError('')
+    try {
+      const url = await cloud.downloadInputUrl(item.raw_path)
+      window.location.assign(url)
+    } catch (value) { setCloudError(`无法建立原始工作簿下载链接：${value.message}`) }
+  }
+
+  const deleteCloudResult = async item => {
+    if (!window.confirm('仅删除这个结果 ZIP，任务记录和质量日志会保留。继续吗？')) return
+    setCloudError('')
+    try {
+      await cloud.deleteResult({ jobId: item.id, path: item.result_path })
+      setHistory(await cloud.listJobs())
+    } catch (value) { setCloudError(`结果 ZIP 删除失败：${value.message}`) }
+  }
+
   const markInterrupted = async item => {
     setCloudError('')
     try {
@@ -710,6 +794,8 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
     await taskStore.clear(taskScopeRef.current).catch(() => {})
     if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
     resultUrlRef.current = ''
+    if (partialResultUrlRef.current) URL.revokeObjectURL(partialResultUrlRef.current)
+    partialResultUrlRef.current = ''
     activeJobIdRef.current = ''
     stageSummaryRef.current = []
     cloudSyncRef.current = Promise.resolve()
@@ -799,7 +885,7 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
                   {job.status !== 'saving' && <button type="button" onClick={reset}><RotateCcw />新任务</button>}
                 </div>
               </section>
-              {job.error && <div className="shimadzu-inline-error"><AlertCircle /><span><strong>{job.error.code}</strong>{job.error.message}</span></div>}
+              {job.error && <div className="shimadzu-inline-error" role="alert"><AlertCircle /><div><p><strong>{job.error.code}</strong>{job.error.message}</p>{job.error.details?.stage !== undefined && <small>失败步骤：{Number(job.error.details.stage) + 1} / 7</small>}{job.error.details?.issues?.length > 0 && <ul>{job.error.details.issues.slice(0, 4).map((issue, index) => <li key={`${issue.code || 'issue'}-${index}`}>{issue.code || '质量门禁问题'}{issue.sampleName ? ` · ${issue.sampleName}` : ''}{issue.cas ? ` · CAS ${issue.cas}` : ''}</li>)}</ul>}{job.partialDownloadUrl && <a href={job.partialDownloadUrl} download={job.partialArchiveFileName}><Download />下载已完成步骤与错误证据</a>}</div></div>}
               <LiveMonitor job={job} capabilities={null} engine={engine} />
               <section className="shimadzu-stage-detail shimadzu-reveal" aria-labelledby="detail-title">
                 <div className="shimadzu-region-heading"><div><h2 id="detail-title">步骤状态与处理计数</h2><p>各步骤的运行状态、警告和待复核项会保留到最终报告。</p></div></div>
@@ -815,7 +901,7 @@ export default function ShimadzuAnalysisPage({ onHome, onThresholds, isEnglish, 
             <WorkflowMap job={job} />
           </>
         )}
-        <HistoryPanel jobs={history} interruptedJobIds={interruptedJobIds} onDownload={downloadCloudResult} onMarkInterrupted={markInterrupted} />
+        <HistoryPanel jobs={history} interruptedJobIds={interruptedJobIds} onDownload={downloadCloudResult} onMarkInterrupted={markInterrupted} onDownloadInput={downloadCloudInput} onDeleteResult={deleteCloudResult} isAdmin={profile?.is_admin === true} />
       </main>
     </div>
   )

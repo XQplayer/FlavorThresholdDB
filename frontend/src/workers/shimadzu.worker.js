@@ -45,9 +45,22 @@ self.onmessage = async ({ data }) => {
     }, [archiveBytes])
   } catch (error) {
     const cancelled = controller.signal.aborted || error?.code === 'ANALYSIS_CANCELLED'
-    self.postMessage(cancelled
-      ? { type: 'cancelled', code: 'ANALYSIS_CANCELLED', message: '分析已取消' }
-      : { type: 'error', code: error?.code || 'BROWSER_ANALYSIS_FAILED', message: error?.message || String(error), details: error?.details })
+    if (cancelled) {
+      self.postMessage({ type: 'cancelled', code: 'ANALYSIS_CANCELLED', message: '分析已取消' })
+    } else {
+      const payload = {
+        type: 'error', code: error?.code || 'BROWSER_ANALYSIS_FAILED',
+        message: error?.message || String(error), details: error?.details,
+        archiveSha256: error?.archiveSha256, archiveSize: error?.archiveSize, fileName: error?.fileName,
+      }
+      const archiveBytes = error?.archiveBytes instanceof Uint8Array
+        ? error.archiveBytes
+        : error?.archiveBytes ? new Uint8Array(error.archiveBytes) : null
+      if (archiveBytes) {
+        payload.archiveBytes = archiveBytes.buffer
+        self.postMessage(payload, [payload.archiveBytes])
+      } else self.postMessage(payload)
+    }
   } finally {
     controller = null
     reviewResolver = null

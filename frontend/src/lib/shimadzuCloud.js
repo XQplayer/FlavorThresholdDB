@@ -29,10 +29,16 @@ export function resultObjectPath(userId, jobId) {
   return `${userId}/${jobId}/result.zip`
 }
 
+export function inputObjectPath(userId, jobId, kind) {
+  if (!UUID.test(userId) || !UUID.test(jobId) || !['raw', 'sample'].includes(kind)) throw Object.assign(new Error('INVALID_STORAGE_ID'), { code: 'INVALID_STORAGE_ID' })
+  return `${userId}/${jobId}/${kind}.xlsx`
+}
+
 export function retentionColumns(now = new Date().toISOString()) {
   return {
     result_expires_at: expiryFrom(now, RESULT_RETENTION_DAYS),
     record_expires_at: expiryFrom(now, RECORD_RETENTION_DAYS),
+    input_expires_at: expiryFrom(now, RECORD_RETENTION_DAYS),
   }
 }
 
@@ -76,14 +82,31 @@ export function createShimadzuCloud(client) {
     async updateJob(id, patch) {
       return unwrap(await requireClient(client).from('shimadzu_jobs').update(patch).eq('id', id).select().single())
     },
-    async uploadResult({ userId, jobId, archiveBytes, sha256 }) {
+    async uploadResult({ userId, jobId, archiveBytes, sha256, status = 'complete', currentStage = 7, progress = 100, completedAt = new Date().toISOString() }) {
       const path = resultObjectPath(userId, jobId)
       const body = archiveBytes instanceof Blob ? archiveBytes : new Blob([archiveBytes], { type: 'application/zip' })
       unwrap(await requireClient(client).storage.from('shimadzu-results').upload(path, body, { contentType: 'application/zip', upsert: true }))
-      return this.updateJob(jobId, { result_path: path, result_sha256: sha256, result_size: body.size, status: 'complete', progress: 100, completed_at: new Date().toISOString() })
+      return this.updateJob(jobId, { result_path: path, result_sha256: sha256, result_size: body.size, status, current_stage: currentStage, progress, completed_at: completedAt })
     },
-    async downloadUrl(path) {
-      return unwrap(await requireClient(client).storage.from('shimadzu-results').createSignedUrl(path, 300))?.signedUrl
+    async uploadInputs({ userId, jobId, rawBytes, sampleBytes }) {
+      const rawPath = inputObjectPath(userId, jobId, 'raw')
+      const samplePath = inputObjectPath(userId, jobId, 'sample')
+      const rawBody = rawBytes instanceof Blob ? rawBytes : new Blob([rawBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const sampleBody = sampleBytes instanceof Blob ? sampleBytes : new Blob([sampleBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const bucket = requireClient(client).storage.from('shimadzu-inputs')
+      unwrap(await bucket.upload(rawPath, rawBody, { contentType: rawBody.type, upsert: true }))
+      unwrap(await bucket.upload(samplePath, sampleBody, { contentType: sampleBody.type, upsert: true }))
+      return this.updateJob(jobId, { raw_path: rawPath, sample_path: samplePath })
+    },
+    async downloadUrl(path, bucketName = 'shimadzu-results') {
+      return unwrap(await requireClient(client).storage.from(bucketName).createSignedUrl(path, 300))?.signedUrl
+    },
+    async downloadInputUrl(path) {
+      return this.downloadUrl(path, 'shimadzu-inputs')
+    },
+    async deleteResult({ jobId, path }) {
+      unwrap(await requireClient(client).storage.from('shimadzu-results').remove([path]))
+      return this.updateJob(jobId, { result_path: null, result_sha256: null, result_size: null, result_expires_at: new Date().toISOString() })
     },
     async pendingUsers() {
       return unwrap(await requireClient(client).from('profiles').select('id,display_name,approval_status,requested_at,reviewed_at').eq('approval_status', 'pending').order('requested_at')) || []

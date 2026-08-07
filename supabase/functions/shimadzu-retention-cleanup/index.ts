@@ -37,6 +37,23 @@ Deno.serve(async request => {
     if (updateError) return json({ error: updateError.message }, 500)
   }
 
+  const { data: expiredInputs, error: inputSelectError } = await admin
+    .from('shimadzu_jobs')
+    .select('id,raw_path,sample_path')
+    .or(`raw_path.not.is.null,sample_path.not.is.null`)
+    .lte('input_expires_at', now)
+    .limit(1000)
+  if (inputSelectError) return json({ error: inputSelectError.message }, 500)
+
+  const inputPaths = (expiredInputs || []).flatMap(item => [item.raw_path, item.sample_path]).filter(Boolean)
+  if (inputPaths.length) {
+    const { error: inputStorageError } = await admin.storage.from('shimadzu-inputs').remove(inputPaths)
+    if (inputStorageError) return json({ error: inputStorageError.message }, 500)
+    const inputIds = (expiredInputs || []).map(item => item.id)
+    const { error: inputUpdateError } = await admin.from('shimadzu_jobs').update({ raw_path: null, sample_path: null }).in('id', inputIds)
+    if (inputUpdateError) return json({ error: inputUpdateError.message }, 500)
+  }
+
   const { data: removedJobs, error: deleteError } = await admin
     .from('shimadzu_jobs')
     .delete()
@@ -44,5 +61,5 @@ Deno.serve(async request => {
     .select('id')
   if (deleteError) return json({ error: deleteError.message }, 500)
 
-  return json({ status: 'PASS', removed_results: paths.length, removed_jobs: removedJobs?.length || 0, checked_at: now })
+  return json({ status: 'PASS', removed_results: paths.length, removed_inputs: inputPaths.length, removed_jobs: removedJobs?.length || 0, checked_at: now })
 })

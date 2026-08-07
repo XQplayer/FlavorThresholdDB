@@ -44,3 +44,28 @@ test('dispose reports an interruption so page unload does not erase resumable in
   client.dispose()
   await assert.rejects(pending, error => error.code === 'ANALYSIS_INTERRUPTED')
 })
+
+test('preserves structured failure details and partial archive metadata', async () => {
+  const client = createShimadzuWorkerClient({ WorkerCtor: FakeWorker, workerUrl: 'worker.js' })
+  const pending = client.run({ rawBytes: new ArrayBuffer(1), sampleBytes: new ArrayBuffer(1) })
+  const archive = new Uint8Array([7, 6, 5]).buffer
+  FakeWorker.latest.emit({
+    type: 'error',
+    code: 'STAGE_GATE_FAILED',
+    message: '步骤4未通过质量门禁',
+    details: { stage: 4, issues: [{ code: 'INVALID_INTERNAL_STANDARD_AREA', sampleName: 'A-2' }] },
+    archiveBytes: archive,
+    archiveSha256: 'partial-sha',
+    archiveSize: archive.byteLength,
+    fileName: '失败测试_部分结果.zip',
+  })
+
+  await assert.rejects(pending, error => {
+    assert.equal(error.code, 'STAGE_GATE_FAILED')
+    assert.equal(error.details.stage, 4)
+    assert.deepEqual([...new Uint8Array(error.archiveBytes)], [7, 6, 5])
+    assert.equal(error.archiveSha256, 'partial-sha')
+    assert.equal(error.fileName, '失败测试_部分结果.zip')
+    return true
+  })
+})
