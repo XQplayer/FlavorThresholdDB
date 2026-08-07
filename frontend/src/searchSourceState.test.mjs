@@ -7,10 +7,40 @@ import {
   buildEntityExportSourceStatuses,
   failCompoundProfileRequest,
   failFemaProfileRequest,
+  fetchSourceWithRetry,
   getExportClassification,
   retryFetchOptions,
   withRetryGeneration,
 } from './searchSourceState.js';
+
+test('source fetch retries transient cold-start failures before succeeding', async () => {
+  const outcomes = [
+    { ok: false, status: 503 },
+    new TypeError('network connection reset'),
+    { ok: true, status: 200 },
+  ];
+  let attempts = 0;
+
+  const response = await fetchSourceWithRetry(async () => {
+    const outcome = outcomes[attempts++];
+    if (outcome instanceof Error) throw outcome;
+    return outcome;
+  }, { retryDelaysMs: [0, 0] });
+
+  assert.equal(response.status, 200);
+  assert.equal(attempts, 3);
+});
+
+test('source fetch does not retry a permanent client error', async () => {
+  let attempts = 0;
+  const response = await fetchSourceWithRetry(async () => {
+    attempts += 1;
+    return { ok: false, status: 404 };
+  }, { retryDelaysMs: [0, 0] });
+
+  assert.equal(response.status, 404);
+  assert.equal(attempts, 1);
+});
 
 test('new CSV export ignores hidden classic filters and uses a fixed evidence contract', () => {
   const queryMatchedResults = [

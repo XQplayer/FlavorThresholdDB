@@ -1,6 +1,28 @@
 const errorMessage = error => error?.message || String(error || 'Source unavailable');
 
 const NEW_EXPORT_MEDIA = Object.freeze(['水', '空气', '其他介质']);
+const TRANSIENT_SOURCE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+
+const wait = delayMs => new Promise(resolve => setTimeout(resolve, delayMs));
+
+export async function fetchSourceWithRetry(request, {
+  retryDelaysMs = [1200, 3000, 6000],
+} = {}) {
+  let lastError;
+  for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+    try {
+      const response = await request(attempt);
+      if (!TRANSIENT_SOURCE_STATUSES.has(response.status) || attempt === retryDelaysMs.length) {
+        return response;
+      }
+    } catch (error) {
+      lastError = error;
+      if (attempt === retryDelaysMs.length) throw error;
+    }
+    await wait(retryDelaysMs[attempt]);
+  }
+  throw lastError || new Error('Source request failed');
+}
 
 export function buildCsvExportContract({
   resultView,

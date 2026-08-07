@@ -33,6 +33,7 @@ import {
   beginFemaProfileRequest,
   failCompoundProfileRequest,
   failFemaProfileRequest,
+  fetchSourceWithRetry,
   getExportClassification,
   retryFetchOptions,
   withRetryGeneration,
@@ -621,10 +622,10 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     setFemaProfiles(current => ({ ...current, [cas]: loadingProfile }));
     try {
       const retryGeneration = retrying ? generation : 0;
-      const response = await fetch(
-        withRetryGeneration(`${FEMA_API_URL}/fema?cas=${encodeURIComponent(cas)}`, retryGeneration),
-        retryFetchOptions(retryGeneration),
-      );
+      const response = await fetchSourceWithRetry(attempt => fetch(
+        withRetryGeneration(`${FEMA_API_URL}/fema?cas=${encodeURIComponent(cas)}`, retryGeneration + attempt),
+        retryFetchOptions(retryGeneration + attempt),
+      ));
       if (!response.ok) throw new Error(`FEMA lookup failed (${response.status})`);
       const profile = { ...(await response.json()), loading: false, retrying: false };
       if (femaRequestGenerationRef.current[cas] !== generation) return;
@@ -648,10 +649,10 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
     setCompoundProfiles(current => ({ ...current, [cas]: loadingProfile }));
     try {
       const retryGeneration = retrying ? generation : 0;
-      const response = await fetch(
-        withRetryGeneration(`${FEMA_API_URL}/compound?cas=${encodeURIComponent(cas)}`, retryGeneration),
-        retryFetchOptions(retryGeneration),
-      );
+      const response = await fetchSourceWithRetry(attempt => fetch(
+        withRetryGeneration(`${FEMA_API_URL}/compound?cas=${encodeURIComponent(cas)}`, retryGeneration + attempt),
+        retryFetchOptions(retryGeneration + attempt),
+      ));
       if (!response.ok) throw new Error(`Compound lookup failed (${response.status})`);
       const profile = await response.json();
       const smartClassification = await classifyCompoundBySmarts(profile.pubchem?.smiles);
