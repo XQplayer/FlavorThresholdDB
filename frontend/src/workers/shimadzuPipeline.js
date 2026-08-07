@@ -20,7 +20,7 @@ const textBytes = value => new TextEncoder().encode(value)
 const clone = value => structuredClone(value)
 const sum = (items, key) => items.reduce((total, item) => total + Number(item?.[key] ?? 0), 0)
 const issueStatus = issues => stageStatus(issues || [])
-const fail = (code, details = {}) => Object.assign(new Error(code), { code, ...details })
+const fail = (code, details = {}) => Object.assign(new Error(code), { code, details, ...details })
 const matchingName = value => normalizeNameForMatching(value).normalized
 
 async function sha256(bytes) {
@@ -69,6 +69,50 @@ async function addStage(zip, index, data, workbookSpecs) {
   zip.file(manifestPath, manifestBytes)
   zip.file(`${directory}/manifest.sha256`, `${await sha256(manifestBytes)}\n`)
   return manifest
+}
+
+const archiveFileName = name => {
+  const invalidName = new Set('<>:"/\\|?*')
+  const safeName = [...String(name || '岛津气质分析')]
+    .map(character => invalidName.has(character) || character.charCodeAt(0) < 32 ? '_' : character)
+    .join('').slice(0, 80) || '岛津气质分析'
+  return `${safeName}_部分结果.zip`
+}
+
+export async function createPartialFailureArchive({ zip, name, stage, issues = [], completedStages = [] }) {
+  const normalizedIssues = clone(Array.isArray(issues) ? issues : [issues])
+  const completed = clone(completedStages)
+  const generatedAt = new Date().toISOString()
+  const failure = {
+    schemaVersion: 'shimadzu-browser-failure-1', status: 'FAILED', failedStage: stage,
+    failedStageName: V2_STAGE_DIRECTORIES[stage] || `stage-${stage}`, issues: normalizedIssues,
+    completedStages: completed, generatedAt,
+  }
+  const state = {
+    schemaVersion: 'shimadzu-browser-partial-run-1', status: 'PARTIAL_FAILED', name,
+    failedStage: stage, completedStages: completed,
+    archiveContents: '已完成步骤及失败步骤的证据、错误明细与处理状态', generatedAt,
+  }
+  const failureBytes = textBytes(`${JSON.stringify(failure, null, 2)}\n`)
+  const stateBytes = textBytes(`${JSON.stringify(state, null, 2)}\n`)
+  zip.file('失败任务/错误明细.json', failureBytes)
+  zip.file('失败任务/部分运行状态.json', stateBytes)
+  zip.file('失败任务/错误明细.sha256', `${await sha256(failureBytes)}\n`)
+  zip.file('失败任务/部分运行状态.sha256', `${await sha256(stateBytes)}\n`)
+  const runBytes = textBytes(`${JSON.stringify({
+    schemaVersion: 'shimadzu-browser-run-1', completedAt: generatedAt, status: 'PARTIAL_FAILED',
+    oavExecuted: false, name, failedStage: stage, completedStages: completed,
+  }, null, 2)}\n`)
+  zip.file('v2-run.json', runBytes)
+  zip.file('v2-run.sha256', `${await sha256(runBytes)}\n`)
+  const archiveBytes = await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE', compressionOptions: { level: 6 } })
+  const archiveSha256 = await sha256(archiveBytes)
+  const details = { stage, issues: normalizedIssues, completedStages: completed, archiveStatus: 'PARTIAL_FAILED' }
+  return Object.assign(new Error(`第${Number(stage) + 1}步未通过质量门禁`), {
+    code: 'STAGE_GATE_FAILED', details, ...details,
+    archiveBytes, archiveSha256, archiveSize: archiveBytes.byteLength,
+    fileName: archiveFileName(name),
+  })
 }
 
 function stage0(rawBytes, sampleBytes, rawName, sampleName) {
@@ -288,11 +332,17 @@ export async function runShimadzuBrowserPipeline({ rawBytes, sampleBytes, rawNam
   ]
   const manifests = []
   for (let index = 0; index < builders.length; index += 1) {
-    assertNotCancelled(signal)
+    try {
+      assertNotCancelled(signal)
     onEvent({ type: 'stage-start', stage: index, progress: Math.round(index / 7 * 100), message: V2_STAGE_DIRECTORIES[index] })
     const data = builders[index]()
     const manifest = await addStage(zip, index, data, workbookSpecs(index, data))
-    if (!manifest.canAdvance) throw fail('STAGE_GATE_FAILED', { stage: index, issues: data.issues })
+    if (!manifest.canAdvance) {
+      throw await createPartialFailureArchive({
+        zip, name, stage: index, issues: data.issues,
+        completedStages: [...manifests, { stage: manifest.stage, status: manifest.severity, counts: manifest.counts }],
+      })
+    }
     stages.push(data)
     manifests.push(manifest)
     onEvent({ type: 'stage-complete', stage: index, progress: Math.round((index + 1) / 7 * 100), status: manifest.severity, counts: data.counts })
@@ -300,6 +350,14 @@ export async function runShimadzuBrowserPipeline({ rawBytes, sampleBytes, rawNam
       onEvent({ type: 'stage-review', stage: index, progress: Math.round((index + 1) / 7 * 100), message: '等待用户复核后继续' })
       await reviewGate(index)
       assertNotCancelled(signal)
+      }
+    } catch (error) {
+      if (error?.code === 'ANALYSIS_CANCELLED' || error?.archiveBytes) throw error
+      throw await createPartialFailureArchive({
+        zip, name, stage: index,
+        issues: [{ severity: 'FAIL', code: error?.code || 'BROWSER_ANALYSIS_FAILED', message: error?.message || String(error), ...error?.details }],
+        completedStages: manifests,
+      })
     }
   }
   const completeness = {

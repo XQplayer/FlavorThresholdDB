@@ -169,6 +169,12 @@
 .shimadzu-inline-error span { font-size: 14px; line-height: 1.55; }
 .shimadzu-alert strong,
 .shimadzu-inline-error strong { margin-right: 9px; }
+.shimadzu-inline-error > div { min-width: 0; }
+.shimadzu-inline-error p { margin: 0; font-size: 14px; line-height: 1.55; }
+.shimadzu-inline-error small { display: block; margin-top: 5px; color: var(--sz-muted); font-size: 12px; }
+.shimadzu-inline-error ul { margin: 7px 0 0; padding-left: 18px; color: var(--sz-warning); font-size: 12px; line-height: 1.6; }
+.shimadzu-inline-error a { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--sz-accent-deep); font-size: 13px; font-weight: 700; }
+.shimadzu-inline-error a svg { width: 14px; }
 
 .shimadzu-recovery-notice {
   margin-bottom: 18px;
@@ -250,6 +256,9 @@
 .shimadzu-history-table strong { display: block; color: var(--sz-ink); font-size: 14px; }
 .shimadzu-history-table small,
 .shimadzu-history-table > div > span:not(.shimadzu-job-badge) { margin-top: 4px; color: var(--sz-muted); font-size: 12px; }
+.shimadzu-history-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
+.shimadzu-history-actions button { min-height: 34px; padding: 0 9px; font-size: 11px; }
+.shimadzu-history-actions button.danger { border-color: var(--sz-danger, #b43f42); color: var(--sz-danger, #b43f42); background: transparent; }
 
 .shimadzu-workflow { margin-top: 18px; padding: 30px 32px 32px; }
 
@@ -789,6 +798,7 @@
   .shimadzu-job-actions > * { flex: 1; }
   .shimadzu-history-table > div { grid-template-columns: minmax(0, 1fr) auto; }
   .shimadzu-history-table button { justify-self: end; }
+  .shimadzu-history-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
 
 @media (max-width: 620px) {
