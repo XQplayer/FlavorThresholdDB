@@ -8,10 +8,25 @@ import {
   failCompoundProfileRequest,
   failFemaProfileRequest,
   fetchSourceWithRetry,
+  readSourceCache,
+  writeSourceCache,
   getExportClassification,
   retryFetchOptions,
   withRetryGeneration,
 } from './searchSourceState.js';
+
+test('source cache safely restores fresh profiles and ignores expired entries', () => {
+  const values = new Map();
+  const storage = {
+    getItem: key => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const now = 1_000_000;
+  const profile = { found: true, name: 'ETHYL ACETATE' };
+  writeSourceCache('fema', '141-78-6', profile, { storage, now });
+  assert.deepEqual(readSourceCache('fema', '141-78-6', { storage, now: now + 100 }), profile);
+  assert.equal(readSourceCache('fema', '141-78-6', { storage, now: now + 8 * 24 * 60 * 60 * 1000 }), null);
+});
 
 test('source fetch retries transient cold-start failures before succeeding', async () => {
   const outcomes = [

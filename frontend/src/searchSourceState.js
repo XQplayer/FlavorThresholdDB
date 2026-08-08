@@ -2,6 +2,31 @@ const errorMessage = error => error?.message || String(error || 'Source unavaila
 
 const NEW_EXPORT_MEDIA = Object.freeze(['水', '空气', '其他介质']);
 const TRANSIENT_SOURCE_STATUSES = new Set([408, 425, 429, 500, 502, 503, 504]);
+const SOURCE_CACHE_TTL_MS = Object.freeze({ fema: 7 * 24 * 60 * 60 * 1000, compound: 24 * 60 * 60 * 1000 });
+
+const getStorage = storage => storage || (typeof window !== 'undefined' ? window.localStorage : null);
+const sourceCacheKey = (source, cas) => `flavorthresholddb:source:${source}:v1:${cas}`;
+
+export function readSourceCache(source, cas, { storage, now = Date.now() } = {}) {
+  try {
+    const raw = getStorage(storage)?.getItem(sourceCacheKey(source, cas));
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    const ttl = SOURCE_CACHE_TTL_MS[source] || 0;
+    if (!entry?.savedAt || !entry?.profile || now - entry.savedAt > ttl) return null;
+    return entry.profile;
+  } catch {
+    return null;
+  }
+}
+
+export function writeSourceCache(source, cas, profile, { storage, now = Date.now() } = {}) {
+  try {
+    getStorage(storage)?.setItem(sourceCacheKey(source, cas), JSON.stringify({ savedAt: now, profile }));
+  } catch {
+    // Private browsing and quota errors must never block source loading.
+  }
+}
 
 const wait = delayMs => new Promise(resolve => setTimeout(resolve, delayMs));
 

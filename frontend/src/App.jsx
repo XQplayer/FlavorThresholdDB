@@ -34,6 +34,8 @@ import {
   failCompoundProfileRequest,
   failFemaProfileRequest,
   fetchSourceWithRetry,
+  readSourceCache,
+  writeSourceCache,
   getExportClassification,
   retryFetchOptions,
   withRetryGeneration,
@@ -366,6 +368,11 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
   }, [coreLoadNonce]);
 
   useEffect(() => {
+    // Wake the free Render instance while the user is reading local results.
+    fetch(`${FEMA_API_URL}/health`, { cache: 'no-store' }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     const normalize = str => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     Promise.all([
@@ -614,6 +621,14 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
 
   const loadFemaProfile = useCallback(async (cas, { retrying = false } = {}) => {
     if (!cas || (!retrying && femaProfilesRef.current[cas] !== undefined)) return;
+    if (!retrying) {
+      const cached = readSourceCache('fema', cas);
+      if (cached) {
+        femaProfilesRef.current[cas] = cached;
+        setFemaProfiles(current => ({ ...current, [cas]: cached }));
+        return;
+      }
+    }
     const generation = (femaRequestGenerationRef.current[cas] || 0) + 1;
     femaRequestGenerationRef.current[cas] = generation;
     const previous = femaProfilesRef.current[cas];
@@ -628,6 +643,7 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
       ));
       if (!response.ok) throw new Error(`FEMA lookup failed (${response.status})`);
       const profile = { ...(await response.json()), loading: false, retrying: false };
+      if (profile.found) writeSourceCache('fema', cas, profile);
       if (femaRequestGenerationRef.current[cas] !== generation) return;
       femaProfilesRef.current[cas] = profile;
       setFemaProfiles(current => ({ ...current, [cas]: profile }));
@@ -641,6 +657,14 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
 
   const loadCompoundProfile = useCallback(async (cas, { retrying = false } = {}) => {
     if (!cas || (!retrying && compoundProfilesRef.current[cas] !== undefined)) return;
+    if (!retrying) {
+      const cached = readSourceCache('compound', cas);
+      if (cached) {
+        compoundProfilesRef.current[cas] = cached;
+        setCompoundProfiles(current => ({ ...current, [cas]: cached }));
+        return;
+      }
+    }
     const generation = (compoundRequestGenerationRef.current[cas] || 0) + 1;
     compoundRequestGenerationRef.current[cas] = generation;
     const previous = compoundProfilesRef.current[cas];
@@ -662,6 +686,9 @@ FlavorDB2. (${accessYear}). Flavor molecule and food entity database. Retrieved 
         loading: false,
         retrying: false,
       };
+      if (completedProfile.pubchem?.found || completedProfile.flavordb?.found) {
+        writeSourceCache('compound', cas, completedProfile);
+      }
       if (compoundRequestGenerationRef.current[cas] !== generation) return;
       compoundProfilesRef.current[cas] = completedProfile;
       setCompoundProfiles(current => ({ ...current, [cas]: completedProfile }));
